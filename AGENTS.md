@@ -99,10 +99,10 @@ The pure logic (irc, heard, contacts, messenger) also runs under Node 22.18+ wit
 
 Roughly in order:
 
-1. Run it on a desktop with a T1000-E over USB, fix what breaks, then on a phone over Bluetooth. Android needs Bluetooth permissions declared in the manifest.
-2. **Persistence:** contacts, threads and IRC credentials are in memory only. Store the IRC password on the device only.
-3. **IRC setup self-test:** send a code from the user's nick to their own node via the bridge and confirm it arrives. Needs the bridge's addressing for a DM to a node (see open questions).
-4. **Contacts UI:** linking a node and a nick into one person.
+1. **Run it on a phone** over Bluetooth with the v0.1.0 APK, and on a desktop with a T1000-E over USB; fix what breaks. Expect `lib/radio.ts`, `lib/ui.ts` and `app.ts` to need fixes.
+2. **IRC setup self-test:** send a code from the user's nick to their own node via the bridge and confirm it arrives. Needs the bridge's addressing for a DM to a node (see open questions).
+3. **Over-the-air updates with Pear** (experiment, see `docs/plan.md`).
+4. **Mockup fidelity:** radio screen, IRC setup screen, light mode.
 5. **bare-meshtastic gaps** (better fixed upstream, in holepunchto/bare-meshtastic):
    - reactions and replies: `Data` needs the reply-to ID and emoji flag fields;
    - an event for every packet received, on any port, so `Heard` sees all traffic and ekho can receive private-port packets (dropped today);
