@@ -13,7 +13,7 @@ import { FakeRadio, FakeStream } from '../test/helpers.ts'
 const { test } = tap
 const { Window } = native
 
-const HOLD = Number(globalThis.process?.env?.HOLD ?? 4000)
+const HOLD = 4000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // A link that stays where it's put, for showing. Its state is set once the
@@ -92,13 +92,22 @@ function world() {
   return { messenger, ivan }
 }
 
+// Markers in the output, so a run that dies shows where.
+const step = (text: string) => console.log('# step ' + text)
+
 async function shot(name: string, setup: (ui: Ui) => void, ui: Ui) {
+  step(name + ': window')
   const window = new Window(390, 844)
+  step(name + ': content')
   window.content(ui.root)
+  step(name + ': show')
   window.show()
   ui.setCompact(true)
+  step(name + ': wait')
   await sleep(300)
+  step(name + ': setup')
   setup(ui)
+  step(name + ': shown')
   await sleep(500)
   console.log('# shot ' + name)
   await sleep(HOLD)
@@ -106,8 +115,10 @@ async function shot(name: string, setup: (ui: Ui) => void, ui: Ui) {
 }
 
 test('onboarding', async (t) => {
+  step('onboarding: start')
   const messenger = new Messenger({ ircChannel: '#bulgaria' })
   const radio = link('radio')
+  step('onboarding: ui')
   const ui = new Ui(messenger, actions(), { onboarded: false, radio, irc: link('irc') })
   await shot('onboarding', () => put(radio, 'connecting', 'syncing: 37 nodes so far'), ui)
   t.pass()
