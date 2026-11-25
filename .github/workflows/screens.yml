@@ -1,0 +1,56 @@
+name: Screens
+# Screenshots for the README, taken from the real app on macOS. Each one is
+# cropped to the app and printed to the log as base64 between markers, so it
+# can be read back without artifact storage.
+on:
+  push:
+    branches:
+      - docs/readme
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  screens:
+    runs-on: macos-latest
+    name: Screenshots
+    steps:
+      - uses: holepunchto/actions/bare-base@v1
+      - run: python3 -m pip install --quiet --break-system-packages pillow
+      - name: Capture
+        run: |
+          mkdir -p shots
+          npx bare-native-test scripts/screens.ts --platform darwin --out test/native | while IFS= read -r line; do
+            echo "$line"
+            case "$line" in
+              "# shot "*) screencapture -x "shots/${line#\# shot }.png" ;;
+            esac
+          done
+          ls -la shots
+      - name: Crop and print
+        run: |
+          python3 - <<'PY'
+          import base64, glob, io, os
+          from PIL import Image
+          ground = (10, 13, 12)
+          for path in sorted(glob.glob('shots/*.png')):
+              img = Image.open(path).convert('RGB')
+              w, h = img.size
+              px = img.load()
+              near = lambda p: all(abs(a - b) <= 6 for a, b in zip(p, ground))
+              # The app's background is the largest run of the ground colour:
+              # find its bounding box by scanning rows and columns.
+              rows = [y for y in range(0, h, 2) if sum(near(px[x, y]) for x in range(0, w, 8)) > 20]
+              cols = [x for x in range(0, w, 2) if sum(near(px[x, y]) for y in range(0, h, 8)) > 20]
+              box = (min(cols), min(rows), max(cols) + 2, max(rows) + 2) if rows and cols else (0, 0, w, h)
+              out = img.crop(box)
+              buf = io.BytesIO()
+              out.save(buf, 'PNG', optimize=True)
+              name = os.path.basename(path)
+              print('::group::' + name, out.size, box)
+              print('BEGIN ' + name)
+              data = base64.b64encode(buf.getvalue()).decode()
+              for i in range(0, len(data), 4000):
+                  print(data[i:i + 4000])
+              print('END ' + name)
+              print('::endgroup::')
+          PY
