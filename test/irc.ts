@@ -72,3 +72,15 @@ test('splits long text across lines', (t) => {
   t.equal(irc.privmsg('ivanp', 'x'.repeat(450)), 2)
   t.equal(stream.lines.length, 2)
 })
+
+test('emits every line the server sends', (t) => {
+  const { stream, irc } = client()
+  const lines: string[] = []
+  irc.on('line', (line: string) => lines.push(line))
+
+  stream.serve(':irc.motaba.net 900 dom dom!~dom@host dom :You are now logged in as dom\r\n')
+
+  t.deepStrictEqual(lines, [
+    ':irc.motaba.net 900 dom dom!~dom@host dom :You are now logged in as dom'
+  ])
+})

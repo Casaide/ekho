@@ -16,8 +16,8 @@ interface Parsed {
 // in tests. It speaks just what ekho needs - log in, NickServ, join, and
 // private messages to nicks and channels.
 //
-// Events: ready, message ({ from, to, text, direct }), notice ({ from, text }),
-// error, close.
+// Events: ready, line (each line the server sends), message ({ from, to, text,
+// direct }), notice ({ from, text }), error, close.
 export default class Irc extends EventEmitter {
   stream: Duplex
   nick: string
@@ -95,7 +95,9 @@ export default class Irc extends EventEmitter {
     while ((i = this._buffer.indexOf('\n')) !== -1) {
       const line = this._buffer.slice(0, i).replace(/\r$/, '')
       this._buffer = this._buffer.slice(i + 1)
-      if (line) this._online(parse(line))
+      if (line === '') continue
+      this.emit('line', line)
+      this._online(parse(line))
     }
   }
 

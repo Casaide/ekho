@@ -8,12 +8,42 @@ import Store from './lib/store.ts'
 import Ui from './lib/ui.ts'
 import connectRadio from './lib/radio.ts'
 import showCrash from './lib/crash.ts'
+import Log from './lib/log.ts'
 
 const { Window } = native
 
-// Show any error on screen rather than closing.
-Bare.on('uncaughtException', showCrash)
-Bare.on('unhandledRejection', showCrash)
+// Everything printed goes into the log too, readable and copyable in the app.
+const log = new Log()
+log.capture()
+log.info('ekho starting on ' + Bare.platform + '-' + Bare.arch)
+
+// Show any error on screen rather than closing: as a banner over the working
+// app when it's up, as a screen of its own when the app itself is what failed.
+let shownUi: Ui | null = null
+let shownWindow: InstanceType<typeof Window> | null = null
+
+function crash(err: unknown) {
+  const message = err instanceof Error ? (err.stack ?? err.message) : String(err)
+  log.error('uncaught:', message)
+  try {
+    shownUi!.showError(message)
+  } catch {
+    showCrash(message, shownWindow)
+  }
+}
+
+Bare.on('uncaughtException', crash)
+Bare.on('unhandledRejection', crash)
+
+// Bluetooth failures, in words someone can act on.
+function explainRadio(err: Error): string {
+  const text = err.message
+  if (/SecurityException|permission/i.test(text)) {
+    return 'bluetooth is blocked: open Settings › Apps › ekho › Permissions, allow Nearby devices, then try again'
+  }
+  if (/not turned on|poweredOff|BT Adapter/i.test(text)) return 'turn bluetooth on, then try again'
+  return 'radio: ' + text
+}
 
 // The community IRC server; it bridges IRC to the mesh both ways.
 const IRC_HOST = 'irc.motaba.net'
@@ -69,8 +99,17 @@ function connectIrc(register: boolean) {
     channels: [IRC_CHANNEL]
   })
 
-  irc.on('error', (err: Error) => console.error('irc:', err.message))
-  irc.on('notice', (n: { from: string; text: string }) => console.log(n.from + ':', n.text))
+  log.info('irc: connecting to ' + IRC_HOST + ':' + IRC_PORT + ' as ' + settings.nick)
+
+  // Every line the server sends, so the log reads like a terminal. Lines we
+  // send aren't logged, as they carry the password.
+  irc.on('line', (line: string) => log.info('irc <', line))
+  irc.on('ready', () => log.info('irc: logged in as ' + settings.nick))
+  irc.on('close', () => log.warn('irc: connection closed'))
+  irc.on('error', (err: Error) => {
+    log.error('irc:', err)
+    ui.showError('irc: ' + err.message)
+  })
   if (register) irc.once('ready', () => irc.register())
 
   messenger.setIrc(irc)
@@ -81,12 +120,19 @@ const ui = new Ui(
   messenger,
   {
     connectRadio() {
-      connectRadio().then(
+      ui.setRadioStatus('looking for your radio… keep it close and on')
+      log.info('radio: connecting')
+      connectRadio({ onstatus: (status) => log.info('radio:', status) }).then(
         ({ client }) => {
           messenger.node = client.id
           messenger.setRadio(client)
+          ui.setRadioStatus('connected as ' + client.id)
+          log.info('radio: connected as', client.id)
         },
-        (err: Error) => console.error('radio:', err.message)
+        (err: Error) => {
+          log.error('radio:', err)
+          ui.setRadioStatus(explainRadio(err), true)
+        }
       )
     },
 
@@ -97,13 +143,15 @@ const ui = new Ui(
       connectIrc(register)
     }
   },
-  { nick: settings.nick, password: settings.password }
+  { nick: settings.nick, password: settings.password, log }
 )
 
 const window = new Window(1100, 720)
 
 window.content(ui.root)
 window.show()
+shownUi = ui
+shownWindow = window
 
 ui.setCompact(window.size.width < COMPACT)
 window.on('resize', () => ui.setCompact(window.size.width < COMPACT))
