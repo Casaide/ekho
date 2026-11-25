@@ -15,7 +15,7 @@ test('every screen renders: chats, thread, contact info, join, compact', (t) => 
   const messenger = new Messenger({ ircChannel: '#sofia' })
   const ui = new Ui(
     messenger,
-    { connectRadio() {}, connectIrc() {}, finishOnboarding() {} },
+    { connectRadio() {}, disconnectRadio() {}, connectIrc() {}, finishOnboarding() {} },
     { compact: true }
   )
 
@@ -62,7 +62,12 @@ test('every screen renders: chats, thread, contact info, join, compact', (t) => 
 
 test('errors show as a banner, the radio says what went wrong, and the log copies', (t) => {
   const messenger = new Messenger()
-  const ui = new Ui(messenger, { connectRadio() {}, connectIrc() {}, finishOnboarding() {} })
+  const ui = new Ui(messenger, {
+    connectRadio() {},
+    disconnectRadio() {},
+    connectIrc() {},
+    finishOnboarding() {}
+  })
 
   const window = new Window(380, 800)
   window.content(ui.root)
@@ -71,6 +76,13 @@ test('errors show as a banner, the radio says what went wrong, and the log copie
 
   ui.setRadioStatus('looking for your radio…')
   ui.setRadioStatus('turn bluetooth on, then try again', true)
+  ui.setRadioBusy(true)
+  ui.setRadioStatus('syncing: 37 nodes so far')
+  ui.setRadioBusy(false)
+  ui.setRadioConnected('!0e8666a6')
+  ui.setRadioConnected(null)
+  ui.setIrcStatus('logged in as dom')
+  ui.setIrcStatus('that nick is in use', true)
   ui.showError('Error: boom')
   ui.hideError()
   ui.showError('Error: again')
@@ -97,6 +109,7 @@ test('first run opens on onboarding, then chats; settings holds the same control
     new Messenger(),
     {
       connectRadio() {},
+      disconnectRadio() {},
       connectIrc() {},
       finishOnboarding() {
         finished = true

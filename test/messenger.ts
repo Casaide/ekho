@@ -279,3 +279,16 @@ test('a person with two nodes is sent to the one heard most recently', (t) => {
   t.equal(msg.address, '!5d02b7aa')
   t.equal(radio.sent[0].opts.to, 0x5d02b7aa)
 })
+
+test('a channel saved under an old name is dropped for the current one', (t) => {
+  const before = new Messenger({ ircChannel: '#mesh' })
+  const state = JSON.parse(JSON.stringify(before))
+
+  const after = new Messenger({ ircChannel: '#bulgaria', state })
+  const channels = after.contacts.all().filter((c) => c.channel)
+
+  t.deepStrictEqual(
+    channels.map((c) => c.id),
+    ['#bulgaria']
+  )
+})

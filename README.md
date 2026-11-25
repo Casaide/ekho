@@ -33,7 +33,7 @@ The core runs without any UI:
 ```js
 import { Messenger, Irc } from 'ekho'
 
-const messenger = new Messenger({ ircChannel: '#mesh' })
+const messenger = new Messenger({ ircChannel: '#bulgaria' })
 
 messenger.setRadio(client) // a bare-meshtastic Client
 messenger.setIrc(irc) // an Irc over a TLS socket

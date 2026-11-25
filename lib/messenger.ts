@@ -73,7 +73,13 @@ export default class Messenger extends EventEmitter {
 
     if (opts.state) this._restore(opts.state)
 
-    const ircChannel = opts.ircChannel ?? '#mesh'
+    const ircChannel = opts.ircChannel ?? '#bulgaria'
+
+    // A channel saved under an older name is gone from the bridge.
+    for (const c of this.contacts.all()) {
+      if (c.channel && c.id !== ircChannel) this.contacts.remove(c)
+    }
+
     this.channel =
       this.contacts.get(ircChannel) ??
       this.contacts.add({ name: opts.channelName ?? 'mesh', nick: ircChannel, channel: true })
