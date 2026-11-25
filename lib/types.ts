@@ -4,7 +4,10 @@ import type EventEmitter from 'bare-events'
 export interface Radio extends EventEmitter {
   // Our own node ID, like '!e2f4a910'.
   readonly id: string
-  send(text: string, opts?: { to?: number; id?: number; wantAck?: boolean }): boolean
+  send(
+    text: string,
+    opts?: { to?: number; id?: number; wantAck?: boolean; channel?: number }
+  ): boolean
 }
 
 export interface RadioMessage {

@@ -19,6 +19,8 @@ interface Parsed {
 // Events: ready, line (each line the server sends), message ({ from, to, text,
 // direct }), notice ({ from, text }), channels ([{ name, users, topic }]),
 // login (account), reclaim (account), nick (nick), error, close.
+// Who's where: names (channel, nicks), join, part ({ nick, channel }),
+// quit ({ nick }), rename ({ from, to }) for nicks other than ours.
 //
 // With a password it logs in during the handshake with SASL PLAIN, and falls
 // back to NickServ IDENTIFY where the server doesn't offer SASL. A wrong
@@ -48,6 +50,7 @@ export default class Irc extends EventEmitter {
   _caps: string[]
   _watchdog: ReturnType<typeof setTimeout> | null
   _listing: { name: string; users: number; topic: string }[]
+  _names: Map<string, string[]>
   _reclaimTimer: ReturnType<typeof setTimeout> | null
 
   constructor(
@@ -80,6 +83,7 @@ export default class Irc extends EventEmitter {
     this._caps = []
     this._watchdog = null
     this._listing = []
+    this._names = new Map()
 
     stream.on('data', (data: Uint8Array) => this._ondata(data))
     stream.on('error', (err: Error) => this.emit('error', err))
@@ -300,7 +304,39 @@ export default class Irc extends EventEmitter {
           this.nick = msg.params[0]
           if (this.nick === this.account) this._reclaiming = false
           this.emit('nick', this.nick)
+        } else {
+          this.emit('rename', { from: msg.nick, to: msg.params[0] })
         }
+        return
+
+      // NAMES: who's in a channel, over several lines, then 366.
+      case '353': {
+        const channel = msg.params[2]
+        const nicks = this._names.get(channel) ?? []
+        for (const name of (msg.params[3] ?? '').split(' ')) {
+          if (name) nicks.push(name.replace(/^[@+%&~]+/, ''))
+        }
+        this._names.set(channel, nicks)
+        return
+      }
+
+      case '366': {
+        const channel = msg.params[1]
+        this.emit('names', channel, this._names.get(channel) ?? [])
+        this._names.delete(channel)
+        return
+      }
+
+      case 'JOIN':
+        this.emit('join', { nick: msg.nick, channel: msg.params[0] })
+        return
+
+      case 'PART':
+        this.emit('part', { nick: msg.nick, channel: msg.params[0] })
+        return
+
+      case 'QUIT':
+        this.emit('quit', { nick: msg.nick })
         return
 
       case 'NOTICE':

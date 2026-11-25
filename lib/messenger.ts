@@ -25,6 +25,8 @@ export interface MessengerOptions {
 export interface SavedState {
   contacts: Contact[]
   threads: Record<string, Message[]>
+  // When each conversation was last read; missing in state saved before.
+  read?: Record<string, number>
 }
 
 export interface Status {
@@ -53,6 +55,8 @@ export default class Messenger extends EventEmitter {
   keep: number
 
   _threads: Map<string, Message[]>
+  _read: Map<string, number>
+  _radioChannels: Map<string, number>
   _pending: Map<number, Message>
   _unradio: (() => void) | null
   _unirc: (() => void) | null
@@ -69,6 +73,8 @@ export default class Messenger extends EventEmitter {
     this.keep = opts.keep ?? 500
 
     this._threads = new Map()
+    this._read = new Map()
+    this._radioChannels = new Map([[ircChannel0(opts), 0]])
     this._pending = new Map()
     this._unradio = null
     this._unirc = null
@@ -159,6 +165,7 @@ export default class Messenger extends EventEmitter {
       .sort((a, b) => a.time - b.time)
     this._threads.set(contact.id, thread)
     this._threads.delete(other.id)
+    this._read.delete(other.id)
 
     this.contacts.remove(other)
     for (const node of other.nodes) this.contacts.link(contact, { node })
@@ -186,7 +193,41 @@ export default class Messenger extends EventEmitter {
   toJSON(): SavedState {
     const threads: Record<string, Message[]> = {}
     for (const [id, thread] of this._threads) threads[id] = thread.slice(-this.keep)
-    return { contacts: this.contacts.all(), threads }
+    return { contacts: this.contacts.all(), threads, read: Object.fromEntries(this._read) }
+  }
+
+  // The radio's channels, as its index for each IRC channel the bridge pairs
+  // it with: a channel named "Sofia" is #sofia, and the unnamed primary one
+  // (LongFast) is the mesh channel. Channels without a radio one are IRC only.
+  setRadioChannels(channels: { index: number; name: string | null; role: number }[]): void {
+    this._radioChannels = new Map()
+    for (const c of channels) {
+      if (c.role === 0) continue
+      const irc = c.name ? '#' + c.name.toLowerCase() : c.index === 0 ? this.channel.id : null
+      if (irc !== null) this._radioChannels.set(irc, c.index)
+    }
+    this.emit('contacts')
+  }
+
+  // The radio channel paired with a channel contact, or null: IRC only.
+  radioChannel(contact: Contact): number | null {
+    return this._radioChannels.get(contact.id) ?? null
+  }
+
+  // Messages received in a conversation since it was last read.
+  unread(contact: Contact): number {
+    const since = this._read.get(contact.id) ?? 0
+    let count = 0
+    for (const msg of this.thread(contact)) {
+      if (msg.state === 'received' && msg.time > since) count++
+    }
+    return count
+  }
+
+  markRead(contact: Contact): void {
+    if (this.unread(contact) === 0) return
+    this._read.set(contact.id, this.now())
+    this.emit('read', contact)
   }
 
   // The whole routing rule: any node heard recently, LoRa; otherwise IRC.
@@ -213,8 +254,9 @@ export default class Messenger extends EventEmitter {
       contact: contact.id,
       from: null,
       text,
-      // Channels other than the mesh one exist on IRC only.
-      via: opts.via ?? (contact.channel && contact !== this.channel ? 'irc' : this.route()),
+      // A channel with no radio channel paired exists on IRC only.
+      via:
+        opts.via ?? (contact.channel && this.radioChannel(contact) === null ? 'irc' : this.route()),
       state: 'sending',
       reason: null,
       address: null,
@@ -269,8 +311,10 @@ export default class Messenger extends EventEmitter {
     if (this.radio === null) return this._fail(msg, 'RADIO_OFFLINE')
 
     if (contact.channel) {
-      this.radio.send(msg.text, { wantAck: false })
-      msg.address = 'channel'
+      const index = this.radioChannel(contact)
+      if (index === null) return this._fail(msg, 'NO_RADIO_CHANNEL')
+      this.radio.send(msg.text, { wantAck: false, channel: index })
+      msg.address = 'channel ' + index
       msg.state = 'sent'
       return
     }
@@ -363,6 +407,7 @@ export default class Messenger extends EventEmitter {
 
   _restore(state: SavedState): void {
     for (const contact of state.contacts) this.contacts.add(contact)
+    for (const [id, time] of Object.entries(state.read ?? {})) this._read.set(id, time)
 
     for (const [id, thread] of Object.entries(state.threads)) {
       for (const msg of thread) {
@@ -405,4 +450,10 @@ function randomId(): number {
 
 function nodeNum(id: string): number {
   return parseInt(id.slice(1), 16)
+}
+
+// Until the radio says which channels it has, its primary one is the mesh
+// channel.
+function ircChannel0(opts: MessengerOptions): string {
+  return opts.ircChannel ?? '#bulgaria'
 }
