@@ -71,6 +71,8 @@ try {
 }
 
 const settings = { nick: '', password: '', ...saved?.irc }
+// Set once the first-run page is done; until then ekho opens on it.
+let onboarded: boolean = saved?.onboarded ?? false
 const messenger = new Messenger({ ircChannel: IRC_CHANNEL, state: saved?.messenger ?? null })
 
 // Save a second after the last change, not on every message.
@@ -80,7 +82,7 @@ function save() {
   timer = setTimeout(() => {
     timer = null
     try {
-      store.save({ messenger, irc: settings })
+      store.save({ messenger, irc: settings, onboarded })
     } catch (err) {
       console.error('save:', (err as Error).message)
     }
@@ -154,6 +156,11 @@ const ui = new Ui(
       )
     },
 
+    finishOnboarding() {
+      onboarded = true
+      save()
+    },
+
     connectIrc({ nick, password, register }) {
       settings.nick = nick
       settings.password = password
@@ -161,7 +168,7 @@ const ui = new Ui(
       connectIrc(register)
     }
   },
-  { nick: settings.nick, password: settings.password, log }
+  { nick: settings.nick, password: settings.password, log, onboarded }
 )
 
 const window = new Window(1100, 720)

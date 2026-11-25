@@ -6,17 +6,22 @@ import type { Contact, Message } from './types.ts'
 import Log, { line } from './log.ts'
 import type { Entry } from './log.ts'
 
-const { View, Text, TextInput, ScrollView, Clipboard } = native
+const { View, Text, TextInput, ScrollView, Clipboard, Keyboard } = native
 const { colors, font } = theme
 
 export interface UiActions {
   connectRadio(): void
   connectIrc(opts: { nick: string; password: string; register: boolean }): void
+  finishOnboarding(): void
 }
 
-// The whole app view: chats, the selected conversation, the composer, and the
-// radio and IRC controls. On a narrow screen it shows the chats or the
-// conversation, one at a time; on a wide one, both side by side.
+export type Page = 'chats' | 'onboarding' | 'settings' | 'log'
+
+// The whole app view. Pages: onboarding (first run: connect the radio, log in
+// to IRC), chats (the list, the selected conversation, the composer),
+// settings (the same radio and IRC controls, later) and the log. On a narrow
+// screen chats shows the list or the conversation, one at a time; on a wide
+// one, both side by side.
 //
 // It redraws from the Messenger on every change, which is plenty for a
 // first attempt.
@@ -43,15 +48,25 @@ export default class Ui {
   _alias: any
   _showInfo: boolean
   log: Log
-  _showLog: boolean
+  page: Page
   _body: any
   _logPanel: any
   _logList: any
+  _setup: any
+  _onboarding: any
+  _settings: any
+  _headerButton: any
 
   constructor(
     messenger: Messenger,
     actions: UiActions,
-    opts: { compact?: boolean; nick?: string; password?: string; log?: Log } = {}
+    opts: {
+      compact?: boolean
+      nick?: string
+      password?: string
+      log?: Log
+      onboarded?: boolean
+    } = {}
   ) {
     this.messenger = messenger
     this.actions = actions
@@ -59,7 +74,7 @@ export default class Ui {
     this.selected = null
     this._showInfo = false
     this.log = opts.log ?? new Log()
-    this._showLog = false
+    this.page = opts.onboarded === false ? 'onboarding' : 'chats'
 
     this._status = text('', { color: colors.muted, fontSize: 11 })
 
@@ -75,7 +90,7 @@ export default class Ui {
       view({ flexDirection: 'row', alignItems: 'center', gap: 8 }, [
         mark(),
         view({ flex: 1 }, [title]),
-        button('log', () => this.toggleLog(), chip(colors.muted))
+        (this._headerButton = view())
       ]),
       this._status
     ])
@@ -89,7 +104,9 @@ export default class Ui {
     this._radio = text('not connected', { color: colors.muted, fontSize: 12 })
     this._password.value = opts.password ?? ''
 
-    const setup = view({ padding: 14, gap: 8 }, [
+    // The radio and IRC controls: on the onboarding page the first time, in
+    // settings after that. One set, moved between the two.
+    this._setup = view({ gap: 8 }, [
       text('// radio', { color: colors.muted, fontSize: 11 }),
       button('connect t1000-e', () => this.actions.connectRadio(), chip(colors.accent)),
       this._radio,
@@ -102,7 +119,7 @@ export default class Ui {
       ])
     ])
 
-    this._side = view({ width: 300 }, [this._list, rule(), setup])
+    this._side = view({ width: 300 }, [this._list])
     this._divider = view({ width: 1, backgroundColor: colors.line })
 
     this._thread = new ScrollView()
@@ -119,15 +136,7 @@ export default class Ui {
         gap: 8,
         padding: 12
       },
-      [
-        view({ flex: 1 }, [this._input]),
-        button('send', () => this._send(), {
-          ...chip(colors.ground),
-          backgroundColor: colors.accent,
-          borderColor: colors.accent,
-          fontWeight: 'bold'
-        })
-      ]
+      [view({ flex: 1 }, [this._input]), button('send', () => this._send(), primary())]
     )
 
     // The selected contact's name, and the way into their info.
@@ -169,14 +178,25 @@ export default class Ui {
       view({ flexDirection: 'row', gap: 8, padding: 14 }, [
         text('// log · info, warnings and errors', { color: colors.muted, fontSize: 11, flex: 1 }),
         button('copy', () => this.copyLog(), chip(colors.accent)),
-        button('close', () => this.toggleLog(), chip(colors.text))
+        button('close', () => this.show('settings'), chip(colors.text))
       ]),
       rule(),
       this._logList
     ])
     this.log.on('entry', (entry: Entry) => {
-      if (this._showLog) this._logList.content.appendChild(logLine(entry))
+      if (this.page === 'log') this._logList.content.appendChild(logLine(entry))
     })
+
+    this._onboarding = page()
+    this._settings = page()
+
+    // Typing in a field near the bottom: bring it into view above the keyboard.
+    for (const field of [this._nick, this._password]) {
+      field.on('focus', () => {
+        const scroll = this.page === 'onboarding' ? this._onboarding : this._settings
+        setTimeout(() => (scroll.contentOffset = { y: Number.MAX_SAFE_INTEGER }), 300)
+      })
+    }
 
     // Errors show here, above a UI that keeps working.
     this._banner = view({ display: 'none' })
@@ -188,14 +208,23 @@ export default class Ui {
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
       },
-      [this._banner, header, rule(), this._body, this._logPanel]
+      [this._banner, header, rule(), this._body, this._onboarding, this._settings, this._logPanel]
     )
+
+    // Lift everything above the on-screen keyboard while it's open.
+    Keyboard.on('change', ({ height }: { height: number }) => {
+      this.root.style = {
+        ...this.root.style,
+        paddingBottom: height > 0 ? height : 'env(safe-area-inset-bottom)'
+      }
+    })
 
     messenger.on('contacts', () => this.render())
     messenger.on('message', () => this.render())
     messenger.on('update', () => this.render())
     messenger.on('status', () => this.render())
 
+    this._fillPage()
     this.render()
   }
 
@@ -221,14 +250,59 @@ export default class Ui {
     this._banner.style = { display: 'none' }
   }
 
-  toggleLog(): void {
-    this._showLog = !this._showLog
+  show(page: Page): void {
+    this.page = page
     clear(this._logList.content)
-    if (this._showLog) {
+    if (page === 'log') {
       for (const entry of this.log.entries) this._logList.content.appendChild(logLine(entry))
       this._logList.contentOffset = { y: Number.MAX_SAFE_INTEGER }
     }
+    this._fillPage()
     this.render()
+  }
+
+  finishOnboarding(): void {
+    this.actions.finishOnboarding()
+    this.show('chats')
+  }
+
+  // Rebuild the onboarding or settings page around the shared controls.
+  _fillPage(): void {
+    if (this._setup.parent !== null) this._setup.parent.removeChild(this._setup)
+    clear(this._onboarding.content)
+    clear(this._settings.content)
+
+    const label = (value: string) => text(value, { color: colors.muted, fontSize: 11 })
+
+    if (this.page === 'onboarding') {
+      const content = this._onboarding.content
+      content.appendChild(
+        text('welcome to ekho', { color: colors.text, fontSize: 20, fontWeight: 'bold' })
+      )
+      content.appendChild(
+        text(
+          'Message people over LoRa with your T1000-E. When no radio is in range, ' +
+            'messages go over IRC instead, through irc.motaba.net. Set up either or both; ' +
+            'you can change this later in settings.',
+          { color: colors.soft, fontSize: 13, lineHeight: 20 }
+        )
+      )
+      content.appendChild(this._setup)
+      content.appendChild(button('start messaging', () => this.finishOnboarding(), primary()))
+    }
+
+    if (this.page === 'settings') {
+      const content = this._settings.content
+      content.appendChild(
+        view({ flexDirection: 'row', alignItems: 'center' }, [
+          text('settings', { color: colors.text, fontSize: 18, fontWeight: 'bold', flex: 1 }),
+          button('close', () => this.show('chats'), chip(colors.text))
+        ])
+      )
+      content.appendChild(this._setup)
+      content.appendChild(label('// help'))
+      content.appendChild(button('view log', () => this.show('log'), chip(colors.muted)))
+    }
   }
 
   copyLog(): void {
@@ -277,8 +351,18 @@ export default class Ui {
       display: this.compact ? 'none' : 'flex'
     }
     this._main.style = { flex: 1, display: showMain ? 'flex' : 'none' }
-    this._body.style = { flex: 1, flexDirection: 'row', display: this._showLog ? 'none' : 'flex' }
-    this._logPanel.style = { flex: 1, display: this._showLog ? 'flex' : 'none' }
+    const on = (page: Page) => (this.page === page ? 'flex' : 'none')
+    this._body.style = { flex: 1, flexDirection: 'row', display: on('chats') }
+    this._onboarding.style = { flex: 1, display: on('onboarding') }
+    this._settings.style = { flex: 1, display: on('settings') }
+    this._logPanel.style = { flex: 1, display: on('log') }
+
+    clear(this._headerButton)
+    if (this.page === 'chats') {
+      this._headerButton.appendChild(
+        button('settings', () => this.show('settings'), chip(colors.muted))
+      )
+    }
 
     // A contact merged away no longer exists.
     if (this.selected !== null && this.messenger.contacts.get(this.selected.id) === null) {
@@ -480,6 +564,23 @@ function mark(): any {
     bar(14, 0.6),
     bar(19, 0.3)
   ])
+}
+
+// A page of its own that scrolls: onboarding and settings.
+function page(): any {
+  const scroll = new ScrollView()
+  scroll.style = { flex: 1, display: 'none' }
+  scroll.contentStyle = { padding: 20, gap: 16 }
+  return scroll
+}
+
+function primary(): { color: string } & object {
+  return {
+    ...chip(colors.ground),
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+    fontWeight: 'bold'
+  }
 }
 
 // A one-point line between sections.

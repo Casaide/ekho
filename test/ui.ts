@@ -13,7 +13,11 @@ const { Window } = native
 // accept, so this catches layout mistakes before they crash the app.
 test('every screen renders: chats, thread, contact info, join, compact', (t) => {
   const messenger = new Messenger({ ircChannel: '#sofia' })
-  const ui = new Ui(messenger, { connectRadio() {}, connectIrc() {} }, { compact: true })
+  const ui = new Ui(
+    messenger,
+    { connectRadio() {}, connectIrc() {}, finishOnboarding() {} },
+    { compact: true }
+  )
 
   const window = new Window(380, 800)
   window.content(ui.root)
@@ -58,7 +62,7 @@ test('every screen renders: chats, thread, contact info, join, compact', (t) => 
 
 test('errors show as a banner, the radio says what went wrong, and the log copies', (t) => {
   const messenger = new Messenger()
-  const ui = new Ui(messenger, { connectRadio() {}, connectIrc() {} })
+  const ui = new Ui(messenger, { connectRadio() {}, connectIrc() {}, finishOnboarding() {} })
 
   const window = new Window(380, 800)
   window.content(ui.root)
@@ -72,10 +76,11 @@ test('errors show as a banner, the radio says what went wrong, and the log copie
   ui.showError('Error: again')
 
   ui.log.warn('something odd')
-  ui.toggleLog()
+  ui.show('settings')
+  ui.show('log')
   ui.log.error('while the log is open')
   ui.copyLog()
-  ui.toggleLog()
+  ui.show('chats')
 
   t.equal(ui.log.entries.at(-1)!.text, 'log copied to the clipboard')
 })
@@ -84,4 +89,32 @@ test('the crash screen renders an error', (t) => {
   const window = showCrash('Error: boom')
   t.teardown(() => window.hide())
   t.ok(window.contentView)
+})
+
+test('first run opens on onboarding, then chats; settings holds the same controls', (t) => {
+  let finished = false
+  const ui = new Ui(
+    new Messenger(),
+    {
+      connectRadio() {},
+      connectIrc() {},
+      finishOnboarding() {
+        finished = true
+      }
+    },
+    { onboarded: false }
+  )
+
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
+  t.teardown(() => window.hide())
+
+  t.equal(ui.page, 'onboarding')
+  ui.finishOnboarding()
+  t.ok(finished)
+  t.equal(ui.page, 'chats')
+  ui.show('settings')
+  t.equal(ui.page, 'settings')
+  ui.show('chats')
 })
