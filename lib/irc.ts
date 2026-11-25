@@ -18,7 +18,14 @@ interface Parsed {
 //
 // Events: ready, line (each line the server sends), message ({ from, to, text,
 // direct }), notice ({ from, text }), channels ([{ name, users, topic }]),
-// reclaim (account), nick (nick), error, close.
+// login (account), reclaim (account), nick (nick), error, close.
+//
+// With a password it logs in during the handshake with SASL PLAIN, and falls
+// back to NickServ IDENTIFY where the server doesn't offer SASL. A wrong
+// password is an error with code `LOGIN_FAILED`.
+//
+// A server silent for `quiet` ms is pinged; one silent a further 30 s is
+// taken as gone, and the stream destroyed.
 //
 // A nick left behind by a dropped connection is reclaimed when the password
 // is known: log in as `nick_`, ask NickServ to GHOST the old session, then
@@ -32,15 +39,26 @@ export default class Irc extends EventEmitter {
   channels: string[]
   ready: boolean
   quitting: boolean
+  loggedIn: boolean
+  quiet: number
 
   _buffer: string
   _reclaiming: boolean
+  _sasl: 'none' | 'asking' | 'done'
+  _caps: string[]
+  _watchdog: ReturnType<typeof setTimeout> | null
   _listing: { name: string; users: number; topic: string }[]
   _reclaimTimer: ReturnType<typeof setTimeout> | null
 
   constructor(
     stream: Duplex,
-    opts: { nick: string; password?: string | null; realname?: string; channels?: string[] }
+    opts: {
+      nick: string
+      password?: string | null
+      realname?: string
+      channels?: string[]
+      quiet?: number
+    }
   ) {
     super()
 
@@ -52,10 +70,15 @@ export default class Irc extends EventEmitter {
     this.channels = opts.channels ?? []
     this.ready = false
     this.quitting = false
+    this.loggedIn = false
+    this.quiet = opts.quiet ?? 120_000
 
     this._buffer = ''
     this._reclaiming = false
     this._reclaimTimer = null
+    this._sasl = 'none'
+    this._caps = []
+    this._watchdog = null
     this._listing = []
 
     stream.on('data', (data: Uint8Array) => this._ondata(data))
@@ -63,6 +86,8 @@ export default class Irc extends EventEmitter {
     stream.on('close', () => {
       this.ready = false
       if (this._reclaimTimer !== null) clearTimeout(this._reclaimTimer)
+      if (this._watchdog !== null) clearTimeout(this._watchdog)
+      this._watchdog = null
       this.emit('close')
     })
   }
@@ -70,8 +95,17 @@ export default class Irc extends EventEmitter {
   // Send the login. The server answers with 001 when it has accepted the
   // nick, which emits `ready`.
   connect(): void {
+    // Ask what the server offers first, for SASL; one that doesn't know CAP
+    // ignores it.
+    if (this.password) this._send('CAP LS 302')
     this._send('NICK ' + this.nick)
     this._send('USER ' + this.nick + ' 0 * :' + this.realname)
+    this._listen()
+  }
+
+  // Say goodbye and close, as the Link connection interface asks.
+  close(): void {
+    this.quit()
   }
 
   // One-off NickServ registration. Servers differ on whether an email is
@@ -109,8 +143,53 @@ export default class Irc extends EventEmitter {
 
   quit(reason = 'bye'): void {
     this.quitting = true
+    if (this._watchdog !== null) clearTimeout(this._watchdog)
+    this._watchdog = null
     this._send('QUIT :' + reason)
     this.stream.end()
+  }
+
+  _oncap(msg: Parsed): void {
+    const sub = msg.params[1]
+    const last = msg.params[msg.params.length - 1]
+
+    if (sub === 'LS') {
+      this._caps.push(...last.split(' '))
+      // `*` before the list means more lines follow.
+      if (msg.params[2] === '*') return
+      const sasl = this._caps.some((c) => c === 'sasl' || c.startsWith('sasl='))
+      if (sasl) {
+        this._sasl = 'asking'
+        this._send('CAP REQ :sasl')
+      } else {
+        this._send('CAP END')
+      }
+      return
+    }
+
+    if (sub === 'ACK' && last.trim() === 'sasl') return this._send('AUTHENTICATE PLAIN')
+
+    if (sub === 'NAK') {
+      this._sasl = 'none'
+      this._send('CAP END')
+    }
+  }
+
+  // Reset the silence timer: ping after `quiet`, give up 30 s after that.
+  _listen(pinged = false): void {
+    if (this._watchdog !== null) clearTimeout(this._watchdog)
+    if (this.quitting) return
+    this._watchdog = setTimeout(
+      () => {
+        this._watchdog = null
+        if (pinged) return this.stream.destroy(new Error('the server stopped answering'))
+        this._send('PING :ekho')
+        this._listen(true)
+      },
+      pinged ? 30_000 : this.quiet
+    )
+    // The socket keeps the app alive; this timer alone shouldn't.
+    this._watchdog.unref()
   }
 
   _send(line: string): void {
@@ -125,6 +204,7 @@ export default class Irc extends EventEmitter {
       const line = this._buffer.slice(0, i).replace(/\r$/, '')
       this._buffer = this._buffer.slice(i + 1)
       if (line === '') continue
+      this._listen()
       this.emit('line', line)
       this._online(parse(line))
     }
@@ -136,9 +216,42 @@ export default class Irc extends EventEmitter {
         this._send('PONG :' + (msg.params[0] ?? ''))
         return
 
+      case 'CAP':
+        return this._oncap(msg)
+
+      case 'AUTHENTICATE':
+        if (msg.params[0] === '+') {
+          const plain = this.account + '\0' + this.account + '\0' + this.password
+          this._send('AUTHENTICATE ' + b4a.toString(b4a.from(plain), 'base64'))
+        }
+        return
+
+      case '900':
+        this.loggedIn = true
+        this.emit('login', this.account)
+        return
+
+      case '903':
+        this._sasl = 'done'
+        this._send('CAP END')
+        return
+
+      case '902':
+      case '904':
+      case '905': {
+        this._send('CAP END')
+        const err = new Error(
+          'Login failed for ' + this.account + ': wrong nick or password'
+        ) as Error & { code: string }
+        err.code = 'LOGIN_FAILED'
+        this.emit('error', err)
+        return
+      }
+
       case '001':
         this.ready = true
-        if (this.password) this.identify()
+        // Logged in during the handshake already, or ask NickServ now.
+        if (this.password && this._sasl !== 'done') this.identify()
         if (this._reclaiming) {
           this.privmsg('NickServ', 'GHOST ' + this.account + ' ' + this.password)
           // Give NickServ a moment to drop the old session.

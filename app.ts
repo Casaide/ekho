@@ -7,6 +7,8 @@ import Irc from './lib/irc.ts'
 import Store from './lib/store.ts'
 import Ui from './lib/ui.ts'
 import connectRadio from './lib/radio.ts'
+import type { RadioConnection } from './lib/radio.ts'
+import Link, { FatalError } from './lib/link.ts'
 import showCrash from './lib/crash.ts'
 import Log from './lib/log.ts'
 
@@ -35,23 +37,6 @@ function crash(err: unknown) {
 Bare.on('uncaughtException', crash)
 Bare.on('unhandledRejection', crash)
 
-function explainIrc(err: Error & { code?: string }): string {
-  if (err.code === 'NICK_IN_USE') {
-    return 'that nick is in use: is another IRC app connected as it? close it, then log in'
-  }
-  return 'irc: ' + err.message
-}
-
-// Bluetooth failures, in words someone can act on.
-function explainRadio(err: Error): string {
-  const text = err.message
-  if (/SecurityException|permission/i.test(text)) {
-    return 'bluetooth is blocked: open Settings › Apps › ekho › Permissions, allow Nearby devices, then try again'
-  }
-  if (/not turned on|poweredOff|BT Adapter/i.test(text)) return 'turn bluetooth on, then try again'
-  return 'radio: ' + text
-}
-
 // The community IRC server; it bridges IRC to the mesh both ways.
 const IRC_HOST = 'irc.motaba.net'
 const IRC_PORT = 6697
@@ -78,7 +63,14 @@ try {
   console.error('state:', (err as Error).message)
 }
 
+// The IRC login, and whether each link should be kept up: set by connecting
+// or logging in, cleared by disconnecting or logging out. On start, and on
+// coming back to the app, wanted links reconnect by themselves.
 const settings = { nick: '', password: '', ...saved?.irc }
+let wanted: { radio: boolean; irc: boolean } = {
+  radio: saved?.wanted?.radio ?? false,
+  irc: saved?.wanted?.irc ?? settings.nick !== ''
+}
 // Set once the first-run page is done; until then ekho opens on it.
 let onboarded: boolean = saved?.onboarded ?? false
 // Bridged channels joined beyond IRC_CHANNEL, such as regional ones.
@@ -97,7 +89,7 @@ function save() {
   timer = setTimeout(() => {
     timer = null
     try {
-      store.save({ messenger, irc: settings, onboarded, channels })
+      store.save({ messenger, irc: settings, wanted, onboarded, channels })
     } catch (err) {
       console.error('save:', (err as Error).message)
     }
@@ -109,144 +101,139 @@ messenger.on('update', save)
 messenger.on('contacts', save)
 
 let irc: Irc | null = null
+// Set by the register button, for the next IRC attempt only.
+let registering = false
 
-// Reconnect after a drop we didn't ask for (Android closes sockets when the
-// app is in the background, or the network changes): soon, then less often.
-const RETRY = [5_000, 15_000, 60_000]
-let retries = 0
-let retryTimer: ReturnType<typeof setTimeout> | null = null
+// Open one IRC connection, for the IRC link: resolves once the server has
+// let us in, rejects with a FatalError for what only the user can fix.
+function openIrc(detail: (text: string) => void): Promise<Irc> {
+  const register = registering
+  registering = false
 
-function connectIrc(register: boolean) {
-  if (retryTimer !== null) clearTimeout(retryTimer)
-  retryTimer = null
-
-  // One connection at a time: close the previous one and wait for it to go,
-  // as a second under the same nick is refused.
-  if (irc !== null) {
-    const previous = irc
-    irc = null
-    log.info('irc: closing the previous connection')
-    let opened = false
-    const open = () => {
-      if (opened) return
-      opened = true
-      openIrc(register)
-    }
-    previous.once('close', open)
-    setTimeout(open, 2000)
-    previous.quit('reconnecting')
-    return
-  }
-
-  openIrc(register)
-}
-
-function openIrc(register: boolean) {
   const socket = tls.connect({ host: IRC_HOST, port: IRC_PORT })
   const current = new Irc(socket, {
     nick: settings.nick,
     password: settings.password,
     channels: [IRC_CHANNEL, ...channels]
   })
-  irc = current
 
   log.info('irc: connecting to ' + IRC_HOST + ':' + IRC_PORT + ' as ' + settings.nick)
-  ui.setIrcStatus('connecting as ' + settings.nick + '…')
+  detail('connecting as ' + settings.nick)
 
   // Every line the server sends, so the log reads like a terminal. Lines we
   // send aren't logged, as they carry the password.
   current.on('line', (line: string) => log.info('irc <', line))
-  current.on('ready', () => {
-    retries = 0
-    current.list()
-    log.info('irc: logged in as ' + current.nick)
-    ui.setIrcStatus('logged in as ' + current.nick)
+  current.on('login', (account: string) => log.info('irc: logged in to account ' + account))
+  current.on('reclaim', (account: string) => {
+    log.warn('irc: ' + account + ' is held by an old connection; reclaiming it')
+    detail(account + ' is held by an old connection, reclaiming it')
+  })
+  current.on('nick', (nick: string) => {
+    log.info('irc: now ' + nick)
+    ui.render()
+  })
+  current.on('notice', (n: { from: string; text: string }) => {
+    if (n.from === 'NickServ') ui.setIrcNotice(n.text)
   })
   current.on('channels', (list: { name: string; users: number; topic: string }[]) => {
     serverChannels = list.sort((a, b) => b.users - a.users)
     log.info('irc: ' + list.length + ' channels on the server')
     ui.setChannels(serverChannels, channels, IRC_CHANNEL)
   })
-  current.on('reclaim', (account: string) => {
-    log.warn('irc: ' + account + ' is held by an old connection; reclaiming it')
-    ui.setIrcStatus(account + ' is held by an old connection, reclaiming it…')
-  })
-  current.on('nick', (nick: string) => {
-    log.info('irc: now ' + nick)
-    ui.setIrcStatus('logged in as ' + nick)
-  })
-  current.on('notice', (n: { from: string; text: string }) => {
-    if (n.from === 'NickServ') ui.setIrcStatus('NickServ: ' + n.text)
-  })
-  current.on('error', (err: Error) => {
-    log.error('irc:', err)
-    ui.setIrcStatus(explainIrc(err), true)
-  })
-  current.on('close', () => {
-    log.warn('irc: connection closed')
-    if (current.quitting || irc !== current) return
-    irc = null
-    const wait = RETRY[Math.min(retries++, RETRY.length - 1)]
-    log.info('irc: reconnecting in ' + wait / 1000 + ' s')
-    ui.setIrcStatus('disconnected, reconnecting in ' + wait / 1000 + ' s…', true)
-    retryTimer = setTimeout(() => connectIrc(false), wait)
-  })
-  if (register) current.once('ready', () => current.register())
+  current.on('close', () => log.warn('irc: connection closed'))
 
-  messenger.setIrc(current)
-  current.connect()
+  return new Promise((resolve, reject) => {
+    const give = (err: Error) => {
+      current.removeAllListeners('ready')
+      current.quit()
+      socket.destroy()
+      reject(err)
+    }
+
+    current.on('error', (err: Error & { code?: string }) => {
+      log.error('irc:', err)
+      if (current.ready) return
+      if (err.code === 'LOGIN_FAILED') return give(new FatalError('wrong nick or password'))
+      if (err.code === 'NICK_IN_USE') {
+        return give(new FatalError(settings.nick + ' is in use, and no password to reclaim it'))
+      }
+      give(err)
+    })
+    current.once('close', () => {
+      if (!current.ready) reject(new Error('the server closed the connection'))
+    })
+    current.once('ready', () => {
+      irc = current
+      messenger.setIrc(current)
+      if (register) current.register()
+      current.list()
+      resolve(current)
+    })
+
+    current.connect()
+  })
 }
 
-let radioBusy = false
-let radio: { id: string; disconnect: () => void } | null = null
+const ircLink = new Link('irc', openIrc)
+ircLink.on('change', () => {
+  log.info('irc: ' + ircLink.state + (ircLink.detail ? ' · ' + ircLink.detail : ''))
+  if (ircLink.state !== 'on') irc = null
+  ui.render()
+})
+
+// Open the radio, for the radio link.
+function openRadio(detail: (text: string) => void): Promise<RadioConnection> {
+  detail('looking for your radio: keep it close and on')
+  return connectRadio({
+    onstatus: (status) => {
+      log.info('radio:', status)
+      detail(status)
+    },
+    onlog: (line) => log.info('radio:', line)
+  }).then((connection) => {
+    messenger.node = connection.client.id
+    messenger.setRadio(connection.client)
+    log.info('radio: connected as', connection.client.id)
+    return connection
+  })
+}
+
+const radioLink = new Link('radio', openRadio)
+radioLink.on('change', () => {
+  log.info('radio: ' + radioLink.state + (radioLink.detail ? ' · ' + radioLink.detail : ''))
+  ui.render()
+})
+
+function want(link: 'radio' | 'irc', on: boolean) {
+  wanted = { ...wanted, [link]: on }
+  save()
+}
+
+// Android pauses the app when it leaves the screen, and its sockets with it.
+// Say goodbye to IRC properly rather than leave a session that holds the nick,
+// and log back in on return. The radio's Bluetooth link outlives a pause, and
+// the radio keeps what arrives meanwhile.
+Bare.on('suspend', () => {
+  log.info('app: paused')
+  ircLink.pause()
+})
+Bare.on('resume', () => {
+  log.info('app: back')
+  ircLink.resume()
+})
+Bare.on('exit', () => irc?.quit('closed'))
 
 const ui = new Ui(
   messenger,
   {
     connectRadio() {
-      // One attempt at a time: a second would scan while the first holds the
-      // radio, and never find it.
-      if (radioBusy) return log.warn('radio: already connecting')
-      radioBusy = true
-
-      ui.setRadioBusy(true)
-      ui.setRadioStatus('looking for your radio… keep it close and on')
-      log.info('radio: connecting')
-      connectRadio({
-        onstatus: (status) => {
-          log.info('radio:', status)
-          ui.setRadioStatus(status)
-        },
-        onlog: (line) => log.info('radio:', line)
-      }).then(
-        ({ client, disconnect }) => {
-          radioBusy = false
-          ui.setRadioBusy(false)
-          radio = { id: client.id, disconnect }
-          ui.setRadioConnected(client.id)
-          messenger.node = client.id
-          messenger.setRadio(client)
-          ui.setRadioStatus('connected as ' + client.id)
-          log.info('radio: connected as', client.id)
-          client.on('close', () => {
-            radio = null
-            ui.setRadioConnected(null)
-            log.warn('radio: disconnected')
-            ui.setRadioStatus('disconnected: press connect to try again', true)
-          })
-        },
-        (err: Error) => {
-          radioBusy = false
-          ui.setRadioBusy(false)
-          log.error('radio:', err)
-          ui.setRadioStatus(explainRadio(err), true)
-        }
-      )
+      want('radio', true)
+      radioLink.start()
     },
 
     disconnectRadio() {
-      log.info('radio: disconnecting')
-      radio?.disconnect()
+      want('radio', false)
+      radioLink.stop()
     },
 
     toggleChannel(name: string) {
@@ -273,11 +260,26 @@ const ui = new Ui(
     connectIrc({ nick, password, register }) {
       settings.nick = nick
       settings.password = password
-      save()
-      connectIrc(register)
+      registering = register
+      want('irc', true)
+      // New details: close what's open and start over with them.
+      ircLink.stop()
+      ircLink.start()
+    },
+
+    logOutIrc() {
+      want('irc', false)
+      ircLink.stop()
     }
   },
-  { nick: settings.nick, password: settings.password, log, onboarded }
+  {
+    nick: settings.nick,
+    password: settings.password,
+    log,
+    onboarded,
+    radio: radioLink,
+    irc: ircLink
+  }
 )
 
 const window = new Window(1100, 720)
@@ -290,5 +292,6 @@ shownWindow = window
 ui.setCompact(window.size.width < COMPACT)
 window.on('resize', () => ui.setCompact(window.size.width < COMPACT))
 
-// Log back in to IRC with the saved nick.
-if (settings.nick) connectIrc(false)
+// Bring back what was up last time.
+if (wanted.radio) radioLink.start()
+if (wanted.irc && settings.nick) ircLink.start()
