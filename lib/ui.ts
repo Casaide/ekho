@@ -1,6 +1,7 @@
 import native from 'bare-native'
 import theme from './theme.ts'
 import type Messenger from './messenger.ts'
+import { displayName } from './contacts.ts'
 import type { Contact, Message } from './types.ts'
 
 const { View, Text, TextInput, ScrollView } = native
@@ -32,12 +33,21 @@ export default class Ui {
   _input: any
   _nick: any
   _password: any
+  _header: any
+  _info: any
+  _alias: any
+  _showInfo: boolean
 
-  constructor(messenger: Messenger, actions: UiActions, opts: { compact?: boolean } = {}) {
+  constructor(
+    messenger: Messenger,
+    actions: UiActions,
+    opts: { compact?: boolean; nick?: string; password?: string } = {}
+  ) {
     this.messenger = messenger
     this.actions = actions
     this.compact = opts.compact ?? false
     this.selected = null
+    this._showInfo = false
 
     this._status = text('', { color: colors.muted, fontSize: 12, flex: 1, textAlign: 'right' })
 
@@ -63,6 +73,8 @@ export default class Ui {
 
     this._nick = input('nick, from your node short name')
     this._password = input('password, stored on this device', { secureTextEntry: true })
+    this._nick.value = opts.nick ?? ''
+    this._password.value = opts.password ?? ''
 
     const setup = view({ padding: 14, gap: 8, borderTopWidth: 1, borderColor: colors.line }, [
       text('// radio', { color: colors.muted, fontSize: 11 }),
@@ -108,7 +120,29 @@ export default class Ui {
       ]
     )
 
-    this._main = view({ flex: 1 }, [this._thread, composer])
+    // The selected contact's name, and the way into their info.
+    this._header = view({
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderColor: colors.line
+    })
+
+    // Contact info: every address they're known by, an alias, and joining.
+    this._alias = input('alias, optional')
+    this._alias.returnKeyType = 'done'
+    this._alias.on('submit', () => {
+      const alias = this._alias.value.trim()
+      this.messenger.rename(this.selected!, alias === '' ? null : alias)
+    })
+    this._info = new ScrollView()
+    this._info.style = { flex: 1 }
+    this._info.contentStyle = { padding: 16, gap: 10 }
+
+    this._main = view({ flex: 1 }, [this._header, this._info, this._thread, composer])
 
     this.root = view(
       {
@@ -120,6 +154,7 @@ export default class Ui {
       [header, view({ flex: 1, flexDirection: 'row' }, [this._side, this._main])]
     )
 
+    messenger.on('contacts', () => this.render())
     messenger.on('message', () => this.render())
     messenger.on('update', () => this.render())
     messenger.on('status', () => this.render())
@@ -134,6 +169,13 @@ export default class Ui {
 
   select(contact: Contact | null): void {
     this.selected = contact
+    this._showInfo = false
+    this.render()
+  }
+
+  toggleInfo(): void {
+    this._showInfo = !this._showInfo
+    if (this._showInfo) this._alias.value = this.selected!.alias ?? ''
     this.render()
   }
 
@@ -157,8 +199,75 @@ export default class Ui {
     }
     this._main.style = { flex: 1, display: showMain ? 'flex' : 'none' }
 
+    // A contact merged away no longer exists.
+    if (this.selected !== null && this.messenger.contacts.get(this.selected.id) === null) {
+      this.selected = null
+    }
+
+    this._info.style = { flex: 1, display: this._showInfo ? 'flex' : 'none' }
+    this._thread.style = { flex: 1, display: this._showInfo ? 'none' : 'flex' }
+
     this._renderList()
+    this._renderHeader()
+    this._renderInfo()
     this._renderThread()
+  }
+
+  _renderHeader(): void {
+    clear(this._header)
+    if (this.selected === null) return
+
+    this._header.appendChild(
+      text(displayName(this.selected), {
+        color: colors.text,
+        fontWeight: 'bold',
+        fontSize: 14,
+        flex: 1
+      })
+    )
+    this._header.appendChild(
+      button(this._showInfo ? 'messages' : 'info', () => this.toggleInfo(), chip(colors.text))
+    )
+  }
+
+  _renderInfo(): void {
+    clear(this._info.content)
+    if (this.selected === null || !this._showInfo) return
+
+    const contact = this.selected
+    const content = this._info.content
+    const label = (value: string) => text(value, { color: colors.muted, fontSize: 11 })
+
+    content.appendChild(label('// alias'))
+    content.appendChild(this._alias)
+
+    content.appendChild(label('// known as'))
+    for (const node of contact.nodes) {
+      const since = this.messenger.heard.since(node)
+      content.appendChild(
+        text('lora  ' + node + '  ' + (since === Infinity ? 'not heard' : 'heard ' + ago(since)), {
+          color: colors.text,
+          fontSize: 13
+        })
+      )
+    }
+    for (const nick of contact.nicks) {
+      content.appendChild(text('irc   ' + nick, { color: colors.irc, fontSize: 13 }))
+    }
+
+    if (contact.channel) return
+
+    content.appendChild(label('// same person as… (joins them into this contact)'))
+    for (const other of this.messenger.contacts.all()) {
+      if (other === contact || other.channel) continue
+      content.appendChild(
+        button(
+          displayName(other) + '  [' + address(other) + ']',
+          () => this.messenger.join(contact, other),
+          chip(colors.soft)
+        )
+      )
+    }
   }
 
   _renderList(): void {
@@ -180,7 +289,7 @@ export default class Ui {
               backgroundColor: active ? colors.panel : colors.ground
             },
             [
-              text(contact.name, { color: colors.text, fontWeight: 'bold', fontSize: 14 }),
+              text(displayName(contact), { color: colors.text, fontWeight: 'bold', fontSize: 14 }),
               text(last ? last.text : '', { color: colors.soft, fontSize: 13 }, 1),
               text('[' + address(contact) + ']', { color: colors.muted, fontSize: 11 })
             ]
@@ -210,9 +319,10 @@ export default class Ui {
     const meta =
       time(msg.time) +
       ' ' +
-      (mine ? 'you' : (msg.from ?? this.selected!.name)) +
+      (mine ? 'you' : (msg.from ?? displayName(this.selected!))) +
       ' [' +
       msg.via +
+      (msg.address ? ' ' + msg.address : '') +
       (msg.hops ? ' · ' + msg.hops + ' hops' : '') +
       ']' +
       (mine ? ' ' + msg.state + (msg.reason ? ' · ' + msg.reason : '') : '')
@@ -228,6 +338,15 @@ export default class Ui {
         borderColor: mine ? tone : colors.edge
       })
     ]
+
+    if (msg.state === 'received') {
+      children.push(
+        view({ flexDirection: 'row', gap: 8, paddingLeft: 12 }, [
+          button('♥', () => this.messenger.react(msg, '♥'), chip(colors.muted)),
+          button('+1', () => this.messenger.react(msg, '👍'), chip(colors.muted))
+        ])
+      )
+    }
 
     if (msg.state === 'failed') {
       children.push(
@@ -327,8 +446,14 @@ function clear(node: any): void {
 }
 
 function address(contact: Contact): string {
-  if (contact.channel) return 'channel · ' + contact.nick
-  return [contact.node, contact.nick && 'irc:' + contact.nick].filter(Boolean).join(' · ')
+  if (contact.channel) return 'channel · ' + contact.nicks.join(', ')
+  return contact.nodes.concat(contact.nicks.map((nick) => 'irc:' + nick)).join(' · ')
+}
+
+function ago(ms: number): string {
+  if (ms < 60_000) return 'just now'
+  if (ms < 3_600_000) return Math.round(ms / 60_000) + 'm ago'
+  return Math.round(ms / 3_600_000) + 'h ago'
 }
 
 function time(ms: number): string {

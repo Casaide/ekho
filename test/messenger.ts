@@ -169,3 +169,113 @@ test('sending fails cleanly when no path is up', (t) => {
   t.equal(msg.state, 'failed')
   t.equal(msg.reason, 'IRC_OFFLINE')
 })
+
+test('linking a nick merges that IRC contact into the person', (t) => {
+  const { c, radio, stream, messenger } = setup()
+
+  stream.serve(':georgi!u@host PRIVMSG dom :from irc\r\n')
+  c.tick(1000)
+  radio.emit('message', {
+    from: '!1b2c3d4e',
+    name: 'GEO',
+    text: 'from lora',
+    snr: 1,
+    rssi: -100,
+    hops: 1,
+    direct: true
+  })
+
+  const node = messenger.contacts.byNode('!1b2c3d4e')!
+  messenger.link(node, { nick: 'georgi' })
+
+  t.equal(messenger.contacts.byNick('georgi'), node)
+  t.equal(messenger.contacts.get('irc:georgi'), null, 'the IRC-only contact is gone')
+  t.deepStrictEqual(
+    messenger.thread(node).map((m) => m.text),
+    ['from irc', 'from lora']
+  )
+})
+
+test('a reaction goes as a short text message on the current route', (t) => {
+  const { stream, messenger, ivan } = setup()
+
+  const original = messenger.send(ivan, 'take the spare cable')
+  messenger.react(original, '♥')
+
+  t.equal(stream.lines[1], 'PRIVMSG ivanp :♥ re: "take the spare cable" [!e2f4a910]')
+})
+
+test('state survives a restart, and unanswered sends come back failed', (t) => {
+  const { radio, messenger, ivan } = setup()
+
+  hearIvan(radio)
+  messenger.send(ivan, 'still waiting for an ack')
+
+  const restarted = new Messenger({
+    ircChannel: '#sofiamesh',
+    state: JSON.parse(JSON.stringify(messenger))
+  })
+  const thread = restarted.thread(restarted.contacts.byNode(IVAN)!)
+
+  t.equal(thread.length, 2)
+  t.equal(thread[1].state, 'failed')
+  t.equal(thread[1].reason, 'INTERRUPTED')
+  t.equal(restarted.channel.nicks[0], '#sofiamesh')
+})
+
+test('a replaced radio is let go', (t) => {
+  const { radio, messenger, ivan } = setup()
+
+  const fresh = new FakeRadio()
+  messenger.setRadio(fresh as never)
+
+  radio.emit('message', {
+    from: IVAN,
+    name: 'ivan',
+    text: 'old radio',
+    snr: 1,
+    rssi: -100,
+    hops: 0,
+    direct: true
+  })
+
+  t.equal(messenger.thread(ivan).length, 0)
+})
+
+test('two contacts joined as one person keep every address, with an alias', (t) => {
+  const { radio, stream, messenger } = setup()
+
+  hearIvan(radio)
+  stream.serve(':ivan_irc!u@host PRIVMSG dom :hi from irc\r\n')
+
+  const lora = messenger.contacts.byNode(IVAN)!
+  const irc = messenger.contacts.byNick('ivan_irc')!
+
+  messenger.join(lora, irc)
+  messenger.rename(lora, 'Ivan P')
+
+  t.equal(messenger.contacts.byNick('ivan_irc'), lora)
+  t.deepStrictEqual(lora.nicks, ['ivanp', 'ivan_irc'])
+  t.equal(lora.alias, 'Ivan P')
+  t.deepStrictEqual(
+    messenger.thread(lora).map((m) => [m.via, m.address]),
+    [
+      ['lora', IVAN],
+      ['irc', 'ivan_irc']
+    ]
+  )
+})
+
+test('a person with two nodes is sent to the one heard most recently', (t) => {
+  const { c, radio, messenger, ivan } = setup()
+
+  messenger.link(ivan, { node: '!5d02b7aa' })
+  hearIvan(radio)
+  c.tick(1000)
+  radio.emit('position', { from: '!5d02b7aa' })
+
+  const msg = messenger.send(ivan, 'which radio?')
+
+  t.equal(msg.address, '!5d02b7aa')
+  t.equal(radio.sent[0].opts.to, 0x5d02b7aa)
+})

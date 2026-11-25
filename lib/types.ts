@@ -32,11 +32,15 @@ export interface IrcMessage {
 
 export interface Contact {
   id: string
+  // The name the network gave: a node's short name or a nick.
   name: string
-  // Meshtastic node ID, like '!e2f4a910'.
-  node: string | null
-  // IRC nick, or the IRC channel for a channel contact.
-  nick: string | null
+  // A name the user chose; shown instead of `name` when set.
+  alias: string | null
+  // Every Meshtastic node ID known to be this person, like '!e2f4a910'.
+  nodes: string[]
+  // Every IRC nick known to be this person, or the IRC channel for a channel
+  // contact.
+  nicks: string[]
   channel: boolean
 }
 
@@ -55,5 +59,8 @@ export interface Message {
   state: State
   reason: string | null
   hops?: number
+  // The exact address it came from or went to: a node ID, a nick or a
+  // channel. Shown in message info, since one person can have several.
+  address: string | null
   time: number
 }
