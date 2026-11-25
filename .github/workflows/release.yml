@@ -1,14 +1,22 @@
 name: Release
+# Every merge to main is a release. The version comes from the Conventional
+# Commits since the last tag: a breaking change bumps minor while we're on 0.x
+# (major after 1.0), feat bumps minor, anything else bumps patch. The first
+# release takes the version in package.json.
 on:
   push:
-    tags:
-      - v*
+    branches:
+      - main
+  workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: ubuntu-latest
-    name: Signed APK release
+    name: Release with APK
     env:
       KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
       KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -17,6 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -26,9 +35,31 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - name: Next version
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          if [ -z "$last" ]; then
+            next=$(node -p "require('./package.json').version")
+          else
+            log=$(git log --format='%s%n%b' "$last..HEAD")
+            IFS=. read -r major minor patch <<< "${last#v}"
+            if printf '%s\n' "$log" | grep -qE '^[a-z]+(\(.+\))?!:|^BREAKING CHANGE'; then
+              if [ "$major" = 0 ]; then minor=$((minor + 1)); patch=0
+              else major=$((major + 1)); minor=0; patch=0; fi
+            elif printf '%s\n' "$log" | grep -qE '^feat(\(.+\))?:'; then
+              minor=$((minor + 1)); patch=0
+            else
+              patch=$((patch + 1))
+            fi
+            next="$major.$minor.$patch"
+          fi
+          echo "Releasing v$next (last release: ${last:-none})"
+          echo "VERSION=$next" >> "$GITHUB_ENV"
       - name: Android SDK platform and build tools
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
       - run: npm install
+      # bare-build reads the app version from package.json.
+      - run: npm pkg set version="$VERSION"
       - name: Signing key
         run: |
           if [ -n "$KEYSTORE" ]; then
@@ -49,10 +80,11 @@ jobs:
           --out build
           $SIGN
       - name: Publish release
+        # Creating the release creates the tag on the merged commit.
         run: |
-          mv build/ekho.apk "build/ekho-${GITHUB_REF_NAME}.apk"
-          gh release create "$GITHUB_REF_NAME" "build/ekho-${GITHUB_REF_NAME}.apk" \
-            --title "ekho $GITHUB_REF_NAME" --generate-notes $PRERELEASE
+          mv build/ekho.apk "build/ekho-v$VERSION.apk"
+          gh release create "v$VERSION" "build/ekho-v$VERSION.apk" \
+            --target "$GITHUB_SHA" --title "ekho v$VERSION" --generate-notes $PRERELEASE
       - name: Remove the key
         if: always()
         run: rm -f release.keystore

@@ -11,7 +11,7 @@ The app replaces the Meshtastic app on the phone, and adds IRC when no nodes are
 - [x] Last-heard tracking and contacts (`lib/heard.ts`, `lib/contacts.ts`)
 - [x] First bare-native UI and app wiring (written, not yet run)
 - [ ] Run on desktop with a T1000-E over USB; fix what breaks
-- [x] Android Bluetooth permissions in the manifest; APK built in CI, signed releases on `v*` tags
+- [x] Android Bluetooth permissions in the manifest; APK built in CI, a release with the APK on every merge to `main`
 - [ ] Run on a phone over Bluetooth; fix what breaks
 - [x] Persistence: contacts, threads, IRC credentials (password stays on the device)
 - [ ] IRC setup flow, plus a self-test that sends a code from your nick to your own node through the bridge

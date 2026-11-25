@@ -88,7 +88,7 @@ A minimal IRC client over a duplex stream. `connect()`, `register([email])`, `id
 
 ## Releases
 
-Pushing a `v*` tag builds the Android APK and publishes it as a GitHub release. To sign releases with your own key, add three repository secrets (Settings › Secrets and variables › Actions):
+Every merge to `main` builds the Android APK and publishes it as a GitHub release, with the APK attached. The version comes from the [Conventional Commits](https://www.conventionalcommits.org) since the last release: `feat` bumps minor, a breaking change (`feat!:` or `BREAKING CHANGE`) bumps minor while on 0.x and major after, anything else bumps patch. The first release uses the version in `package.json`. When squash-merging, give the pull request a Conventional Commits title. To sign releases with your own key, add three repository secrets (Settings › Secrets and variables › Actions):
 
 ```
 keytool -genkeypair -keystore release.keystore -alias ekho -keyalg RSA -keysize 4096 -validity 10000
