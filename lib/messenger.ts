@@ -14,6 +14,8 @@ export interface MessengerOptions {
   channelName?: string
   // The IRC channel the community bridge mirrors the mesh channel to.
   ircChannel?: string
+  // Other bridged IRC channels joined, such as regional ones. IRC only.
+  ircChannels?: string[]
   // What toJSON() returned last run: contacts and threads.
   state?: SavedState | null
   // Messages kept per thread when saving.
@@ -75,10 +77,12 @@ export default class Messenger extends EventEmitter {
 
     const ircChannel = opts.ircChannel ?? '#bulgaria'
 
-    // A channel saved under an older name is gone from the bridge.
+    // A channel saved under an older name, or since left, is dropped.
+    const kept = new Set([ircChannel, ...(opts.ircChannels ?? [])])
     for (const c of this.contacts.all()) {
-      if (c.channel && c.id !== ircChannel) this.contacts.remove(c)
+      if (c.channel && !kept.has(c.id)) this.contacts.remove(c)
     }
+    for (const name of kept) if (name !== ircChannel) this.addChannel(name)
 
     this.channel =
       this.contacts.get(ircChannel) ??
@@ -209,7 +213,8 @@ export default class Messenger extends EventEmitter {
       contact: contact.id,
       from: null,
       text,
-      via: opts.via ?? this.route(),
+      // Channels other than the mesh one exist on IRC only.
+      via: opts.via ?? (contact.channel && contact !== this.channel ? 'irc' : this.route()),
       state: 'sending',
       reason: null,
       address: null,
@@ -220,6 +225,22 @@ export default class Messenger extends EventEmitter {
     this._dispatch(contact, msg)
 
     return msg
+  }
+
+  // A bridged IRC channel of its own, such as a regional one. The mesh
+  // channel stays `channel`; these are reached over IRC only.
+  addChannel(name: string): Contact {
+    const contact =
+      this.contacts.get(name) ?? this.contacts.add({ name, nick: name, channel: true })
+    this.emit('contacts')
+    return contact
+  }
+
+  removeChannel(name: string): void {
+    const contact = this.contacts.get(name)
+    if (contact === null || contact === this.channel) return
+    this.contacts.remove(contact)
+    this.emit('contacts')
   }
 
   // Try a failed message again on LoRa.

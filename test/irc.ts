@@ -118,3 +118,22 @@ test('without a password, a nick in use is an error', (t) => {
 
   t.equal(code, 'NICK_IN_USE')
 })
+
+test('lists the server channels, and joins and leaves them', (t) => {
+  const { stream, irc } = client()
+  let channels: unknown = null
+  irc.on('channels', (list: unknown) => (channels = list))
+
+  irc.list()
+  irc.join('#sofia')
+  irc.part('#sofia')
+  stream.serve(':irc.motaba.net 322 dom #sofia 12 :Sofia mesh\r\n')
+  stream.serve(':irc.motaba.net 322 dom #varna 3 :\r\n')
+  stream.serve(':irc.motaba.net 323 dom :End of /LIST\r\n')
+
+  t.deepStrictEqual(stream.lines, ['LIST', 'JOIN #sofia', 'PART #sofia'])
+  t.deepStrictEqual(channels, [
+    { name: '#sofia', users: 12, topic: 'Sofia mesh' },
+    { name: '#varna', users: 3, topic: '' }
+  ])
+})

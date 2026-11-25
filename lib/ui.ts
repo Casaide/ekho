@@ -14,6 +14,13 @@ export interface UiActions {
   disconnectRadio(): void
   connectIrc(opts: { nick: string; password: string; register: boolean }): void
   finishOnboarding(): void
+  toggleChannel(name: string): void
+}
+
+export interface Channel {
+  name: string
+  users: number
+  topic: string
 }
 
 export type Page = 'chats' | 'onboarding' | 'settings' | 'log'
@@ -38,6 +45,7 @@ export default class Ui {
   _radioButton: any
   _spinner: any
   _irc: any
+  _channels: any
   _banner: any
   _side: any
   _divider: any
@@ -112,6 +120,7 @@ export default class Ui {
     this._spinner = new ActivityIndicator()
     this._spinner.style = { color: colors.accent, display: 'none' }
     this._irc = text('not logged in', { color: colors.muted, fontSize: 12 })
+    this._channels = view({ flexDirection: 'row', flexWrap: 'wrap', gap: 8 })
     this._password.value = opts.password ?? ''
 
     // The radio and IRC controls: on the onboarding page the first time, in
@@ -127,9 +136,12 @@ export default class Ui {
         button('log in', () => this._connectIrc(false), chip(colors.text)),
         button('register', () => this._connectIrc(true), chip(colors.irc))
       ]),
-      this._irc
+      this._irc,
+      text('// channels · tap to join or leave', { color: colors.muted, fontSize: 11 }),
+      this._channels
     ])
     this.setRadioConnected(null)
+    this.setChannels(null, [], '')
 
     this._side = view({ width: 300 }, [this._list])
     this._divider = view({ width: 1, backgroundColor: colors.line })
@@ -265,6 +277,35 @@ export default class Ui {
         ? button('connect t1000-e', () => this.actions.connectRadio(), chip(colors.accent))
         : button('disconnect ' + id, () => this.actions.disconnectRadio(), chip(colors.muted))
     )
+  }
+
+  // The server's channels, each a chip to join or leave. `main` is the one
+  // motaba puts everyone in, so it can't be left. `null` before the list
+  // has arrived.
+  setChannels(list: Channel[] | null, joined: string[], main: string): void {
+    clear(this._channels)
+    if (list === null) {
+      this._channels.appendChild(
+        text('log in to IRC to see them', { color: colors.muted, fontSize: 12 })
+      )
+      return
+    }
+    for (const channel of list) {
+      const isMain = channel.name === main
+      const on = isMain || joined.includes(channel.name)
+      const label = channel.name + ' · ' + channel.users + (isMain ? ' · always' : '')
+      this._channels.appendChild(
+        isMain
+          ? view({ ...chipBox(colors.accent), alignSelf: 'flex-start' }, [
+              text(label, { color: colors.accent, fontSize: 12 })
+            ])
+          : button(
+              label,
+              () => this.actions.toggleChannel(channel.name),
+              chip(on ? colors.accent : colors.muted)
+            )
+      )
+    }
   }
 
   // What IRC is doing, in words: logged in, what NickServ said, or what failed.
@@ -658,6 +699,11 @@ function input(placeholder: string, opts: { secureTextEntry?: boolean } = {}): a
     padding: 10
   }
   return i
+}
+
+function chipBox(color: string): object {
+  const { color: _, ...box } = chip(color)
+  return box
 }
 
 function chip(color: string): { color: string } & object {

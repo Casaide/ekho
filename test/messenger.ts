@@ -292,3 +292,32 @@ test('a channel saved under an old name is dropped for the current one', (t) => 
     ['#bulgaria']
   )
 })
+
+test('regional channels are kept across restarts and go over IRC', (t) => {
+  const radio = new FakeRadio()
+  const stream = new FakeStream()
+  const { now } = clock()
+  const heard = new Heard({ now })
+
+  const before = new Messenger({ ircChannel: '#bulgaria', heard, now })
+  before.addChannel('#sofia')
+  const state = JSON.parse(JSON.stringify(before))
+
+  const m = new Messenger({ ircChannel: '#bulgaria', ircChannels: ['#sofia'], heard, now, state })
+  m.setRadio(radio as never)
+  radio.emit('position', { from: '!a1b2c3d4' })
+  const irc = new Irc(stream as never, { nick: 'dom' })
+  m.setIrc(irc)
+  stream.serve(':irc.motaba.net 001 dom :Welcome\r\n')
+
+  const sofia = m.contacts.get('#sofia')!
+  t.ok(sofia.channel)
+
+  // LoRa is the route, yet a regional channel is IRC only.
+  const msg = m.send(sofia, 'hello sofia')
+  t.equal(msg.via, 'irc')
+  t.equal(stream.lines.at(-1), 'PRIVMSG #sofia :hello sofia')
+
+  m.removeChannel('#sofia')
+  t.equal(m.contacts.get('#sofia'), null)
+})
