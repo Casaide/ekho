@@ -1,5 +1,5 @@
 import EventEmitter from 'bare-events'
-import Contacts, { type Address } from './contacts.ts'
+import Contacts, { type Address, type ContactEntry } from './contacts.ts'
 import Heard from './heard.ts'
 import type Irc from './irc.ts'
 import type { Contact, IrcMessage, Message, Radio, RadioAck, RadioMessage, Via } from './types.ts'
@@ -135,6 +135,13 @@ export default class Messenger extends EventEmitter {
     this.emit('status')
   }
 
+  // A new contact, from someone seen around or entered by hand.
+  addContact(entry: ContactEntry): Contact {
+    const contact = this.contacts.add(entry)
+    this.emit('contacts')
+    return contact
+  }
+
   // Record that `contact` is also reachable at a node or a nick, whether or
   // not they run ekho. If another contact already holds that address, they
   // were the same person all along, and the two are joined.
@@ -211,7 +218,12 @@ export default class Messenger extends EventEmitter {
 
   // The radio channel paired with a channel contact, or null: IRC only.
   radioChannel(contact: Contact): number | null {
-    return this._radioChannels.get(contact.id) ?? null
+    return this.radioChannelOf(contact.id)
+  }
+
+  // The same, by IRC channel name, for channels not joined.
+  radioChannelOf(name: string): number | null {
+    return this._radioChannels.get(name.toLowerCase()) ?? null
   }
 
   // Messages received in a conversation since it was last read.

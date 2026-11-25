@@ -10,6 +10,18 @@ export interface Radio extends EventEmitter {
   ): boolean
 }
 
+// What a synced bare-meshtastic Client also knows: the radio's node list,
+// its channels and its LoRa settings. Read by the app once connected.
+export interface RadioState {
+  nodes: Map<
+    number,
+    { num: number; user: { longName: string | null; shortName: string | null } | null }
+  >
+  channels: Map<number, { index: number; name: string | null; role: number }>
+  config: { region: string; preset: string } | null
+  nodeNum: number
+}
+
 export interface RadioMessage {
   from: string
   name: string
