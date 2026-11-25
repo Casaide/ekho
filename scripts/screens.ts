@@ -8,7 +8,6 @@ import Irc from '../lib/irc.ts'
 import Heard from '../lib/heard.ts'
 import Ui from '../lib/ui.ts'
 import Link from '../lib/link.ts'
-import type { Page } from '../lib/ui.ts'
 import { FakeRadio, FakeStream } from '../test/helpers.ts'
 
 const { test } = tap
@@ -17,12 +16,16 @@ const { Window } = native
 const HOLD = Number(globalThis.process?.env?.HOLD ?? 4000)
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// A link fixed in one state, for showing.
-function link(name: string, state: 'off' | 'connecting' | 'on', detail = '') {
-  const l = new Link(name, () => new Promise(() => {}))
+// A link that stays where it's put, for showing. Its state is set once the
+// window is up, as in the app: a spinner set going before then is never seen.
+function link(name: string) {
+  return new Link(name, () => new Promise(() => {}))
+}
+
+function put(l: Link, state: 'off' | 'connecting' | 'on', detail = '') {
   l.state = state
   l.detail = detail
-  return l
+  l.emit('change')
 }
 
 function actions() {
@@ -94,6 +97,7 @@ async function shot(name: string, setup: (ui: Ui) => void, ui: Ui) {
   window.content(ui.root)
   window.show()
   ui.setCompact(true)
+  await sleep(300)
   setup(ui)
   await sleep(500)
   console.log('# shot ' + name)
@@ -103,44 +107,58 @@ async function shot(name: string, setup: (ui: Ui) => void, ui: Ui) {
 
 test('onboarding', async (t) => {
   const messenger = new Messenger({ ircChannel: '#bulgaria' })
-  const ui = new Ui(messenger, actions(), {
-    onboarded: false,
-    radio: link('radio', 'connecting', 'syncing: 37 nodes so far'),
-    irc: link('irc', 'off')
-  })
-  await shot('onboarding', () => {}, ui)
+  const radio = link('radio')
+  const ui = new Ui(messenger, actions(), { onboarded: false, radio, irc: link('irc') })
+  await shot('onboarding', () => put(radio, 'connecting', 'syncing: 37 nodes so far'), ui)
   t.pass()
 })
 
 test('chats', async (t) => {
   const { messenger } = world()
-  const ui = new Ui(messenger, actions(), {
-    radio: link('radio', 'on'),
-    irc: link('irc', 'on')
-  })
-  await shot('chats', () => ui.show('chats' as Page), ui)
+  const radio = link('radio')
+  const irc = link('irc')
+  const ui = new Ui(messenger, actions(), { radio, irc })
+  const up = () => {
+    put(radio, 'on')
+    put(irc, 'on')
+  }
+  await shot('chats', up, ui)
   t.pass()
 })
 
 test('conversation', async (t) => {
   const { messenger, ivan } = world()
-  const ui = new Ui(messenger, actions(), {
-    radio: link('radio', 'on'),
-    irc: link('irc', 'on')
-  })
-  await shot('conversation', () => ui.select(ivan), ui)
+  const radio = link('radio')
+  const irc = link('irc')
+  const ui = new Ui(messenger, actions(), { radio, irc })
+  const up = () => {
+    put(radio, 'on')
+    put(irc, 'on')
+  }
+  await shot(
+    'conversation',
+    () => {
+      up()
+      ui.select(ivan)
+    },
+    ui
+  )
   t.pass()
 })
 
 test('contact', async (t) => {
   const { messenger, ivan } = world()
-  const ui = new Ui(messenger, actions(), {
-    radio: link('radio', 'on'),
-    irc: link('irc', 'on')
-  })
+  const radio = link('radio')
+  const irc = link('irc')
+  const ui = new Ui(messenger, actions(), { radio, irc })
+  const up = () => {
+    put(radio, 'on')
+    put(irc, 'on')
+  }
   await shot(
     'contact',
     () => {
+      up()
       ui.select(ivan)
       ui.toggleInfo()
     },
@@ -151,13 +169,17 @@ test('contact', async (t) => {
 
 test('settings', async (t) => {
   const { messenger } = world()
-  const ui = new Ui(messenger, actions(), {
-    radio: link('radio', 'on'),
-    irc: link('irc', 'on')
-  })
+  const radio = link('radio')
+  const irc = link('irc')
+  const ui = new Ui(messenger, actions(), { radio, irc })
+  const up = () => {
+    put(radio, 'on')
+    put(irc, 'on')
+  }
   await shot(
     'settings',
     () => {
+      up()
       ui.show('settings')
       ui.setChannels(
         [
