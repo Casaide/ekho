@@ -1,6 +1,6 @@
 {
   "name": "ekho",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Off-grid messenger: LoRa first through a Meshtastic radio, IRC when no nodes are heard",
   "type": "module",
