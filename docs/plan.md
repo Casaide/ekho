@@ -29,14 +29,17 @@ Upstream, in bare-meshtastic (see `docs/design.md` for detail):
 
 ## Phase 2: big files between ekho users over P2P
 
-- [ ] Pairing over a LoRa direct message on a private port: pair secret plus challenge, accepted only if encrypted per contact
-- [ ] Pair secret stored with the contact; attach icon greyed out until paired
-- [ ] Join Hyperswarm on `hash(secret)` only while a transfer is pending
-- [ ] Protomux proof: keyed hash of the handshake hash with the secret
+- [ ] Pairing over a LoRa direct message on a private port: pair secret, challenge and rendezvous secret, accepted only if encrypted per contact
+- [ ] Pair secret and the contact's rendezvous secret stored with the contact; attach icon greyed out until paired
+- [ ] Announce on our own rendezvous topic while online; look up a contact's topic only to connect
+- [ ] Protomux proof: keyed hash of the handshake hash with the pair secret
+- [ ] Rendezvous secret rotation, to drop a contact
 - [ ] Sender-held file as an encrypted Hypercore or Hyperdrive; "file offered" notice over LoRa or IRC
 - [ ] Contact card by QR code, for pairing in person without LoRa
 
 ## Later
+
+- Group topics for private Meshtastic channels (public channels share the default key, so they get none)
 
 - Rooftop or home hub: an always-on mailbox, announcing on the same pair topics
 - MeshCore and Nostr adapters

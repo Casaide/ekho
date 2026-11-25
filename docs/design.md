@@ -112,17 +112,28 @@ Out: MQTT (including the client proxy), a hub, a second radio, MeshCore, Nostr, 
 
 LoRa and IRC can't carry files. Between two ekho users with internet, the Holepunch stack can. The attach icon shows in every conversation but stays greyed out until the contact is paired as an ekho user. Stock users never see any of this.
 
-1. **Pair once over LoRa.** A direct message on a private Meshtastic port carries a fresh random secret for the pair and a challenge. Stock apps ignore unknown ports, so nobody else sees it (to confirm on a device). Firmware 2.5+ encrypts direct messages per contact, so only that contact's radio can read it or answer. Pairing replies are only accepted if they arrived encrypted per contact; on older firmware a direct message falls back to the shared channel key and the sender could be faked.
-2. **Find each other by the secret.** Both apps join Hyperswarm on `hash(secret)`. Nobody else can compute the topic, so no one can see you online or learn your IP.
-3. **Prove it on the connection.** A small Protomux channel where each side sends a keyed hash of the connection's handshake hash, keyed with the secret. A peer without the secret is dropped, and the proof can't be relayed or replayed.
-4. **Join only when there's something to send.** The "file offered" notice goes over LoRa or IRC; both sides join the pair topic, transfer, and leave. Most of the time ekho isn't on the DHT at all, which saves battery and leaks nothing.
-5. **The sender holds the file at first,** shared as a Hypercore or Hyperdrive and encrypted to the recipient with a key derived from the pair secret. The recipient pulls it when both are online. A mailbox comes later, on the user's own always-on hub, announcing on the same pair topics.
+1. **Pair once over LoRa.** A direct message on a private Meshtastic port carries a fresh random pair secret, a challenge, and your rendezvous secret (below). Stock apps ignore unknown ports, so nobody else sees it (to confirm on a device). Firmware 2.5+ encrypts direct messages per contact, so only that contact's radio can read it or answer. Pairing replies are only accepted if they arrived encrypted per contact; on older firmware a direct message falls back to the shared channel key and the sender could be faked.
+2. **One topic per person, for finding each other only.** Each ekho user has one random rendezvous secret and announces on `hash(rendezvous secret)` whenever ekho is online. Paired contacts know it; nobody else can compute it. To reach Ivan, look up his topic. You only ever announce on your own topic, never on per-contact ones, which keeps swarming simple and implicit. The topic does nothing once two peers have found each other.
+3. **Prove the pair on the connection.** A small Protomux channel where each side sends a keyed hash of the connection's handshake hash, keyed with the pair secret. Knowing someone's topic isn't enough to get in; a peer without the pair secret is dropped, and the proof can't be relayed or replayed.
+4. **Data flows over that connection,** not via any topic. The "file offered" notice goes over LoRa or IRC so the recipient knows to connect.
+5. **The sender holds the file at first,** shared as a Hypercore or Hyperdrive and encrypted to the recipient with a key derived from the pair secret. The recipient pulls it when both are online. A mailbox comes later, on the user's own always-on hub, announcing on the user's same rendezvous topic.
+
+**Trade-off:** every paired contact can see when you're online. To drop someone, rotate your rendezvous secret and re-share it with the rest, one direct message each next time you're in range.
+
+**Groups:** a private Meshtastic channel can have one topic, `hash(channel key + name)`, that every ekho member of that channel can find. It proves channel membership only, the same trust as the channel itself. Public channels all use the same default key, so a topic made from it would be public; they get no topic.
+
+| Topic | Who can find you | Used for |
+| --- | --- | --- |
+| Your rendezvous topic | Your paired contacts | One-to-one, always on while online |
+| A private channel's topic | Members of that channel | Groups (later) |
 
 Rejected alternatives, and why:
 
 - **A handshake broadcast over LoRa:** noisy for everyone on the mesh.
 - **A public DHT topic per mesh key:** anyone could announce on it, or watch it to see who runs ekho, when they're online and from which IP.
-- **A DHT server on a long-lived ekho key:** better, but still a stable identifier on the DHT. The pair secret needs no long-term P2P identity.
+- **A DHT server on a long-lived ekho key:** a stable public identifier anyone who learns it can watch. The rendezvous topic is only computable by paired contacts, and can be rotated.
+- **One topic per pair:** private, but a phone announcing on every contact's topic drains battery and needs bookkeeping. One rendezvous topic per person replaces it.
+- **Public channel topics:** public channels share the default key, so their topic would be public.
 - **Key agreement from the mesh keys:** needs the radio's private key exported to the phone, which breaks "the root identity stays on the T1000-E".
 - **Other ekho users as mailboxes:** strangers storing your data brings storage limits and abuse problems.
 

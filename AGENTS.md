@@ -29,7 +29,7 @@ The live design doc and the mockups are artifacts only the owner can open: [desi
  │           threads,   │   meshtastic) │
  │           states)    └── irc.ts ─────┼─ TLS ─ irc.motaba.net ─ bridge ─ mesh
  │                                      │
- │          Phase 2: pairing + P2P ─────┼─ Hyperswarm (pair topic) ─ other ekho
+ │          Phase 2: pairing + P2P ─────┼─ Hyperswarm (rendezvous) ─ other ekho
  └──────────────────────────────────────┘
 ```
 
@@ -113,13 +113,15 @@ Roughly in order:
 
 Large files between two ekho users, which LoRa and IRC can't carry. The attach button shows in every conversation but stays greyed out until the contact is paired. Full reasoning and rejected alternatives are in `docs/design.md`.
 
-1. **Pair once over LoRa.** A direct message on a private Meshtastic port carries a fresh random pair secret and a challenge. Stock apps ignore unknown ports, so nobody else sees it (confirm on a device). Accept the reply only if it arrived encrypted per contact (firmware 2.5+); otherwise the sender could be faked.
-2. **Find each other by the secret.** Join Hyperswarm on `hash(secret)`. Only the pair can compute it: no public identifier, no presence leak.
-3. **Prove it on the connection.** A Protomux channel where each side sends a keyed hash of the connection's handshake hash, keyed with the secret. Drop peers that can't.
-4. **Join only when there's something to send.** "File offered" goes over LoRa or IRC; both join, transfer, leave.
-5. **The sender holds the file** as an encrypted Hypercore or Hyperdrive until the recipient pulls it. A mailbox comes later, on the user's own always-on hub.
+1. **Pair once over LoRa.** A direct message on a private Meshtastic port carries a fresh pair secret, a challenge and our rendezvous secret. Stock apps ignore unknown ports, so nobody else sees it (confirm on a device). Accept the reply only if it arrived encrypted per contact (firmware 2.5+); otherwise the sender could be faked.
+2. **One topic per person, for finding each other only.** Each user announces on `hash(own rendezvous secret)` while online; paired contacts look it up to connect. Never announce on other people's topics. Topics do nothing after peers find each other.
+3. **Prove the pair on the connection.** A Protomux channel where each side sends a keyed hash of the connection's handshake hash, keyed with the pair secret. Knowing a topic isn't enough.
+4. **Data flows over the connection.** "File offered" goes over LoRa or IRC so the recipient knows to connect.
+5. **The sender holds the file** as an encrypted Hypercore or Hyperdrive until the recipient pulls it. A mailbox comes later, on the user's own always-on hub, on the same rendezvous topic.
 
-Not used, on purpose: LoRa broadcasts (noisy for everyone), public DHT topics per mesh key (anyone can watch them), a long-lived ekho key on the DHT (a stable identifier), and exporting the radio's private key (keeps the root identity on the T1000-E).
+Trade-off accepted: paired contacts can see when you're online; rotate the rendezvous secret to drop someone. Groups later get one topic per private channel (`hash(channel key + name)`); public channels share the default key, so they get none.
+
+Not used, on purpose: LoRa broadcasts (noisy for everyone), public DHT topics per mesh key (anyone can watch them), a long-lived ekho key on the DHT (a stable identifier), one topic per pair (battery and bookkeeping), public channel topics (shared default key), and exporting the radio's private key (keeps the root identity on the T1000-E).
 
 ## Open questions
 
