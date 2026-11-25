@@ -1,9 +1,10 @@
 import native from 'bare-native'
-import { colors, font } from './theme.ts'
+import theme from './theme.ts'
 import type Messenger from './messenger.ts'
 import type { Contact, Message } from './types.ts'
 
 const { View, Text, TextInput, ScrollView } = native
+const { colors, font } = theme
 
 export interface UiActions {
   connectRadio(): void

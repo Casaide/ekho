@@ -46,7 +46,7 @@ Don't relitigate these without the user.
 - **TypeScript, erasable syntax only.** Bare strips types natively and rejects anything that isn't erasable (enums, namespaces, parameter properties). No `private` keyword either; use the `_name` convention. `tsconfig.json` sets `erasableSyntaxOnly`.
 - **ESM with explicit `.ts` imports** (`import Heard from './heard.ts'`), and `import type` for types.
 - **CommonJS dependencies are default-imported, then destructured** (`import native from 'bare-native'; const { View } = native`). Don't rely on named imports from CJS.
-- **Holepunch JS house style:** small single-purpose modules; `(required, opts = {})` constructors; all fields declared in the constructor; no async in constructors; no defensive guards (caller bugs crash; operational failures surface as `failed` states or `error` events); `b4a`, never the `Buffer` global; `bare-events` for emitters.
+- **Holepunch JS house style** (full guide in `.claude/skills/js-house-style`; apply its review checklist to every change): small single-purpose modules; `(required, opts = {})` constructors; all fields declared in the constructor; no async in constructors; no defensive guards (caller bugs crash; operational failures surface as `failed` states or `error` events); `b4a`, never the `Buffer` global; `bare-events` for emitters.
 - **Formatting:** `prettier-config-holepunch` (no semicolons, single quotes, 100 columns, no trailing commas). Lint with `lunte`.
 - **Tests:** `bare-native-test` running `bare-tap` tests (`npm test`). Test the public API the way a user of the module calls it; never pin misuse behaviour.
 

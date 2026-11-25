@@ -1,6 +1,6 @@
 // Dark, terminal look from the mockups: monospace everywhere, phosphor green
 // for LoRa and our own messages, amber for IRC, red for failures.
-export const colors = {
+const colors = {
   ground: '#0A0D0C',
   panel: '#111614',
   line: '#1E2522',
@@ -21,4 +21,4 @@ const fonts: Record<string, string> = {
   win32: 'Consolas'
 }
 
-export const font = fonts[Bare.platform] ?? 'monospace'
+export default { colors, font: fonts[Bare.platform] ?? 'monospace' }

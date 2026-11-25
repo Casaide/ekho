@@ -16,7 +16,7 @@ AGENTS.md at the repo root has the product decisions, layout and open questions.
 
 - TypeScript with erasable syntax only: no enums, namespaces, parameter properties or `private`. ESM with explicit `.ts` import paths; `import type` for types.
 - Import CommonJS packages by default import, then destructure.
-- Holepunch house style: small modules, `(required, opts = {})` constructors, fields declared up front, no defensive checks, `b4a` not `Buffer`, `bare-events` for emitters.
+- Holepunch house style, as set out in the js-house-style skill in this repo: small modules, `(required, opts = {})` constructors, fields declared up front, no defensive checks, `b4a` not `Buffer`, `bare-events` for emitters.
 - Format with prettier-config-holepunch: no semicolons, single quotes, 100 columns.
 
 ## Testing
