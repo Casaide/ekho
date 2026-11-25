@@ -122,7 +122,12 @@ const ui = new Ui(
     connectRadio() {
       ui.setRadioStatus('looking for your radio… keep it close and on')
       log.info('radio: connecting')
-      connectRadio({ onstatus: (status) => log.info('radio:', status) }).then(
+      connectRadio({
+        onstatus: (status) => {
+          log.info('radio:', status)
+          ui.setRadioStatus(status)
+        }
+      }).then(
         ({ client }) => {
           messenger.node = client.id
           messenger.setRadio(client)
