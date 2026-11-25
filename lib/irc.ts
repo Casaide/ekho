@@ -17,8 +17,8 @@ interface Parsed {
 // private messages to nicks and channels.
 //
 // Events: ready, line (each line the server sends), message ({ from, to, text,
-// direct }), notice ({ from, text }), reclaim (account), nick (nick), error,
-// close.
+// direct }), notice ({ from, text }), channels ([{ name, users, topic }]),
+// reclaim (account), nick (nick), error, close.
 //
 // A nick left behind by a dropped connection is reclaimed when the password
 // is known: log in as `nick_`, ask NickServ to GHOST the old session, then
@@ -35,6 +35,7 @@ export default class Irc extends EventEmitter {
 
   _buffer: string
   _reclaiming: boolean
+  _listing: { name: string; users: number; topic: string }[]
   _reclaimTimer: ReturnType<typeof setTimeout> | null
 
   constructor(
@@ -55,6 +56,7 @@ export default class Irc extends EventEmitter {
     this._buffer = ''
     this._reclaiming = false
     this._reclaimTimer = null
+    this._listing = []
 
     stream.on('data', (data: Uint8Array) => this._ondata(data))
     stream.on('error', (err: Error) => this.emit('error', err))
@@ -86,6 +88,16 @@ export default class Irc extends EventEmitter {
 
   join(channel: string): void {
     this._send('JOIN ' + channel)
+  }
+
+  part(channel: string): void {
+    this._send('PART ' + channel)
+  }
+
+  // Ask for the server's channels; they arrive as one `channels` event.
+  list(): void {
+    this._listing = []
+    this._send('LIST')
   }
 
   // Returns how many lines the text took.
@@ -156,6 +168,19 @@ export default class Irc extends EventEmitter {
         this.emit('error', err)
         return
       }
+
+      case '322':
+        this._listing.push({
+          name: msg.params[1],
+          users: Number(msg.params[2]),
+          topic: msg.params[3] ?? ''
+        })
+        return
+
+      case '323':
+        this.emit('channels', this._listing)
+        this._listing = []
+        return
 
       case 'NICK':
         if (msg.nick === this.nick) {

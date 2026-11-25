@@ -129,7 +129,7 @@ Privacy first: nothing usable in the clear, notes anonymous unless signed. Accep
 From the server's welcome, MOTD and NickServ (seen on 2026-11-25):
 
 - **Accounts:** only registered nicks may stay. NickServ gives 60 seconds to `IDENTIFY`, which is what ekho does, and suggests SASL PLAIN as the smoother way. One connection per nick: a second gets 433.
-- **Channels:** everyone is joined to `#bulgaria`, which ekho uses. Regional ones are bridged too: `#blagoevgrad`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`, `#burgas`, `#gabrovo`, `#petrich`, `#shumen`, `#varna`, `#vratsa`, `#vt`, `#gorna`. Joining a channel that doesn't exist creates it (ekho once made `#mesh`).
+- **Channels:** the server joins everyone to `#bulgaria`, ekho's mesh channel. ekho asks for `LIST` once logged in and shows the rest as a list to join or leave (saved, rejoined on reconnect); those are IRC only. Regional ones are bridged too: `#blagoevgrad`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`, `#burgas`, `#gabrovo`, `#petrich`, `#shumen`, `#varna`, `#vratsa`, `#vt`, `#gorna`. Joining a channel that doesn't exist creates it (ekho once made `#mesh`).
 - **Mesh users** appear as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The name is the node's long name with spaces as `_`, cut to fit `NICKLEN=30` (the user's T1000-E, long name "Dom", is `Dom|mt`). A DM to a node is most likely a PRIVMSG to that nick (to confirm).
 - **Airtime:** one message per 10 s goes out to the mesh, 150 bytes at most; faster ones wait their turn. `lib/irc.ts` splits at 400 characters today, which is too long.
 - **Hosts** are cloaked (`~dom@64a18efa92.irc`), so the IP isn't shown.

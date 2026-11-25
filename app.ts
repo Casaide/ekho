@@ -81,7 +81,14 @@ try {
 const settings = { nick: '', password: '', ...saved?.irc }
 // Set once the first-run page is done; until then ekho opens on it.
 let onboarded: boolean = saved?.onboarded ?? false
-const messenger = new Messenger({ ircChannel: IRC_CHANNEL, state: saved?.messenger ?? null })
+// Bridged channels joined beyond IRC_CHANNEL, such as regional ones.
+let channels: string[] = saved?.channels ?? []
+let serverChannels: { name: string; users: number; topic: string }[] | null = null
+const messenger = new Messenger({
+  ircChannel: IRC_CHANNEL,
+  ircChannels: channels,
+  state: saved?.messenger ?? null
+})
 
 // Save a second after the last change, not on every message.
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -90,7 +97,7 @@ function save() {
   timer = setTimeout(() => {
     timer = null
     try {
-      store.save({ messenger, irc: settings, onboarded })
+      store.save({ messenger, irc: settings, onboarded, channels })
     } catch (err) {
       console.error('save:', (err as Error).message)
     }
@@ -139,7 +146,7 @@ function openIrc(register: boolean) {
   const current = new Irc(socket, {
     nick: settings.nick,
     password: settings.password,
-    channels: [IRC_CHANNEL]
+    channels: [IRC_CHANNEL, ...channels]
   })
   irc = current
 
@@ -151,8 +158,14 @@ function openIrc(register: boolean) {
   current.on('line', (line: string) => log.info('irc <', line))
   current.on('ready', () => {
     retries = 0
+    current.list()
     log.info('irc: logged in as ' + current.nick)
     ui.setIrcStatus('logged in as ' + current.nick)
+  })
+  current.on('channels', (list: { name: string; users: number; topic: string }[]) => {
+    serverChannels = list.sort((a, b) => b.users - a.users)
+    log.info('irc: ' + list.length + ' channels on the server')
+    ui.setChannels(serverChannels, channels, IRC_CHANNEL)
   })
   current.on('reclaim', (account: string) => {
     log.warn('irc: ' + account + ' is held by an old connection; reclaiming it')
@@ -234,6 +247,22 @@ const ui = new Ui(
     disconnectRadio() {
       log.info('radio: disconnecting')
       radio?.disconnect()
+    },
+
+    toggleChannel(name: string) {
+      if (channels.includes(name)) {
+        channels = channels.filter((c) => c !== name)
+        irc?.part(name)
+        messenger.removeChannel(name)
+        log.info('irc: left ' + name)
+      } else {
+        channels = [...channels, name]
+        irc?.join(name)
+        messenger.addChannel(name)
+        log.info('irc: joined ' + name)
+      }
+      save()
+      ui.setChannels(serverChannels, channels, IRC_CHANNEL)
     },
 
     finishOnboarding() {

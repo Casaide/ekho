@@ -15,7 +15,13 @@ test('every screen renders: chats, thread, contact info, join, compact', (t) => 
   const messenger = new Messenger({ ircChannel: '#sofia' })
   const ui = new Ui(
     messenger,
-    { connectRadio() {}, disconnectRadio() {}, connectIrc() {}, finishOnboarding() {} },
+    {
+      connectRadio() {},
+      disconnectRadio() {},
+      connectIrc() {},
+      finishOnboarding() {},
+      toggleChannel() {}
+    },
     { compact: true }
   )
 
@@ -66,7 +72,8 @@ test('errors show as a banner, the radio says what went wrong, and the log copie
     connectRadio() {},
     disconnectRadio() {},
     connectIrc() {},
-    finishOnboarding() {}
+    finishOnboarding() {},
+    toggleChannel() {}
   })
 
   const window = new Window(380, 800)
@@ -83,6 +90,15 @@ test('errors show as a banner, the radio says what went wrong, and the log copie
   ui.setRadioConnected(null)
   ui.setIrcStatus('logged in as dom')
   ui.setIrcStatus('that nick is in use', true)
+  ui.setChannels(
+    [
+      { name: '#bulgaria', users: 140, topic: '' },
+      { name: '#sofia', users: 12, topic: 'Sofia mesh' },
+      { name: '#varna', users: 3, topic: '' }
+    ],
+    ['#sofia'],
+    '#bulgaria'
+  )
   ui.showError('Error: boom')
   ui.hideError()
   ui.showError('Error: again')
@@ -113,7 +129,8 @@ test('first run opens on onboarding, then chats; settings holds the same control
       connectIrc() {},
       finishOnboarding() {
         finished = true
-      }
+      },
+      toggleChannel() {}
     },
     { onboarded: false }
   )
