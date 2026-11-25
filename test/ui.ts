@@ -56,8 +56,32 @@ test('every screen renders: chats, thread, contact info, join, compact', (t) => 
   t.equal(messenger.contacts.get(georgi.id), null)
 })
 
-test('the crash screen renders an error', (t) => {
-  const window = showCrash(new Error('boom'))
+test('errors show as a banner, the radio says what went wrong, and the log copies', (t) => {
+  const messenger = new Messenger()
+  const ui = new Ui(messenger, { connectRadio() {}, connectIrc() {} })
+
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
   t.teardown(() => window.hide())
-  t.ok(window)
+
+  ui.setRadioStatus('looking for your radio…')
+  ui.setRadioStatus('turn bluetooth on, then try again', true)
+  ui.showError('Error: boom')
+  ui.hideError()
+  ui.showError('Error: again')
+
+  ui.log.warn('something odd')
+  ui.toggleLog()
+  ui.log.error('while the log is open')
+  ui.copyLog()
+  ui.toggleLog()
+
+  t.equal(ui.log.entries.at(-1)!.text, 'log copied to the clipboard')
+})
+
+test('the crash screen renders an error', (t) => {
+  const window = showCrash('Error: boom')
+  t.teardown(() => window.hide())
+  t.ok(window.contentView)
 })

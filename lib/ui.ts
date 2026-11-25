@@ -3,8 +3,10 @@ import theme from './theme.ts'
 import type Messenger from './messenger.ts'
 import { displayName } from './contacts.ts'
 import type { Contact, Message } from './types.ts'
+import Log, { line } from './log.ts'
+import type { Entry } from './log.ts'
 
-const { View, Text, TextInput, ScrollView } = native
+const { View, Text, TextInput, ScrollView, Clipboard } = native
 const { colors, font } = theme
 
 export interface UiActions {
@@ -26,6 +28,8 @@ export default class Ui {
   root: any
 
   _status: any
+  _radio: any
+  _banner: any
   _side: any
   _divider: any
   _main: any
@@ -38,17 +42,24 @@ export default class Ui {
   _info: any
   _alias: any
   _showInfo: boolean
+  log: Log
+  _showLog: boolean
+  _body: any
+  _logPanel: any
+  _logList: any
 
   constructor(
     messenger: Messenger,
     actions: UiActions,
-    opts: { compact?: boolean; nick?: string; password?: string } = {}
+    opts: { compact?: boolean; nick?: string; password?: string; log?: Log } = {}
   ) {
     this.messenger = messenger
     this.actions = actions
     this.compact = opts.compact ?? false
     this.selected = null
     this._showInfo = false
+    this.log = opts.log ?? new Log()
+    this._showLog = false
 
     this._status = text('', { color: colors.muted, fontSize: 12, flex: 1, textAlign: 'right' })
 
@@ -64,7 +75,7 @@ export default class Ui {
         alignItems: 'center',
         padding: 14
       },
-      [title, this._status]
+      [title, this._status, button('log', () => this.toggleLog(), chip(colors.muted))]
     )
 
     this._list = new ScrollView()
@@ -73,11 +84,13 @@ export default class Ui {
     this._nick = input('nick, from your node short name')
     this._password = input('password, stored on this device', { secureTextEntry: true })
     this._nick.value = opts.nick ?? ''
+    this._radio = text('not connected', { color: colors.muted, fontSize: 12 })
     this._password.value = opts.password ?? ''
 
     const setup = view({ padding: 14, gap: 8 }, [
       text('// radio', { color: colors.muted, fontSize: 11 }),
       button('connect t1000-e', () => this.actions.connectRadio(), chip(colors.accent)),
+      this._radio,
       text('// irc fallback · irc.motaba.net', { color: colors.muted, fontSize: 11 }),
       this._nick,
       this._password,
@@ -144,6 +157,28 @@ export default class Ui {
       composer
     ])
 
+    this._body = view({ flex: 1, flexDirection: 'row' }, [this._side, this._divider, this._main])
+
+    // Everything the app has reported, to read or copy and share.
+    this._logList = new ScrollView()
+    this._logList.style = { flex: 1 }
+    this._logList.contentStyle = { padding: 14, gap: 6 }
+    this._logPanel = view({ flex: 1, display: 'none' }, [
+      view({ flexDirection: 'row', gap: 8, padding: 14 }, [
+        text('// log · info, warnings and errors', { color: colors.muted, fontSize: 11, flex: 1 }),
+        button('copy', () => this.copyLog(), chip(colors.accent)),
+        button('close', () => this.toggleLog(), chip(colors.text))
+      ]),
+      rule(),
+      this._logList
+    ])
+    this.log.on('entry', (entry: Entry) => {
+      if (this._showLog) this._logList.content.appendChild(logLine(entry))
+    })
+
+    // Errors show here, above a UI that keeps working.
+    this._banner = view({ display: 'none' })
+
     this.root = view(
       {
         flex: 1,
@@ -151,11 +186,7 @@ export default class Ui {
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
       },
-      [
-        header,
-        rule(),
-        view({ flex: 1, flexDirection: 'row' }, [this._side, this._divider, this._main])
-      ]
+      [this._banner, header, rule(), this._body, this._logPanel]
     )
 
     messenger.on('contacts', () => this.render())
@@ -164,6 +195,39 @@ export default class Ui {
     messenger.on('status', () => this.render())
 
     this.render()
+  }
+
+  // What the radio is doing, in words: scanning, connected, or what went wrong.
+  setRadioStatus(status: string, failed = false): void {
+    this._radio.text = status
+    this._radio.style = { color: failed ? colors.failed : colors.muted, fontSize: 12 }
+  }
+
+  showError(message: string): void {
+    clear(this._banner)
+    this._banner.style = { padding: 14, gap: 8, backgroundColor: colors.panel }
+    this._banner.appendChild(text(message, { color: colors.failed, fontSize: 12 }))
+    this._banner.appendChild(button('dismiss', () => this.hideError(), chip(colors.failed)))
+  }
+
+  hideError(): void {
+    clear(this._banner)
+    this._banner.style = { display: 'none' }
+  }
+
+  toggleLog(): void {
+    this._showLog = !this._showLog
+    clear(this._logList.content)
+    if (this._showLog) {
+      for (const entry of this.log.entries) this._logList.content.appendChild(logLine(entry))
+      this._logList.contentOffset = { y: Number.MAX_SAFE_INTEGER }
+    }
+    this.render()
+  }
+
+  copyLog(): void {
+    Clipboard.setString(this.log.toString())
+    this.log.info('log copied to the clipboard')
   }
 
   setCompact(compact: boolean): void {
@@ -207,6 +271,8 @@ export default class Ui {
       display: this.compact ? 'none' : 'flex'
     }
     this._main.style = { flex: 1, display: showMain ? 'flex' : 'none' }
+    this._body.style = { flex: 1, flexDirection: 'row', display: this._showLog ? 'none' : 'flex' }
+    this._logPanel.style = { flex: 1, display: this._showLog ? 'flex' : 'none' }
 
     // A contact merged away no longer exists.
     if (this.selected !== null && this.messenger.contacts.get(this.selected.id) === null) {
@@ -389,6 +455,12 @@ function view(style: object, children: any[] = []): any {
   v.style = style
   for (const child of children) v.appendChild(child)
   return v
+}
+
+function logLine(entry: Entry): any {
+  const color =
+    entry.level === 'error' ? colors.failed : entry.level === 'warn' ? colors.irc : colors.soft
+  return text(line(entry), { color, fontSize: 11 })
 }
 
 // A one-point line between sections.

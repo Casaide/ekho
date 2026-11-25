@@ -1,5 +1,6 @@
 import './test/heard.ts'
 import './test/irc.ts'
+import './test/log.ts'
 import './test/messenger.ts'
 import './test/store.ts'
 import './test/ui.ts'
