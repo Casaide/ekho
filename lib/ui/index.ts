@@ -305,13 +305,9 @@ export default class Ui {
   pathOf(contact: Contact, msg: Message | null): { label: string; color: string } {
     const ircOnly = contact.channel && this.messenger.radioChannel(contact) === null
     const via = ircOnly ? 'irc' : (msg?.via ?? this.messenger.route())
-    const kind = contact.channel
-      ? ircOnly
-        ? 'irc only'
-        : 'channel'
-      : via === 'irc' && contact.nodes.length > 0
-        ? 'fallback'
-        : 'dm'
+    let kind = 'dm'
+    if (contact.channel) kind = ircOnly ? 'irc only' : 'channel'
+    else if (via === 'irc' && contact.nodes.length > 0) kind = 'fallback'
     return { label: via + ' · ' + kind, color: via === 'irc' ? colors.irc : colors.lora }
   }
 
