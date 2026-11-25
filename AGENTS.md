@@ -83,6 +83,14 @@ Roughly in order:
    - an event when a packet has gone out over the air, for a "sent" state.
 6. **Reactions:** over LoRa once bare-meshtastic supports them; over IRC as a short text message.
 
+## First P2P feature (planned, not started)
+
+Sending large files to another ekho user, which LoRa and IRC can't carry. It uses the Holepunch stack over the internet: either a direct stream between the two devices (Hyperswarm, piped) or replication (a Hypercore or Hyperdrive the sender shares).
+
+- The attach button appears in every conversation, but stays greyed out unless the contact is a known ekho user reachable over P2P. Stock Meshtastic and IRC users never get it.
+- Both sides need internet; LoRa can still carry the small "file offered" notice.
+- To be decided: how ekho learns a contact runs ekho and gets their P2P key. One option is a small handshake message over LoRa or IRC; another is a contact card shared by QR code.
+
 ## Open questions
 
 - How does an IRC user address a direct message to a node through the motaba bridge? The user can DM their own T1000-E from IRC, so it works, but ekho needs the exact target. Until then, IRC fallback needs a contact with a nick.
