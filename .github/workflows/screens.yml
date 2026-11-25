@@ -26,6 +26,15 @@ jobs:
             esac
           done
           ls -la shots
+      - name: Crash reports
+        if: always()
+        run: |
+          ls -la ~/Library/Logs/DiagnosticReports/ || true
+          for f in $(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -2); do
+            echo "== $f"
+            head -c 12000 "$f"
+            echo
+          done
       - name: Crop and print
         run: |
           python3 - <<'PY'
