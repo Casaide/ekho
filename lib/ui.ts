@@ -4,6 +4,7 @@ import type Messenger from './messenger.ts'
 import { displayName } from './contacts.ts'
 import type { Contact, Message } from './types.ts'
 import Log, { line } from './log.ts'
+import Link from './link.ts'
 import type { Entry } from './log.ts'
 
 const { View, Text, TextInput, ScrollView, Clipboard, Keyboard, ActivityIndicator } = native
@@ -13,7 +14,15 @@ export interface UiActions {
   connectRadio(): void
   disconnectRadio(): void
   connectIrc(opts: { nick: string; password: string; register: boolean }): void
+  logOutIrc(): void
   finishOnboarding(): void
+  toggleChannel(name: string): void
+}
+
+export interface Channel {
+  name: string
+  users: number
+  topic: string
 }
 
 export type Page = 'chats' | 'onboarding' | 'settings' | 'log'
@@ -34,10 +43,18 @@ export default class Ui {
   root: any
 
   _status: any
-  _radio: any
-  _radioButton: any
-  _spinner: any
-  _irc: any
+  radio: Link
+  irc: Link
+  _radioState: any
+  _radioButtons: any
+  _radioSpinner: any
+  _ircState: any
+  _ircButtons: any
+  _ircSpinner: any
+  _ircForm: any
+  _notice: any
+  _linksKey: string
+  _channels: any
   _banner: any
   _side: any
   _divider: any
@@ -53,6 +70,7 @@ export default class Ui {
   _showInfo: boolean
   log: Log
   page: Page
+  _back: Page
   _body: any
   _logPanel: any
   _logList: any
@@ -70,6 +88,8 @@ export default class Ui {
       password?: string
       log?: Log
       onboarded?: boolean
+      radio?: Link
+      irc?: Link
     } = {}
   ) {
     this.messenger = messenger
@@ -78,7 +98,13 @@ export default class Ui {
     this.selected = null
     this._showInfo = false
     this.log = opts.log ?? new Log()
+    // The radio and IRC connections, whose state the screen shows. Idle ones
+    // stand in where none are given.
+    this.radio = opts.radio ?? new Link('radio', () => new Promise(() => {}))
+    this.irc = opts.irc ?? new Link('irc', () => new Promise(() => {}))
+    this._linksKey = ''
     this.page = opts.onboarded === false ? 'onboarding' : 'chats'
+    this._back = this.page
 
     this._status = text('', { color: colors.muted, fontSize: 11 })
 
@@ -105,29 +131,43 @@ export default class Ui {
     this._nick = input('nick, from your node short name')
     this._password = input('password, stored on this device', { secureTextEntry: true })
     this._nick.value = opts.nick ?? ''
-    this._radio = text('not connected', { color: colors.muted, fontSize: 12 })
-    this._radioButton = view()
-    this._spinner = new ActivityIndicator()
-    this._spinner.style = { color: colors.accent, display: 'none' }
-    this._irc = text('not logged in', { color: colors.muted, fontSize: 12 })
+    this._radioState = text('', { color: colors.muted, fontSize: 12 })
+    this._radioButtons = view({ flexDirection: 'row', gap: 8 })
+    this._radioSpinner = spinner()
+    this._ircState = text('', { color: colors.muted, fontSize: 12 })
+    this._ircButtons = view({ flexDirection: 'row', gap: 8 })
+    this._ircSpinner = spinner()
+    this._notice = text('', { color: colors.muted, fontSize: 11 })
+    this._channels = view({ flexDirection: 'row', flexWrap: 'wrap', gap: 8 })
     this._password.value = opts.password ?? ''
 
     // The radio and IRC controls: on the onboarding page the first time, in
     // settings after that. One set, moved between the two.
+    // The login fields, shown only while logged out.
+    this._ircForm = view({ gap: 8 }, [this._nick, this._password])
+
     this._setup = view({ gap: 8 }, [
       text('// radio', { color: colors.muted, fontSize: 11 }),
-      this._radioButton,
-      view({ flexDirection: 'row', alignItems: 'center', gap: 8 }, [this._spinner, this._radio]),
-      text('// irc fallback · irc.motaba.net', { color: colors.muted, fontSize: 11 }),
-      this._nick,
-      this._password,
-      view({ flexDirection: 'row', gap: 8 }, [
-        button('log in', () => this._connectIrc(false), chip(colors.text)),
-        button('register', () => this._connectIrc(true), chip(colors.irc))
+      view({ flexDirection: 'row', alignItems: 'center', gap: 8 }, [
+        this._radioSpinner,
+        this._radioState
       ]),
-      this._irc
+      this._radioButtons,
+      text('// irc fallback · irc.motaba.net', { color: colors.muted, fontSize: 11 }),
+      view({ flexDirection: 'row', alignItems: 'center', gap: 8 }, [
+        this._ircSpinner,
+        this._ircState
+      ]),
+      this._ircForm,
+      this._ircButtons,
+      this._notice,
+      text('// channels · tap to join or leave', { color: colors.muted, fontSize: 11 }),
+      this._channels
     ])
-    this.setRadioConnected(null)
+    this.setChannels(null, [], '')
+
+    this.radio.on('change', () => this.render())
+    this.irc.on('change', () => this.render())
 
     this._side = view({ width: 300 }, [this._list])
     this._divider = view({ width: 1, backgroundColor: colors.line })
@@ -188,7 +228,7 @@ export default class Ui {
       view({ flexDirection: 'row', gap: 8, padding: 14 }, [
         text('// log · info, warnings and errors', { color: colors.muted, fontSize: 11, flex: 1 }),
         button('copy', () => this.copyLog(), chip(colors.accent)),
-        button('close', () => this.show('settings'), chip(colors.text))
+        button('close', () => this.back(), chip(colors.text))
       ]),
       rule(),
       this._logList
@@ -238,41 +278,38 @@ export default class Ui {
     this.render()
   }
 
-  // A spinner beside the radio status while it connects.
-  setRadioBusy(busy: boolean): void {
-    this._spinner.animating = busy
-    this._spinner.style = { color: colors.accent, display: busy ? 'flex' : 'none' }
-  }
-
-  // What the radio is doing, in words: scanning, connected, or what went wrong.
-  setRadioStatus(status: string, failed = false): void {
-    this._radio.text = status
-    this._radio.style = {
-      color: failed ? colors.failed : colors.muted,
-      fontFamily: font,
-      fontSize: 12,
-      flex: 1
+  // The server's channels, each a chip to join or leave. `main` is the one
+  // motaba puts everyone in, so it can't be left. `null` before the list
+  // has arrived.
+  setChannels(list: Channel[] | null, joined: string[], main: string): void {
+    clear(this._channels)
+    if (list === null) {
+      this._channels.appendChild(
+        text('log in to IRC to see them', { color: colors.muted, fontSize: 12 })
+      )
+      return
+    }
+    for (const channel of list) {
+      const isMain = channel.name === main
+      const on = isMain || joined.includes(channel.name)
+      const label = channel.name + ' · ' + channel.users + (isMain ? ' · always' : '')
+      this._channels.appendChild(
+        isMain
+          ? view({ ...chipBox(colors.accent), alignSelf: 'flex-start' }, [
+              text(label, { color: colors.accent, fontSize: 12 })
+            ])
+          : button(
+              label,
+              () => this.actions.toggleChannel(channel.name),
+              chip(on ? colors.accent : colors.muted)
+            )
+      )
     }
   }
 
-  // The radio's button: connect when there's none, disconnect when there is.
-  setRadioConnected(id: string | null): void {
-    clear(this._radioButton)
-    this._radioButton.appendChild(
-      id === null
-        ? button('connect t1000-e', () => this.actions.connectRadio(), chip(colors.accent))
-        : button('disconnect ' + id, () => this.actions.disconnectRadio(), chip(colors.muted))
-    )
-  }
-
-  // What IRC is doing, in words: logged in, what NickServ said, or what failed.
-  setIrcStatus(status: string, failed = false): void {
-    this._irc.text = status
-    this._irc.style = {
-      color: failed ? colors.failed : colors.muted,
-      fontFamily: font,
-      fontSize: 12
-    }
+  // The last thing NickServ said, shown under the IRC controls.
+  setIrcNotice(text: string): void {
+    this._notice.text = 'NickServ: ' + text
   }
 
   showError(message: string): void {
@@ -288,6 +325,8 @@ export default class Ui {
   }
 
   show(page: Page): void {
+    // The log goes back to where it was opened from.
+    if (page === 'log' && this.page !== 'log') this._back = this.page
     this.page = page
     clear(this._logList.content)
     if (page === 'log') {
@@ -296,6 +335,11 @@ export default class Ui {
     }
     this._fillPage()
     this.render()
+  }
+
+  // Leave the log for the page it was opened from.
+  back(): void {
+    this.show(this._back)
   }
 
   finishOnboarding(): void {
@@ -326,6 +370,7 @@ export default class Ui {
       )
       content.appendChild(this._setup)
       content.appendChild(button('start messaging', () => this.finishOnboarding(), primary()))
+      content.appendChild(button('view log', () => this.show('log'), chip(colors.muted)))
     }
 
     if (this.page === 'settings') {
@@ -366,13 +411,16 @@ export default class Ui {
 
   render(): void {
     const s = this.messenger.status()
+    const nick = this.messenger.irc?.nick ?? ''
     this._status.text =
       'lora ' +
-      (s.radio ? s.heard + ' heard' : 'off') +
+      brief(this.radio, s.heard + ' heard') +
       ' · irc ' +
-      (s.irc ? 'on' : 'off') +
+      brief(this.irc, nick) +
       ' · route ' +
       s.route
+
+    this._renderLinks()
 
     const showSide = !this.compact || this.selected === null
     const showMain = !this.compact || this.selected !== null
@@ -413,6 +461,66 @@ export default class Ui {
     this._renderHeader()
     this._renderInfo()
     this._renderThread()
+  }
+
+  // The radio and IRC sections of setup, from the two links. Rebuilt only
+  // when something shown changes.
+  _renderLinks(): void {
+    const radio = this.radio
+    const irc = this.irc
+    const node = this.messenger.node ?? ''
+    const nick = this.messenger.irc?.nick ?? ''
+    const key = [radio.state, radio.detail, irc.state, irc.detail, node, nick].join('|')
+    if (key === this._linksKey) return
+    this._linksKey = key
+
+    const radioText: Record<string, string> = {
+      off: 'not connected',
+      connecting: radio.detail || 'connecting',
+      on: 'connected as ' + node,
+      waiting: radio.detail,
+      failed: radio.detail
+    }
+    status(this._radioState, this._radioSpinner, radio, radioText[radio.state])
+
+    clear(this._radioButtons)
+    this._radioButtons.appendChild(
+      radio.state === 'on'
+        ? button('disconnect', () => this.actions.disconnectRadio(), chip(colors.muted))
+        : radio.state === 'connecting' || radio.state === 'waiting'
+          ? button('cancel', () => this.actions.disconnectRadio(), chip(colors.muted))
+          : button('connect t1000-e', () => this.actions.connectRadio(), chip(colors.accent))
+    )
+
+    const ircText: Record<string, string> = {
+      off: irc.detail === 'paused' ? 'paused while ekho is in the background' : 'not logged in',
+      connecting: irc.detail || 'connecting',
+      on: 'logged in as ' + nick,
+      waiting: irc.detail,
+      failed: irc.detail
+    }
+    status(this._ircState, this._ircSpinner, irc, ircText[irc.state])
+
+    const loggedOut = irc.state === 'off' || irc.state === 'failed'
+    this._ircForm.style = { gap: 8, display: loggedOut ? 'flex' : 'none' }
+
+    clear(this._ircButtons)
+    if (loggedOut) {
+      this._ircButtons.appendChild(
+        button('log in', () => this._connectIrc(false), chip(colors.text))
+      )
+      this._ircButtons.appendChild(
+        button('register', () => this._connectIrc(true), chip(colors.irc))
+      )
+    } else {
+      this._ircButtons.appendChild(
+        button(
+          irc.state === 'on' ? 'log out' : 'cancel',
+          () => this.actions.logOutIrc(),
+          chip(colors.muted)
+        )
+      )
+    }
   }
 
   _renderHeader(): void {
@@ -603,6 +711,40 @@ function mark(): any {
   ])
 }
 
+// A link in a word or two, for the header.
+function brief(link: Link, on: string): string {
+  if (link.state === 'on') return on
+  if (link.state === 'connecting') return 'connecting'
+  if (link.state === 'waiting') return 'retrying'
+  if (link.state === 'failed') return 'needs you'
+  return 'off'
+}
+
+// A link's state line: a spinner while it works, red when it needs the user.
+function status(label: any, wheel: any, link: Link, value: string): void {
+  const busy = link.state === 'connecting'
+  wheel.animating = busy
+  wheel.style = { color: colors.accent, display: busy ? 'flex' : 'none' }
+  label.text = value
+  label.style = {
+    color:
+      link.state === 'failed'
+        ? colors.failed
+        : link.state === 'waiting'
+          ? colors.irc
+          : colors.muted,
+    fontFamily: font,
+    fontSize: 12,
+    flex: 1
+  }
+}
+
+function spinner(): any {
+  const wheel = new ActivityIndicator()
+  wheel.style = { color: colors.accent, display: 'none' }
+  return wheel
+}
+
 // A page of its own that scrolls: onboarding and settings.
 function page(): any {
   const scroll = new ScrollView()
@@ -648,6 +790,11 @@ function input(placeholder: string, opts: { secureTextEntry?: boolean } = {}): a
     padding: 10
   }
   return i
+}
+
+function chipBox(color: string): object {
+  const { color: _, ...box } = chip(color)
+  return box
 }
 
 function chip(color: string): { color: string } & object {

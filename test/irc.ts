@@ -10,20 +10,28 @@ function client(opts = {}) {
   return { stream, irc }
 }
 
-test('logs in, identifies and joins once the server welcomes the nick', (t) => {
+test('without SASL, identifies with NickServ and joins once welcomed', (t) => {
   const { stream, irc } = client({ password: 'secret', channels: ['#sofiamesh'] })
 
   let ready = false
   irc.on('ready', () => (ready = true))
 
   irc.connect()
-  t.deepStrictEqual(stream.lines, ['NICK dom', 'USER dom 0 * :dom'])
+  t.deepStrictEqual(stream.lines, ['CAP LS 302', 'NICK dom', 'USER dom 0 * :dom'])
+
+  // No SASL on offer: end negotiation, and fall back to NickServ.
+  stream.serve(':irc.motaba.net CAP * LS :multi-prefix\r\n')
+  t.equal(stream.lines.at(-1), 'CAP END')
 
   stream.serve(':irc.motaba.net 001 dom :Welcome\r\n')
 
   t.ok(ready)
   t.ok(irc.ready)
-  t.deepStrictEqual(stream.lines.slice(2), ['PRIVMSG NickServ :IDENTIFY secret', 'JOIN #sofiamesh'])
+  t.deepStrictEqual(stream.lines.slice(-2), [
+    'PRIVMSG NickServ :IDENTIFY secret',
+    'JOIN #sofiamesh'
+  ])
+  irc.quit()
 })
 
 test('answers PING', (t) => {
@@ -83,4 +91,116 @@ test('emits every line the server sends', (t) => {
   t.deepStrictEqual(lines, [
     ':irc.motaba.net 900 dom dom!~dom@host dom :You are now logged in as dom'
   ])
+})
+
+test('reclaims a nick left behind by a dropped connection', async (t) => {
+  const { stream, irc } = client({ password: 'secret' })
+  const nicks: string[] = []
+  irc.on('nick', (nick: string) => nicks.push(nick))
+
+  irc.connect()
+  stream.serve(':irc.motaba.net 433 * dom :Nickname is already in use\r\n')
+  t.equal(stream.lines.at(-1), 'NICK dom_')
+
+  stream.serve(':irc.motaba.net 001 dom_ :Welcome\r\n')
+  t.deepStrictEqual(stream.lines.slice(-2), [
+    'PRIVMSG NickServ :IDENTIFY dom secret',
+    'PRIVMSG NickServ :GHOST dom secret'
+  ])
+
+  await new Promise((resolve) => setTimeout(resolve, 2100))
+  t.equal(stream.lines.at(-1), 'NICK dom')
+
+  stream.serve(':dom_!~dom@host NICK :dom\r\n')
+  t.equal(irc.nick, 'dom')
+  t.deepStrictEqual(nicks, ['dom'])
+})
+
+test('without a password, a nick in use is an error', (t) => {
+  const { stream, irc } = client()
+  let code = null
+  irc.on('error', (err: Error & { code: string }) => (code = err.code))
+
+  irc.connect()
+  stream.serve(':irc.motaba.net 433 * dom :Nickname is already in use\r\n')
+
+  t.equal(code, 'NICK_IN_USE')
+})
+
+test('lists the server channels, and joins and leaves them', (t) => {
+  const { stream, irc } = client()
+  let channels: unknown = null
+  irc.on('channels', (list: unknown) => (channels = list))
+
+  irc.list()
+  irc.join('#sofia')
+  irc.part('#sofia')
+  stream.serve(':irc.motaba.net 322 dom #sofia 12 :Sofia mesh\r\n')
+  stream.serve(':irc.motaba.net 322 dom #varna 3 :\r\n')
+  stream.serve(':irc.motaba.net 323 dom :End of /LIST\r\n')
+
+  t.deepStrictEqual(stream.lines, ['LIST', 'JOIN #sofia', 'PART #sofia'])
+  t.deepStrictEqual(channels, [
+    { name: '#sofia', users: 12, topic: 'Sofia mesh' },
+    { name: '#varna', users: 3, topic: '' }
+  ])
+})
+
+test('logs in with SASL during the handshake', (t) => {
+  const { stream, irc } = client({ password: 'secret', channels: ['#bulgaria'] })
+  const logins: string[] = []
+  irc.on('login', (account: string) => logins.push(account))
+
+  irc.connect()
+  stream.serve(':irc.motaba.net CAP * LS * :multi-prefix\r\n')
+  stream.serve(':irc.motaba.net CAP * LS :sasl=PLAIN server-time\r\n')
+  t.equal(stream.lines.at(-1), 'CAP REQ :sasl')
+
+  stream.serve(':irc.motaba.net CAP * ACK :sasl\r\n')
+  t.equal(stream.lines.at(-1), 'AUTHENTICATE PLAIN')
+
+  stream.serve('AUTHENTICATE +\r\n')
+  // base64 of "dom\0dom\0secret"
+  t.equal(stream.lines.at(-1), 'AUTHENTICATE ZG9tAGRvbQBzZWNyZXQ=')
+
+  stream.serve(':irc.motaba.net 900 dom dom!~dom@host dom :You are now logged in as dom\r\n')
+  stream.serve(':irc.motaba.net 903 dom :SASL authentication successful\r\n')
+  t.equal(stream.lines.at(-1), 'CAP END')
+
+  stream.serve(':irc.motaba.net 001 dom :Welcome\r\n')
+  // Logged in already, so no NickServ IDENTIFY.
+  t.equal(stream.lines.at(-1), 'JOIN #bulgaria')
+  t.deepStrictEqual(logins, ['dom'])
+  t.ok(irc.loggedIn)
+  irc.quit()
+})
+
+test('a wrong password is a LOGIN_FAILED error', (t) => {
+  const { stream, irc } = client({ password: 'wrong' })
+  let code = null
+  irc.on('error', (err: Error & { code: string }) => (code = err.code))
+
+  irc.connect()
+  stream.serve(':irc.motaba.net CAP * LS :sasl\r\n')
+  stream.serve(':irc.motaba.net CAP * ACK :sasl\r\n')
+  stream.serve('AUTHENTICATE +\r\n')
+  stream.serve(':irc.motaba.net 904 dom :SASL authentication failed\r\n')
+
+  t.equal(code, 'LOGIN_FAILED')
+  irc.quit()
+})
+
+test('pings a quiet server, and gives up on a silent one', async (t) => {
+  const { stream, irc } = client({ quiet: 20 })
+  let destroyed: Error | null = null
+  ;(stream as any).destroy = (err: Error) => (destroyed = err)
+
+  irc.connect()
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  t.equal(stream.lines.at(-1), 'PING :ekho')
+
+  // An answer resets the timer.
+  stream.serve(':irc.motaba.net PONG irc.motaba.net :ekho\r\n')
+  t.equal(destroyed, null)
+  irc.quit()
 })

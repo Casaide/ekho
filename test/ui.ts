@@ -4,20 +4,31 @@ import Messenger from '../lib/messenger.ts'
 import Irc from '../lib/irc.ts'
 import Ui from '../lib/ui.ts'
 import showCrash from '../lib/crash.ts'
+import Link, { FatalError } from '../lib/link.ts'
+import EventEmitter from 'bare-events'
 import { FakeRadio, FakeStream } from './helpers.ts'
 
 const { test } = tap
 const { Window } = native
 
+// Actions that do nothing, with any overridden.
+function actions(own = {}) {
+  return {
+    connectRadio() {},
+    disconnectRadio() {},
+    connectIrc() {},
+    logOutIrc() {},
+    finishOnboarding() {},
+    toggleChannel() {},
+    ...own
+  }
+}
+
 // Renders on the real bare-native, which throws on any style a node doesn't
 // accept, so this catches layout mistakes before they crash the app.
 test('every screen renders: chats, thread, contact info, join, compact', (t) => {
   const messenger = new Messenger({ ircChannel: '#sofia' })
-  const ui = new Ui(
-    messenger,
-    { connectRadio() {}, disconnectRadio() {}, connectIrc() {}, finishOnboarding() {} },
-    { compact: true }
-  )
+  const ui = new Ui(messenger, actions(), { compact: true })
 
   const window = new Window(380, 800)
   window.content(ui.root)
@@ -60,29 +71,25 @@ test('every screen renders: chats, thread, contact info, join, compact', (t) => 
   t.equal(messenger.contacts.get(georgi.id), null)
 })
 
-test('errors show as a banner, the radio says what went wrong, and the log copies', (t) => {
+test('errors show as a banner, NickServ notices show, and the log copies', (t) => {
   const messenger = new Messenger()
-  const ui = new Ui(messenger, {
-    connectRadio() {},
-    disconnectRadio() {},
-    connectIrc() {},
-    finishOnboarding() {}
-  })
+  const ui = new Ui(messenger, actions())
 
   const window = new Window(380, 800)
   window.content(ui.root)
   window.show()
   t.teardown(() => window.hide())
 
-  ui.setRadioStatus('looking for your radio…')
-  ui.setRadioStatus('turn bluetooth on, then try again', true)
-  ui.setRadioBusy(true)
-  ui.setRadioStatus('syncing: 37 nodes so far')
-  ui.setRadioBusy(false)
-  ui.setRadioConnected('!0e8666a6')
-  ui.setRadioConnected(null)
-  ui.setIrcStatus('logged in as dom')
-  ui.setIrcStatus('that nick is in use', true)
+  ui.setIrcNotice('You are now logged in as dom')
+  ui.setChannels(
+    [
+      { name: '#bulgaria', users: 140, topic: '' },
+      { name: '#sofia', users: 12, topic: 'Sofia mesh' },
+      { name: '#varna', users: 3, topic: '' }
+    ],
+    ['#sofia'],
+    '#bulgaria'
+  )
   ui.showError('Error: boom')
   ui.hideError()
   ui.showError('Error: again')
@@ -107,14 +114,11 @@ test('first run opens on onboarding, then chats; settings holds the same control
   let finished = false
   const ui = new Ui(
     new Messenger(),
-    {
-      connectRadio() {},
-      disconnectRadio() {},
-      connectIrc() {},
+    actions({
       finishOnboarding() {
         finished = true
       }
-    },
+    }),
     { onboarded: false }
   )
 
@@ -124,10 +128,58 @@ test('first run opens on onboarding, then chats; settings holds the same control
   t.teardown(() => window.hide())
 
   t.equal(ui.page, 'onboarding')
+  ui.show('log')
+  ui.back()
+  t.equal(ui.page, 'onboarding', 'the log closes back to onboarding')
   ui.finishOnboarding()
   t.ok(finished)
   t.equal(ui.page, 'chats')
   ui.show('settings')
   t.equal(ui.page, 'settings')
+  ui.show('chats')
+})
+
+test('the radio and IRC sections follow their links through every state', async (t) => {
+  const pending: {
+    detail: (text: string) => void
+    resolve: (c: unknown) => void
+    reject: (e: Error) => void
+  }[] = []
+  const connect = (detail: (text: string) => void) =>
+    new Promise<any>((resolve, reject) => pending.push({ detail, resolve, reject }))
+  const radio = new Link('radio', connect)
+  const irc = new Link('irc', connect, { retry: [10] })
+
+  const messenger = new Messenger()
+  const ui = new Ui(messenger, actions(), { radio, irc })
+
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
+  t.teardown(() => {
+    radio.stop()
+    irc.stop()
+    window.hide()
+  })
+  ui.show('settings')
+
+  radio.start()
+  pending[0].detail('syncing: 37 nodes so far')
+  pending[0].reject(new FatalError('turn Bluetooth on, then connect'))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  t.equal(radio.state, 'failed')
+
+  irc.start()
+  const connection = new EventEmitter() as EventEmitter & { close(): void }
+  connection.close = () => {}
+  pending[1].resolve(connection)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  t.equal(irc.state, 'on')
+
+  connection.emit('close')
+  t.equal(irc.state, 'waiting')
+
+  irc.pause()
+  t.equal(irc.detail, 'paused')
   ui.show('chats')
 })

@@ -15,6 +15,7 @@ A phone and desktop messenger for the Bulgarian Meshtastic community. You messag
 
 - **`docs/design.md`**: the full design, including why each decision was made and which alternatives were rejected. Start here if you're new to the project.
 - **`docs/plan.md`**: the phased plan with checkboxes; what's done and what's next.
+- **`docs/connections.md`**: how the radio and IRC connections stay up (one state per link, what's wanted, Android pausing, SASL, ghosts). Read before touching connection code.
 - This file: the short version of both, plus conventions and how to work in the repo.
 
 The live design doc and the mockups are artifacts only the owner can open: [design doc](https://claude.ai/artifact/FoQHiUT59zJwcn9gLDa5u2), [mockups](https://claude.ai/artifact/764MRSiCRXhoQuWgTLqC2b). The repo copy in `docs/` is the reference for the code.
@@ -54,7 +55,8 @@ Don't relitigate these without the user.
 | Path                             | What it is                                                                                                                                          |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `lib/messenger.ts`               | The core: threads, routing, sending, ack matching, retry and send via IRC. Radio and IRC are attached with `setRadio` and `setIrc` as they connect. |
-| `lib/irc.ts`                     | Minimal IRC client over any duplex stream: login, PING, NickServ register and identify, join, privmsg with line splitting.                          |
+| `lib/irc.ts`                     | Minimal IRC client over any duplex stream: SASL or NickServ login, reclaiming a ghosted nick, PING and a silence check, LIST, join, part, privmsg.  |
+| `lib/link.ts`                    | One connection kept up while wanted: a single state (off, connecting, on, waiting, failed), retries, pause and resume. See `docs/connections.md`.   |
 | `lib/heard.ts`                   | Last-heard time per node, and the window.                                                                                                           |
 | `lib/contacts.ts`                | People linking a node ID and an IRC nick; a channel contact for the mesh channel.                                                                   |
 | `lib/types.ts`                   | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses.                                                            |
@@ -128,8 +130,8 @@ Privacy first: nothing usable in the clear, notes anonymous unless signed. Accep
 
 From the server's welcome, MOTD and NickServ (seen on 2026-11-25):
 
-- **Accounts:** only registered nicks may stay. NickServ gives 60 seconds to `IDENTIFY`, which is what ekho does, and suggests SASL PLAIN as the smoother way. One connection per nick: a second gets 433.
-- **Channels:** everyone is joined to `#bulgaria`, which ekho uses. Regional ones are bridged too: `#blagoevgrad`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`, `#burgas`, `#gabrovo`, `#petrich`, `#shumen`, `#varna`, `#vratsa`, `#vt`, `#gorna`. Joining a channel that doesn't exist creates it (ekho once made `#mesh`).
+- **Accounts:** only registered nicks may stay. NickServ gives 60 seconds to `IDENTIFY` and suggests SASL PLAIN, which ekho uses (falling back to `IDENTIFY`). One connection per nick: a second gets 433, so ekho reclaims a ghosted nick (see `docs/connections.md`).
+- **Channels:** the server joins everyone to `#bulgaria`, ekho's mesh channel. ekho asks for `LIST` once logged in and shows the rest as a list to join or leave (saved, rejoined on reconnect); those are IRC only. Regional ones are bridged too: `#blagoevgrad`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`, `#burgas`, `#gabrovo`, `#petrich`, `#shumen`, `#varna`, `#vratsa`, `#vt`, `#gorna`. Joining a channel that doesn't exist creates it (ekho once made `#mesh`).
 - **Mesh users** appear as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The name is the node's long name with spaces as `_`, cut to fit `NICKLEN=30` (the user's T1000-E, long name "Dom", is `Dom|mt`). A DM to a node is most likely a PRIVMSG to that nick (to confirm).
 - **Airtime:** one message per 10 s goes out to the mesh, 150 bytes at most; faster ones wait their turn. `lib/irc.ts` splits at 400 characters today, which is too long.
 - **Hosts** are cloaked (`~dom@64a18efa92.irc`), so the IP isn't shown.
