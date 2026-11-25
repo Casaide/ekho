@@ -124,10 +124,20 @@ Keep it focused: follow the mailbox pattern from [cero-base](https://github.com/
 
 Privacy first: nothing usable in the clear, notes anonymous unless signed. Accepted trade-off: anyone holding your address can see when your inbox is online, so only contacts get it, the inbox runs only in the foreground, and the address can be rotated.
 
+## What irc.motaba.net told us
+
+From the server's welcome and MOTD (seen on 2026-11-25):
+
+- Mesh users appear on IRC as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The server counted 141 of them, against 4 plain IRC users. A DM to a Meshtastic node is most likely a PRIVMSG to `name|mt` (to confirm).
+- Bridged channels are per region: `#blagoevgrad`, `#bulgaria`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`. There is no `#mesh`; `app.ts` still uses it as a placeholder.
+- Radio airtime is scarce: one message per 10 s goes out to the mesh, 150 bytes at most. `lib/irc.ts` splits at 400 characters today, which is too long.
+- Accounts log in during the handshake: the server answers with numeric 900 ("You are now logged in as dom"), so SASL is supported.
+- Hosts are cloaked (`~dom@64a18efa92.irc`), so the IP isn't shown.
+
 ## Open questions
 
-- How does an IRC user address a direct message to a node through the motaba bridge? The user can DM their own T1000-E from IRC, so it works, but ekho needs the exact target. Until then, IRC fallback needs a contact with a nick.
-- Which IRC channel does motaba mirror the mesh channel to? `app.ts` uses `#mesh` as a placeholder.
+- Is `name|mt` the node's short name, long name or ID, and is a DM to it delivered as a Meshtastic DM to that node?
+- Which channel maps to the default LongFast mesh channel?
 - Does irc.motaba.net enforce registered nicks?
 - Can the T1000-E sign an arbitrary message with its key (XEdDSA), asked over Bluetooth? That would let app users verify each other on IRC.
 - Would motaba add a verified nick-to-node link?
