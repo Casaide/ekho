@@ -1,6 +1,7 @@
 import bluetooth from 'bare-bluetooth'
 import meshtastic from 'bare-meshtastic'
 import type { Radio } from './types.ts'
+import { FatalError } from './link.ts'
 
 const { Central } = bluetooth
 const { Client, Mailbox } = meshtastic
@@ -27,9 +28,17 @@ const HINT_AFTER = 20_000
 //
 // The T1000-E pairs with one device at a time, so the Meshtastic app must be
 // disconnected from it first.
+// An open radio connection, in the shape a Link expects: `close` hangs up,
+// and `close` is emitted when the radio goes, asked or not.
+export interface RadioConnection {
+  client: Radio
+  close(): void
+  on(event: 'close', fn: () => void): unknown
+}
+
 export default function connectRadio(
   opts: { onstatus?: (status: string) => void; onlog?: (line: string) => void } = {}
-): Promise<{ client: Radio; disconnect: () => void }> {
+): Promise<RadioConnection> {
   const status = opts.onstatus ?? (() => {})
   // Detail for the log that would only confuse on screen.
   const note = opts.onlog ?? (() => {})
@@ -53,9 +62,10 @@ export default function connectRadio(
       }
     }
 
-    const fail = (err: Error) => {
+    const fail = (cause: Error) => {
       if (settled) return
       settled = true
+      const err = explain(cause)
       try {
         disconnect()
       } catch {
@@ -80,6 +90,11 @@ export default function connectRadio(
 
       central.on('stateChange', (state: string) => {
         status('bluetooth ' + state)
+        if (state === 'poweredOff') return fail(new FatalError('turn Bluetooth on, then connect'))
+        if (state === 'unauthorized') return fail(new Error('permission'))
+        if (state === 'unsupported') {
+          return fail(new FatalError('this device has no Bluetooth Low Energy'))
+        }
         if (state !== 'poweredOn' || settled) return
         step(() => central.startScan([meshtastic.SERVICE_UUID]))
         status('scanning for a meshtastic radio')
@@ -108,7 +123,12 @@ export default function connectRadio(
         status('connected, discovering services')
 
         peripheral.on('error', fail)
-        peripheral.on('disconnect', () => fail(new Error('The radio disconnected')))
+        // Before it's ready this is a failed attempt; after, the end of the
+        // connection, reported by the client's close.
+        peripheral.on('disconnect', () => {
+          if (settled && client !== null) return client.destroy()
+          fail(new Error('the radio disconnected'))
+        })
         peripheral.on('mtuChanged', (mtu: number) => note('packet size ' + mtu))
 
         let service: any = null
@@ -161,7 +181,11 @@ export default function connectRadio(
               if (settled) return
               settled = true
               status('synced')
-              resolve({ client, disconnect })
+              resolve({
+                client,
+                close: disconnect,
+                on: (event: 'close', fn: () => void) => client.on(event, fn)
+              })
             })
             client.on('error', fail)
 
@@ -182,4 +206,18 @@ export default function connectRadio(
 // UUIDs compare without case, whichever way the platform writes them.
 function same(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase()
+}
+
+// Failures only the user can fix become FatalErrors, in words they can act on.
+function explain(err: Error): Error {
+  if ((err as Error & { fatal?: boolean }).fatal) return err
+  if (/SecurityException|permission/i.test(err.message)) {
+    return new FatalError(
+      'Bluetooth is blocked: open Settings › Apps › ekho › Permissions, allow Nearby devices, then connect'
+    )
+  }
+  if (/not turned on|BT Adapter/i.test(err.message)) {
+    return new FatalError('turn Bluetooth on, then connect')
+  }
+  return err
 }
