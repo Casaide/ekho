@@ -35,6 +35,7 @@ export default function connectRadio(
   return new Promise((resolve, reject) => {
     let central: any = null
     let peripheral: any = null
+    let found = false
     let client: any = null
     let hint: ReturnType<typeof setTimeout> | null = null
     let settled = false
@@ -86,14 +87,17 @@ export default function connectRadio(
         )
       })
 
-      central.on('discover', (found: any) => {
-        if (peripheral !== null || settled) return
+      // A radio is often reported more than once as the scan stops; connecting
+      // twice fails on Android with GATT error 133.
+      central.on('discover', (discovered: any) => {
+        if (found || settled) return
+        found = true
         clearTimeout(hint!)
         hint = null
-        status('found ' + (found.name ?? found.id) + ', connecting')
+        status('found ' + (discovered.name ?? discovered.id) + ', connecting')
         step(() => {
           central.stopScan()
-          central.connect(found)
+          central.connect(discovered)
         })
       })
 
