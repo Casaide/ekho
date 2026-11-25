@@ -61,25 +61,25 @@ That's the whole rule. A failed LoRa message is never moved to IRC automatically
 
 **What each path carries:**
 
-| Feature | LoRa (Meshtastic) | IRC |
-| --- | --- | --- |
-| Direct and channel messages | Yes | Yes |
-| Reactions | Yes | Sent as a new text message |
-| Replies | Yes | Quoted as text |
-| Delivery acknowledgement | Yes, from the mesh | No; sent only |
-| Encryption | Channel key, or per-contact key for direct messages | TLS to the server only |
-| Position and telemetry | Yes | No |
-| Message length | About 200 bytes | About 400 bytes per line |
+| Feature                     | LoRa (Meshtastic)                                   | IRC                        |
+| --------------------------- | --------------------------------------------------- | -------------------------- |
+| Direct and channel messages | Yes                                                 | Yes                        |
+| Reactions                   | Yes                                                 | Sent as a new text message |
+| Replies                     | Yes                                                 | Quoted as text             |
+| Delivery acknowledgement    | Yes, from the mesh                                  | No; sent only              |
+| Encryption                  | Channel key, or per-contact key for direct messages | TLS to the server only     |
+| Position and telemetry      | Yes                                                 | No                         |
+| Message length              | About 200 bytes                                     | About 400 bytes per line   |
 
 **Delivery states on LoRa:**
 
-| State | Meaning |
-| --- | --- |
-| Sending | Queued on the radio, waiting for airtime |
-| Sent | Transmitted by your radio (needs a bare-meshtastic event; not shown yet) |
-| Relayed | Another node passed it on (needs the ack sender from bare-meshtastic) |
-| Delivered | The recipient's node acknowledged it |
-| Failed | No acknowledgement after the radio's retries; offers retry and send via IRC |
+| State     | Meaning                                                                     |
+| --------- | --------------------------------------------------------------------------- |
+| Sending   | Queued on the radio, waiting for airtime                                    |
+| Sent      | Transmitted by your radio (needs a bare-meshtastic event; not shown yet)    |
+| Relayed   | Another node passed it on (needs the ack sender from bare-meshtastic)       |
+| Delivered | The recipient's node acknowledged it                                        |
+| Failed    | No acknowledgement after the radio's retries; offers retry and send via IRC |
 
 Channel messages stop at sent, as channels have no per-person acknowledgement. IRC messages are sent with no receipt.
 
@@ -130,14 +130,14 @@ Not used, and why: LoRa broadcasts (noisy for everyone), topics derived from mes
 
 One Bare codebase covers phone and desktop.
 
-| Layer | Module | Status |
-| --- | --- | --- |
-| UI | [bare-native](https://github.com/holepunchto/bare-native): native views, text, inputs, scroll views on iOS, Android, macOS, Linux, Windows; packaged with bare-build | 0.3.x |
-| Radio protocol | [bare-meshtastic](https://github.com/holepunchto/bare-meshtastic): codec and client, config sync, node database, text, acks, position, telemetry | 0.0.1, experimental |
-| Phone link | bare-bluetooth with bare-meshtastic's `Mailbox` | Used in bare-meshtastic's example |
-| Desktop link | bare-meshtastic's `Framed` over a serial stream | Serial module to pick |
-| IRC | `lib/irc.ts` over bare-tls | Written |
-| P2P (later) | Hyperswarm, Protomux, Hypercore or Hyperdrive | Planned |
+| Layer          | Module                                                                                                                                                               | Status                            |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| UI             | [bare-native](https://github.com/holepunchto/bare-native): native views, text, inputs, scroll views on iOS, Android, macOS, Linux, Windows; packaged with bare-build | 0.3.x                             |
+| Radio protocol | [bare-meshtastic](https://github.com/holepunchto/bare-meshtastic): codec and client, config sync, node database, text, acks, position, telemetry                     | 0.0.1, experimental               |
+| Phone link     | bare-bluetooth with bare-meshtastic's `Mailbox`                                                                                                                      | Used in bare-meshtastic's example |
+| Desktop link   | bare-meshtastic's `Framed` over a serial stream                                                                                                                      | Serial module to pick             |
+| IRC            | `lib/irc.ts` over bare-tls                                                                                                                                           | Written                           |
+| P2P (later)    | Hyperswarm, Protomux, Hypercore or Hyperdrive                                                                                                                        | Planned                           |
 
 **Gaps in bare-meshtastic**, best fixed upstream:
 
@@ -151,15 +151,15 @@ One Bare codebase covers phone and desktop.
 
 Most pieces exist; nobody has one phone app with one contact per person across networks that works with recipients on stock clients.
 
-| Project | What it does | Gap |
-| --- | --- | --- |
-| [Mesh-Client](https://github.com/Colorado-Mesh/mesh-client) | Desktop client for Meshtastic, MeshCore and Reticulum | Desktop only; switches between protocols rather than one contact per person |
-| [MESH-API](https://github.com/mr-tbot/mesh-api) | Hub-side router for Meshtastic and MeshCore radios | Hub software; no cross-network identity |
-| [mtmc bridge](https://sourceforge.net/projects/mtmc-bridge/) | Relays between MeshCore and Meshtastic radios | Broadcasts everything to everything |
-| [Nostrastic](https://github.com/quixotesystems/nostrastic) | Nostr over LoRa via a Meshtastic gateway | One network pair |
-| [Akita Meshtastic IRC Gateway](https://github.com/AkitaEngineering/Akita-Meshtastic-IRC-Gateway) | IRC channel to Meshtastic and back | One network pair; experimental |
-| [Reticulum](https://simeononsecurity.com/articles/meshtastic-vs-meshcore-vs-reticulum-comparison-guide/) and [Sideband](https://www.github.com/markqvist/Sideband) | One identity across LoRa, WiFi, TCP and more | Everyone must run Reticulum |
-| [cero-base](https://github.com/lekinox/cero-base) mailbox | Sealed, anonymous messages to a 32-byte address, delivered as cores, with mirrors for offline owners | ekho follows its pattern for P2P |
+| Project                                                                                                                                                            | What it does                                                                                         | Gap                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [Mesh-Client](https://github.com/Colorado-Mesh/mesh-client)                                                                                                        | Desktop client for Meshtastic, MeshCore and Reticulum                                                | Desktop only; switches between protocols rather than one contact per person |
+| [MESH-API](https://github.com/mr-tbot/mesh-api)                                                                                                                    | Hub-side router for Meshtastic and MeshCore radios                                                   | Hub software; no cross-network identity                                     |
+| [mtmc bridge](https://sourceforge.net/projects/mtmc-bridge/)                                                                                                       | Relays between MeshCore and Meshtastic radios                                                        | Broadcasts everything to everything                                         |
+| [Nostrastic](https://github.com/quixotesystems/nostrastic)                                                                                                         | Nostr over LoRa via a Meshtastic gateway                                                             | One network pair                                                            |
+| [Akita Meshtastic IRC Gateway](https://github.com/AkitaEngineering/Akita-Meshtastic-IRC-Gateway)                                                                   | IRC channel to Meshtastic and back                                                                   | One network pair; experimental                                              |
+| [Reticulum](https://simeononsecurity.com/articles/meshtastic-vs-meshcore-vs-reticulum-comparison-guide/) and [Sideband](https://www.github.com/markqvist/Sideband) | One identity across LoRa, WiFi, TCP and more                                                         | Everyone must run Reticulum                                                 |
+| [cero-base](https://github.com/lekinox/cero-base) mailbox                                                                                                          | Sealed, anonymous messages to a 32-byte address, delivered as cores, with mirrors for offline owners | ekho follows its pattern for P2P                                            |
 
 ## Mockups
 

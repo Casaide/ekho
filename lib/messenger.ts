@@ -2,15 +2,7 @@ import EventEmitter from 'bare-events'
 import Contacts, { type Address } from './contacts.ts'
 import Heard from './heard.ts'
 import type Irc from './irc.ts'
-import type {
-  Contact,
-  IrcMessage,
-  Message,
-  Radio,
-  RadioAck,
-  RadioMessage,
-  Via
-} from './types.ts'
+import type { Contact, IrcMessage, Message, Radio, RadioAck, RadioMessage, Via } from './types.ts'
 
 export interface MessengerOptions {
   contacts?: Contacts
@@ -152,7 +144,9 @@ export default class Messenger extends EventEmitter {
     const moved = this.thread(other)
     for (const msg of moved) msg.contact = contact.id
 
-    const thread = this.thread(contact).concat(moved).sort((a, b) => a.time - b.time)
+    const thread = this.thread(contact)
+      .concat(moved)
+      .sort((a, b) => a.time - b.time)
     this._threads.set(contact.id, thread)
     this._threads.delete(other.id)
 

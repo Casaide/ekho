@@ -18,7 +18,7 @@
     "format": "prettier --write . && lunte --fix",
     "lint": "prettier --check . && lunte",
     "typecheck": "tsc --noEmit",
-    "test": "bare-native-test test.ts"
+    "test": "bare-native-test test.ts --out test/native"
   },
   "repository": {
     "type": "git",
@@ -35,6 +35,7 @@
     "bare-bluetooth": "^0.6.8",
     "bare-events": "^2.9.2",
     "bare-fs": "^4.8.7",
+    "bare-logger": "^2.0.6",
     "bare-meshtastic": "^0.0.1",
     "bare-native": "^0.3.8",
     "bare-os": "^3.9.4",
@@ -45,8 +46,8 @@
     "bare-build": "^1.7.0",
     "bare-native-test": "^0.1.8",
     "bare-tap": "^1.1.0",
-    "lunte": "^1.8.4",
-    "prettier": "^3.4.2",
+    "lunte": "^1.8.6",
+    "prettier": "^3.10.1",
     "prettier-config-holepunch": "^2.0.0",
     "typescript": "^7.0.2"
   }

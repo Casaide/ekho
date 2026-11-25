@@ -52,11 +52,11 @@ Options:
 
 ```js
 {
-  contacts, // a Contacts instance
-  heard, // a Heard instance, which sets the "recently heard" window
-  node, // our own node ID, added to IRC messages
-  channelName, // name of the mesh channel thread, default 'mesh'
-  ircChannel // the IRC channel the bridge mirrors the mesh channel to
+  ;(contacts, // a Contacts instance
+    heard, // a Heard instance, which sets the "recently heard" window
+    node, // our own node ID, added to IRC messages
+    channelName, // name of the mesh channel thread, default 'mesh'
+    ircChannel) // the IRC channel the bridge mirrors the mesh channel to
 }
 ```
 

@@ -4,3 +4,5 @@ build
 coverage
 sandbox
 sandbox.js
+test/native/*
+!test/native/package.json

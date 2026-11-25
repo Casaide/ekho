@@ -51,22 +51,25 @@ Don't relitigate these without the user.
 
 ## Layout
 
-| Path | What it is |
-| --- | --- |
-| `lib/messenger.ts` | The core: threads, routing, sending, ack matching, retry and send via IRC. Radio and IRC are attached with `setRadio` and `setIrc` as they connect. |
-| `lib/irc.ts` | Minimal IRC client over any duplex stream: login, PING, NickServ register and identify, join, privmsg with line splitting. |
-| `lib/heard.ts` | Last-heard time per node, and the window. |
-| `lib/contacts.ts` | People linking a node ID and an IRC nick; a channel contact for the mesh channel. |
-| `lib/types.ts` | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses. |
-| `lib/radio.ts` | Bluetooth connect: bare-bluetooth plus bare-meshtastic `Mailbox` and `Client`. Device code, untested here. |
-| `lib/ui.ts`, `lib/theme.ts` | bare-native UI: dark terminal look, chats, conversation, composer, radio and IRC controls. Compact mode below 700 points wide. |
-| `app.ts` | Entry: wires Messenger, UI, radio and TLS IRC. |
-| `test/*.ts`, `test.ts` | bare-tap tests with fake radio and fake IRC stream. |
-| `docs/design.md`, `docs/plan.md` | The design and the phased plan. Update them when a decision changes. |
-| `.claude/skills/` | `ekho` (the working loop) and `js-house-style` (the Holepunch style guide). |
+| Path                             | What it is                                                                                                                                          |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/messenger.ts`               | The core: threads, routing, sending, ack matching, retry and send via IRC. Radio and IRC are attached with `setRadio` and `setIrc` as they connect. |
+| `lib/irc.ts`                     | Minimal IRC client over any duplex stream: login, PING, NickServ register and identify, join, privmsg with line splitting.                          |
+| `lib/heard.ts`                   | Last-heard time per node, and the window.                                                                                                           |
+| `lib/contacts.ts`                | People linking a node ID and an IRC nick; a channel contact for the mesh channel.                                                                   |
+| `lib/types.ts`                   | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses.                                                            |
+| `lib/radio.ts`                   | Bluetooth connect: bare-bluetooth plus bare-meshtastic `Mailbox` and `Client`. Device code, untested here.                                          |
+| `lib/ui.ts`, `lib/theme.ts`      | bare-native UI: dark terminal look, chats, conversation, composer, radio and IRC controls. Compact mode below 700 points wide.                      |
+| `app.ts`                         | Entry: wires Messenger, UI, radio and TLS IRC.                                                                                                      |
+| `test/*.ts`, `test.ts`           | bare-tap tests with fake radio and fake IRC stream.                                                                                                 |
+| `docs/design.md`, `docs/plan.md` | The design and the phased plan. Update them when a decision changes.                                                                                |
+| `.claude/skills/`                | `ekho` (the working loop) and `js-house-style` (the Holepunch style guide).                                                                         |
 
 ## Conventions
 
+- **Conventional Commits** for commit messages (`feat(irc): ...`, `fix(ci): ...`, `docs: ...`) and branch names (`feat/contacts-ui`, `fix/ble-reconnect`).
+- **Dependencies match npm.** Take versions from `npm view <name> version`, never from a clone or memory, and declare peer dependencies of what we use (bare-meshtastic needs `bare-logger`). The APK workflow prints each declared range next to the latest published version.
+- **Watch every workflow** after a push (Integrate and APK), not just the one you changed.
 - **TypeScript, erasable syntax only.** Bare strips types natively and rejects anything that isn't erasable (enums, namespaces, parameter properties). No `private` keyword either; use the `_name` convention. `tsconfig.json` sets `erasableSyntaxOnly`.
 - **ESM with explicit `.ts` imports** (`import Heard from './heard.ts'`), and `import type` for types.
 - **CommonJS dependencies are default-imported, then destructured** (`import native from 'bare-native'; const { View } = native`). Don't rely on named imports from CJS.
@@ -88,9 +91,9 @@ The pure logic (irc, heard, contacts, messenger) also runs under Node 22.18+ wit
 
 ## State of the first attempt
 
-- **Verified:** the 17 tests in `test/` pass, and every `.ts` file passes a type-stripping syntax check.
-- **Not verified:** nothing has run on Bare or on a device. `lib/radio.ts`, `lib/ui.ts` and `app.ts` were written against the READMEs and type definitions of bare-native, bare-meshtastic, bare-bluetooth and bare-tls, without being run. Expect fixes on first launch.
-- **Not done:** `npm install`, lint, typecheck and `package-lock.json` have not been run.
+- **Verified:** the 24 tests in `test/` pass under Node type stripping, and the APK builds in CI (`.github/workflows/apk.yml`).
+- **Not verified:** nothing has run on a device yet. `lib/radio.ts`, `lib/ui.ts` and `app.ts` were written against the READMEs of bare-native, bare-meshtastic, bare-bluetooth and bare-tls. Expect fixes on first launch.
+- **Tests on Bare:** `npm test` runs bare-native-test with `--out test/native`. Its generated wrapper is CommonJS, so `test/native/package.json` sets `"type": "commonjs"` there; the rest of the package is ESM.
 
 ## Next steps
 

@@ -12,7 +12,7 @@ The most important rule comes first because it governs all the others:
 
 **Don't follow rules without thinking. Make the best code you can, always.**
 
-Everything below is a default with a reason attached. Defaults exist so you don't re-derive them every time, and so a codebase reads consistently. But a default you can't justify in the moment is a default you should question. Important things are made well and thoughtfully — the judgment about *when a rule earns its place* is the actual skill. The rest is scaffolding for that judgment.
+Everything below is a default with a reason attached. Defaults exist so you don't re-derive them every time, and so a codebase reads consistently. But a default you can't justify in the moment is a default you should question. Important things are made well and thoughtfully — the judgment about _when a rule earns its place_ is the actual skill. The rest is scaffolding for that judgment.
 
 If you internalize five things:
 
@@ -29,16 +29,16 @@ If you internalize five things:
 Before structure comes direction. The way we approach a problem (mafintosh's framing, which the whole way of working is built on):
 
 - Start from the **great ambition** — the real thing you want to exist.
-- Plan *backwards* into small, self-contained pieces. Sort them topologically.
+- Plan _backwards_ into small, self-contained pieces. Sort them topologically.
 - Build the **smallest piece that most efficiently validates the rest** first. Scope it down until the first iteration is a couple of days. Then execute immediately — never stall, never wait for a grand plan to be complete.
 - Lineage example: "unstoppable P2P file sharing" → Hypercore → "address Merkle-tree nodes efficiently" → `flat-tree`, built day 0. Each layer is a small publishable module that stands on its own.
 
 Two failure modes this guards against, both worth catching in review:
 
-- **Working hard in the wrong direction.** Effort mimics progress — tasks closed, bugs fixed — while the direction is wrong. Run the complexity check continuously: *is this the right way, and is there a simpler way to execute the ambition?* Sunk cost is real. Cut early.
+- **Working hard in the wrong direction.** Effort mimics progress — tasks closed, bugs fixed — while the direction is wrong. Run the complexity check continuously: _is this the right way, and is there a simpler way to execute the ambition?_ Sunk cost is real. Cut early.
 - **Scope creep.** It kills projects. Small modules are the antidote — each is independently finishable, testable, replaceable.
 
-On using AI to do this work (heed it, since this skill is often *for* an AI): AI with human comprehension is powerful; without it, quickly destructive. **Don't generate a subsystem you can't evaluate.** If you don't know what *good* looks like for the thing (the canonical cautionary tale: a BBR congestion-control implementation that looked fine and wasn't), generating it costs more than it saves. Build the comprehension first, or get it from someone who has it, then generate.
+On using AI to do this work (heed it, since this skill is often _for_ an AI): AI with human comprehension is powerful; without it, quickly destructive. **Don't generate a subsystem you can't evaluate.** If you don't know what _good_ looks like for the thing (the canonical cautionary tale: a BBR congestion-control implementation that looked fine and wasn't), generating it costs more than it saves. Build the comprehension first, or get it from someone who has it, then generate.
 
 Practical upshot: bias to the smallest correct thing, make it composable, move on.
 
@@ -63,17 +63,17 @@ hypercore  →  hyperbee  →  hyperdb  →  autobee
                              on the bee)
 ```
 
-Read those left to right: each arrow is "built *on*, not instead of." `hyperschema` doesn't invent its own serialization — it generates `compact-encoding` codecs. `hrpc` doesn't invent a message format — it speaks `hyperschema`. `hyperbee` doesn't invent storage — it's a B-tree over a `hypercore`. `hyperdb` doesn't invent a tree — it's collections and indexes over a `hyperbee`. `autobee` doesn't invent consensus from scratch — it's a `hyperbee` made multiwriter through `autobase`.
+Read those left to right: each arrow is "built _on_, not instead of." `hyperschema` doesn't invent its own serialization — it generates `compact-encoding` codecs. `hrpc` doesn't invent a message format — it speaks `hyperschema`. `hyperbee` doesn't invent storage — it's a B-tree over a `hypercore`. `hyperdb` doesn't invent a tree — it's collections and indexes over a `hyperbee`. `autobee` doesn't invent consensus from scratch — it's a `hyperbee` made multiwriter through `autobase`.
 
 What this means when you write code:
 
 - **Find the lowest layer that already solves your sub-problem and build the thin next layer on it.** Before writing storage, ask which of hypercore/hyperbee/hyperdb already gives you 90% of it. You are almost never starting from zero — you're adding one sharp capability to an existing primitive.
 - **Each layer is independently perfect and independently usable.** Someone who needs just the wire format uses `compact-encoding` and never sees `hrpc`. Don't bundle concerns upward — a lower layer must never depend on a higher one, and must be useful on its own.
-- **Don't reach around a layer.** If you're on `hyperdb` and find yourself poking at the underlying `hypercore` directly to do something the bee/db layer should express, that's a smell: either the layer is missing a capability (add it *there*, in its own module) or you're at the wrong layer.
-- **Don't collapse layers "for convenience."** A module that does encoding *and* storage *and* RPC is the thing this style exists to prevent. Three modules, each perfect, composed. The seams are the feature — they're where reuse, testing, and replacement happen.
+- **Don't reach around a layer.** If you're on `hyperdb` and find yourself poking at the underlying `hypercore` directly to do something the bee/db layer should express, that's a smell: either the layer is missing a capability (add it _there_, in its own module) or you're at the wrong layer.
+- **Don't collapse layers "for convenience."** A module that does encoding _and_ storage _and_ RPC is the thing this style exists to prevent. Three modules, each perfect, composed. The seams are the feature — they're where reuse, testing, and replacement happen.
 - **Composition is by passing the lower thing in.** A higher module takes the primitive it builds on as a constructor argument (the `store`, the `core`, the `bee`), it doesn't construct it secretly or hard-wire it. That's what keeps layers swappable and testable.
 
-When you reach for a new capability, the instinct is: *which primitive is this one honest step above, and what is the smallest module that adds exactly that step?*
+When you reach for a new capability, the instinct is: _which primitive is this one honest step above, and what is the smallest module that adds exactly that step?_
 
 ---
 
@@ -85,17 +85,17 @@ A well-shaped module is a single default export, an options bag, cheap construct
 const b4a = require('b4a')
 
 module.exports = class Thing {
-  constructor (store, opts = {}) {
+  constructor(store, opts = {}) {
     this.store = store
     this.foo = opts.foo ?? defaultFoo
     this._internal = null // declare every field here, even if null
   }
 
-  async open () {
+  async open() {
     this._internal = await this.store.get()
   }
 
-  async doWork (arg) {
+  async doWork(arg) {
     // ...
   }
 }
@@ -103,10 +103,10 @@ module.exports = class Thing {
 
 The conventions, each with its reason:
 
-- **Default export is the thing.** One per module. A second named export is usually a sign you have two modules. *Reason: composition is by `require('thing')`, and one-export modules slot together predictably.*
-- **`(required, opts = {})` constructor.** Positional for the one or two things the module fundamentally *is* (the store, the key, the core); everything else in the options bag with `??` defaults. *Reason: the signature documents what's essential vs. configurable.*
-- **Declare all instance fields in the constructor**, even `null` ones. *Reason: a reader sees the whole shape in one place, and the engine keeps a stable hidden class.*
-- **No async work in the constructor.** Construction is synchronous and cheap; async setup happens in an `open`/`ready` step, lazily. *Reason: constructors can't await, and an object that's secretly half-built is a footgun.*
+- **Default export is the thing.** One per module. A second named export is usually a sign you have two modules. _Reason: composition is by `require('thing')`, and one-export modules slot together predictably._
+- **`(required, opts = {})` constructor.** Positional for the one or two things the module fundamentally _is_ (the store, the key, the core); everything else in the options bag with `??` defaults. _Reason: the signature documents what's essential vs. configurable._
+- **Declare all instance fields in the constructor**, even `null` ones. _Reason: a reader sees the whole shape in one place, and the engine keeps a stable hidden class._
+- **No async work in the constructor.** Construction is synchronous and cheap; async setup happens in an `open`/`ready` step, lazily. _Reason: constructors can't await, and an object that's secretly half-built is a footgun._
 - **Match the surrounding project on CommonJS vs ESM.** No house default — read the package and be consistent within it. Don't mix in one package without a reason.
 
 ### README shape
@@ -151,32 +151,32 @@ If you're writing an `init()` method, stop — that's `ready()`, and you're reim
 
 ### Flows → streamx
 
-Use `streamx`, not Node core `stream`. *Reason: lighter, predictable backpressure, runs on Bare, and it's what the ecosystem speaks.* `Readable`/`Writable`/`Duplex`/`Transform` plus `pipeline`.
+Use `streamx`, not Node core `stream`. _Reason: lighter, predictable backpressure, runs on Bare, and it's what the ecosystem speaks._ `Readable`/`Writable`/`Duplex`/`Transform` plus `pipeline`.
 
 ```js
 const { Readable } = require('streamx')
 
 class Query extends Readable {
-  constructor (db, range) {
+  constructor(db, range) {
     super()
     this.db = db
     this.range = range
     this._it = null
   }
 
-  _open (cb) {
+  _open(cb) {
     this._it = this.db.iterator(this.range)
     cb(null)
   }
 
-  async _read (cb) {
+  async _read(cb) {
     const { done, value } = await this._it.next()
     if (done) this.push(null)
     else this.push(value)
     cb(null)
   }
 
-  _destroy (cb) {
+  _destroy(cb) {
     this._it?.close().then(() => cb(null), cb)
   }
 }
@@ -190,17 +190,17 @@ EventEmitter (or streamx's emitter) for "something happened": `'close'`, `'updat
 
 ### Errors: don't program defensively
 
-We do **not** program defensively. We don't litter methods with arg-type checks, null guards, or "did you call this in the right order" assertions. *Reason: defensive code is complexity you write, read, and pay for at runtime forever — to handle a case that is a caller bug, not a real condition.* The contract is the README and the tests; semver protects it. A dev who uses the API totally wrong gets a native crash, and that is the correct outcome — fail fast, fail loud, fix the call site.
+We do **not** program defensively. We don't litter methods with arg-type checks, null guards, or "did you call this in the right order" assertions. _Reason: defensive code is complexity you write, read, and pay for at runtime forever — to handle a case that is a caller bug, not a real condition._ The contract is the README and the tests; semver protects it. A dev who uses the API totally wrong gets a native crash, and that is the correct outcome — fail fast, fail loud, fix the call site.
 
 - **Let misuse fail.** Pass a string where a buffer goes? It throws from deep in the stack. Fine. That's a bug in their code, surfaced immediately, not a state your module should anticipate or absorb.
-- **Don't validate inputs you've documented.** The documented type *is* the validation. Re-checking it in code is redundant with the README and the tests.
+- **Don't validate inputs you've documented.** The documented type _is_ the validation. Re-checking it in code is redundant with the README and the tests.
 - **Operational failure is different — that travels with the resource.** A dropped peer, a replication error, a disk hiccup are real runtime conditions, not caller bugs → emit `'error'`, reject the in-flight promise, or expose state. Don't take the process down for a network blip.
 - **`safety-catch`** rethrows real bugs while swallowing benign teardown rejections, so a genuine programmer error still crashes loudly rather than getting silently eaten:
   ```js
   const safetyCatch = require('safety-catch')
   somePromise().catch(safetyCatch)
   ```
-- **Never swallow silently.** If you catch and ignore an *operational* error, leave a comment on why it's safe.
+- **Never swallow silently.** If you catch and ignore an _operational_ error, leave a comment on why it's safe.
 
 The line to hold: **caller bug → let it crash. Runtime condition → handle it on the resource.** Don't blur the two by defending against the first.
 
@@ -215,7 +215,7 @@ const ScopeLock = require('scope-lock')
 
 const l = new ScopeLock()
 
-async function append (data) {
+async function append(data) {
   await l.lock()
   try {
     await reallyAppend(data)
@@ -232,8 +232,9 @@ It also has a **debounced** mode, for when you don't need every queued entry to 
 ```js
 const d = new ScopeLock({ debounce: true })
 
-async function resync () {
-  if (await d.lock()) {   // only the entries that actually get the scope return true
+async function resync() {
+  if (await d.lock()) {
+    // only the entries that actually get the scope return true
     try {
       await doResync()
     } finally {
@@ -253,15 +254,15 @@ Use a plain lock when every call must run; use debounce when intermediate calls 
 
 ### b4a everywhere
 
-**Don't use the `Buffer` global.** *Reason: it may not exist on Bare. `b4a` is identical behavior, runs on both.* This is the default precisely because we target Bare and Node from the same source.
+**Don't use the `Buffer` global.** _Reason: it may not exist on Bare. `b4a` is identical behavior, runs on both._ This is the default precisely because we target Bare and Node from the same source.
 
 ```js
 const b4a = require('b4a')
 
-b4a.from('hello')         // not Buffer.from
-b4a.alloc(32)             // not Buffer.alloc
-b4a.equals(a, b)          // not a.equals(b)
-b4a.toString(buf, 'hex')  // not buf.toString('hex')
+b4a.from('hello') // not Buffer.from
+b4a.alloc(32) // not Buffer.alloc
+b4a.equals(a, b) // not a.equals(b)
+b4a.toString(buf, 'hex') // not buf.toString('hex')
 b4a.concat([a, b])
 ```
 
@@ -275,9 +276,17 @@ Wire and on-disk formats use `compact-encoding` — positional, length-prefixed,
 const c = require('compact-encoding')
 
 const message = {
-  preencode (state, m) { c.uint.preencode(state, m.seq); c.string.preencode(state, m.name) },
-  encode (state, m) { c.uint.encode(state, m.seq); c.string.encode(state, m.name) },
-  decode (state) { return { seq: c.uint.decode(state), name: c.string.decode(state) } }
+  preencode(state, m) {
+    c.uint.preencode(state, m.seq)
+    c.string.preencode(state, m.name)
+  },
+  encode(state, m) {
+    c.uint.encode(state, m.seq)
+    c.string.encode(state, m.name)
+  },
+  decode(state) {
+    return { seq: c.uint.decode(state), name: c.string.decode(state) }
+  }
 }
 ```
 
@@ -295,7 +304,7 @@ Each dependency is maintained forever — its bugs, breaking changes, security s
 - **Justify every `package.json` entry in one sentence.** If you can't, it shouldn't be there.
 - **Don't import to avoid an obvious function.** `isOdd` is the cautionary tale.
 
-The governing question is the complexity check again: *is there a simpler way to execute the ambition?* Often it's no dependency at all.
+The governing question is the complexity check again: _is there a simpler way to execute the ambition?_ Often it's no dependency at all.
 
 ---
 
@@ -323,9 +332,9 @@ test('basic append and read', async function (t) {
 What "test the API" means here:
 
 - **Tests exercise the public surface as a consumer would call it** — construct, `ready()`, call the documented methods, assert the documented behavior. They're the executable version of the README's Usage section. If a method is documented, there's a test that uses it the documented way.
-- **Test how the thing is *meant* to be used, not how it's built.** Assert behavior through the public API (`t.is`, `t.alike`, `t.ok`), never reach into internals. A refactor that keeps the API stable must keep the tests green — that's the whole point.
+- **Test how the thing is _meant_ to be used, not how it's built.** Assert behavior through the public API (`t.is`, `t.alike`, `t.ok`), never reach into internals. A refactor that keeps the API stable must keep the tests green — that's the whole point.
 - **You do not test misuse.** We don't program defensively, so there's nothing to assert about passing garbage in — that path is a native crash by design. Don't write tests that pin down the crash behavior of unsupported input; it isn't part of the contract and pinning it makes the contract accidentally wider.
-- **Test the real failure paths that *are* part of the contract** — close-during-open, the race you just fixed, the documented bounds that legitimately return nothing, operational errors surfacing on the resource. These are behaviors you promise; prove them.
+- **Test the real failure paths that _are_ part of the contract** — close-during-open, the race you just fixed, the documented bounds that legitimately return nothing, operational errors surfacing on the resource. These are behaviors you promise; prove them.
 - **`t.teardown()` for cleanup** — closes resources even when assertions fail. Use it for everything you open.
 - **Flat tests, one `test()` per behavior.** The name states the assertion. No deep describe/it nesting.
 - **Semver follows the tests.** A change that breaks an existing API test is a breaking change — major bump. Tests are how you know. Even small throwaway modules get CI, lint, and basic API tests; same checklist every time.
@@ -334,7 +343,7 @@ What "test the API" means here:
 
 ## Review checklist
 
-Apply to any module, regardless of size or visibility. When reviewing, walk it and report violations tersely with the fix, in dependency order — don't rewrite wholesale unless asked. And remember the first rule: a flagged item is a prompt to think, not an automatic defect. If the code broke a default *for a good reason*, that's good code.
+Apply to any module, regardless of size or visibility. When reviewing, walk it and report violations tersely with the fix, in dependency order — don't rewrite wholesale unless asked. And remember the first rule: a flagged item is a prompt to think, not an automatic defect. If the code broke a default _for a good reason_, that's good code.
 
 - [ ] One responsibility, describable without "and"; built on the layer below, not reimplementing or reaching around it.
 - [ ] Composed by passing the lower primitive in (store/core/bee), not constructing it secretly; no layer depends upward.
