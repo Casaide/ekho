@@ -22,6 +22,8 @@ jobs:
           java-version: 21
       - name: Android SDK platform and build tools
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+      - name: Published versions
+        run: for p in b4a bare-bluetooth bare-events bare-meshtastic bare-native bare-tls bare-build bare-native-test bare-tap lunte prettier prettier-config-holepunch typescript bare-fs bare-os bare-path; do echo "$p $(npm view $p version 2>/dev/null)"; done
       - run: npm install
       - name: Build
         run: >
