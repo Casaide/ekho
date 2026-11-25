@@ -1,0 +1,50 @@
+{
+  "name": "ekho",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Off-grid messenger: LoRa first through a Meshtastic radio, IRC when no nodes are heard",
+  "type": "module",
+  "exports": {
+    "./package": "./package.json",
+    ".": "./index.ts"
+  },
+  "files": [
+    "index.ts",
+    "app.ts",
+    "lib"
+  ],
+  "scripts": {
+    "start": "bare-build --out build --runtime bare-native/runtime app.ts",
+    "format": "prettier --write . && lunte --fix",
+    "lint": "prettier --check . && lunte",
+    "typecheck": "tsc --noEmit",
+    "test": "bare-native-test test.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Casaide/ekho.git"
+  },
+  "author": "Dominic Cassidy",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/Casaide/ekho/issues"
+  },
+  "homepage": "https://github.com/Casaide/ekho#readme",
+  "dependencies": {
+    "b4a": "^1.9.0",
+    "bare-bluetooth": "^2.6.1",
+    "bare-events": "^2.9.0",
+    "bare-meshtastic": "^0.0.1",
+    "bare-native": "^0.3.8",
+    "bare-tls": "^4.1.2"
+  },
+  "devDependencies": {
+    "bare-build": "^1.7.0",
+    "bare-native-test": "^0.1.4",
+    "bare-tap": "^1.1.0",
+    "lunte": "^1.8.4",
+    "prettier": "^3.4.2",
+    "prettier-config-holepunch": "^2.0.0",
+    "typescript": "^5.9.0"
+  }
+}

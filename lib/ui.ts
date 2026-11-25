@@ -1,0 +1,336 @@
+import native from 'bare-native'
+import { colors, font } from './theme.ts'
+import type Messenger from './messenger.ts'
+import type { Contact, Message } from './types.ts'
+
+const { View, Text, TextInput, ScrollView } = native
+
+export interface UiActions {
+  connectRadio(): void
+  connectIrc(opts: { nick: string; password: string; register: boolean }): void
+}
+
+// The whole app view: chats, the selected conversation, the composer, and the
+// radio and IRC controls. On a narrow screen it shows the chats or the
+// conversation, one at a time; on a wide one, both side by side.
+//
+// It redraws from the Messenger on every change, which is plenty for a
+// first attempt.
+export default class Ui {
+  messenger: Messenger
+  actions: UiActions
+  compact: boolean
+  selected: Contact | null
+  root: any
+
+  _status: any
+  _side: any
+  _main: any
+  _list: any
+  _thread: any
+  _input: any
+  _nick: any
+  _password: any
+
+  constructor(messenger: Messenger, actions: UiActions, opts: { compact?: boolean } = {}) {
+    this.messenger = messenger
+    this.actions = actions
+    this.compact = opts.compact ?? false
+    this.selected = null
+
+    this._status = text('', { color: colors.muted, fontSize: 12, flex: 1, textAlign: 'right' })
+
+    const title = button('~/ekho', () => this.select(null), {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: 'bold'
+    })
+
+    const header = view(
+      {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 14,
+        borderBottomWidth: 1,
+        borderColor: colors.line
+      },
+      [title, this._status]
+    )
+
+    this._list = new ScrollView()
+    this._list.style = { flex: 1 }
+
+    this._nick = input('nick, from your node short name')
+    this._password = input('password, stored on this device', { secureTextEntry: true })
+
+    const setup = view({ padding: 14, gap: 8, borderTopWidth: 1, borderColor: colors.line }, [
+      text('// radio', { color: colors.muted, fontSize: 11 }),
+      button('connect t1000-e', () => this.actions.connectRadio(), chip(colors.accent)),
+      text('// irc fallback · irc.motaba.net', { color: colors.muted, fontSize: 11 }),
+      this._nick,
+      this._password,
+      view({ flexDirection: 'row', gap: 8 }, [
+        button('log in', () => this._connectIrc(false), chip(colors.text)),
+        button('register', () => this._connectIrc(true), chip(colors.irc))
+      ])
+    ])
+
+    this._side = view({ width: 300, borderRightWidth: 1, borderColor: colors.line }, [
+      this._list,
+      setup
+    ])
+
+    this._thread = new ScrollView()
+    this._thread.style = { flex: 1 }
+    this._thread.contentStyle = { padding: 16, gap: 14 }
+
+    this._input = input('message')
+    this._input.returnKeyType = 'send'
+    this._input.on('submit', () => this._send())
+
+    const composer = view(
+      {
+        flexDirection: 'row',
+        gap: 8,
+        padding: 12,
+        borderTopWidth: 1,
+        borderColor: colors.line
+      },
+      [
+        view({ flex: 1 }, [this._input]),
+        button('send', () => this._send(), {
+          ...chip(colors.ground),
+          backgroundColor: colors.accent,
+          borderColor: colors.accent,
+          fontWeight: 'bold'
+        })
+      ]
+    )
+
+    this._main = view({ flex: 1 }, [this._thread, composer])
+
+    this.root = view(
+      {
+        flex: 1,
+        backgroundColor: colors.ground,
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
+      },
+      [header, view({ flex: 1, flexDirection: 'row' }, [this._side, this._main])]
+    )
+
+    messenger.on('message', () => this.render())
+    messenger.on('update', () => this.render())
+    messenger.on('status', () => this.render())
+
+    this.render()
+  }
+
+  setCompact(compact: boolean): void {
+    this.compact = compact
+    this.render()
+  }
+
+  select(contact: Contact | null): void {
+    this.selected = contact
+    this.render()
+  }
+
+  render(): void {
+    const s = this.messenger.status()
+    this._status.text =
+      'lora ' +
+      (s.radio ? s.heard + ' heard' : 'off') +
+      ' · irc ' +
+      (s.irc ? 'on' : 'off') +
+      ' · route ' +
+      s.route
+
+    const showSide = !this.compact || this.selected === null
+    const showMain = !this.compact || this.selected !== null
+
+    this._side.style = {
+      ...this._side.style,
+      display: showSide ? 'flex' : 'none',
+      width: this.compact ? '100%' : 300
+    }
+    this._main.style = { flex: 1, display: showMain ? 'flex' : 'none' }
+
+    this._renderList()
+    this._renderThread()
+  }
+
+  _renderList(): void {
+    clear(this._list.content)
+
+    for (const contact of this.messenger.contacts.all()) {
+      const thread = this.messenger.thread(contact)
+      const last = thread[thread.length - 1]
+      const active = this.selected !== null && this.selected.id === contact.id
+
+      this._list.content.appendChild(
+        press(
+          view(
+            {
+              padding: 14,
+              gap: 4,
+              borderBottomWidth: 1,
+              borderColor: colors.line,
+              backgroundColor: active ? colors.panel : colors.ground
+            },
+            [
+              text(contact.name, { color: colors.text, fontWeight: 'bold', fontSize: 14 }),
+              text(last ? last.text : '', { color: colors.soft, fontSize: 13 }, 1),
+              text('[' + address(contact) + ']', { color: colors.muted, fontSize: 11 })
+            ]
+          ),
+          () => this.select(contact)
+        )
+      )
+    }
+  }
+
+  _renderThread(): void {
+    clear(this._thread.content)
+    if (this.selected === null) return
+
+    for (const msg of this.messenger.thread(this.selected)) {
+      this._thread.content.appendChild(this._message(msg))
+    }
+
+    this._thread.contentOffset = { y: Number.MAX_SAFE_INTEGER }
+  }
+
+  _message(msg: Message): any {
+    const mine = msg.state !== 'received'
+    const tone =
+      msg.state === 'failed' ? colors.failed : msg.via === 'irc' ? colors.irc : colors.accent
+
+    const meta =
+      time(msg.time) +
+      ' ' +
+      (mine ? 'you' : (msg.from ?? this.selected!.name)) +
+      ' [' +
+      msg.via +
+      (msg.hops ? ' · ' + msg.hops + ' hops' : '') +
+      ']' +
+      (mine ? ' ' + msg.state + (msg.reason ? ' · ' + msg.reason : '') : '')
+
+    const children = [
+      text(meta, { color: mine ? tone : colors.muted, fontSize: 11 }),
+      text(msg.text, {
+        color: colors.text,
+        fontSize: 14,
+        lineHeight: 20,
+        paddingLeft: 12,
+        borderLeftWidth: 2,
+        borderColor: mine ? tone : colors.edge
+      })
+    ]
+
+    if (msg.state === 'failed') {
+      children.push(
+        view({ flexDirection: 'row', gap: 8, paddingLeft: 12 }, [
+          button('retry on lora', () => this.messenger.retry(msg), chip(colors.text)),
+          button('send via irc', () => this.messenger.sendViaIrc(msg), chip(colors.irc))
+        ])
+      )
+    }
+
+    return view({ gap: 4 }, children)
+  }
+
+  _send(): void {
+    const value = this._input.value.trim()
+    if (value === '' || this.selected === null) return
+
+    this.messenger.send(this.selected, value)
+    this._input.value = ''
+  }
+
+  _connectIrc(register: boolean): void {
+    this.actions.connectIrc({
+      nick: this._nick.value.trim(),
+      password: this._password.value,
+      register
+    })
+  }
+}
+
+function view(style: object, children: any[] = []): any {
+  const v = new View()
+  v.style = style
+  for (const child of children) v.appendChild(child)
+  return v
+}
+
+function text(value: string, style: object, lines = 0): any {
+  const t = new Text(value)
+  t.style = { fontFamily: font, ...style }
+  if (lines) t.numberOfLines = lines
+  return t
+}
+
+function input(placeholder: string, opts: { secureTextEntry?: boolean } = {}): any {
+  const i = new TextInput(opts)
+  i.placeholder = placeholder
+  i.autoCapitalize = 'none'
+  i.autoCorrect = false
+  i.style = {
+    fontFamily: font,
+    fontSize: 13,
+    color: colors.text,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.edge,
+    borderRadius: 6,
+    padding: 10
+  }
+  return i
+}
+
+function chip(color: string): { color: string } & object {
+  return {
+    color,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: color,
+    borderRadius: 4
+  }
+}
+
+// A label in a box that acts on a tap or click. Pointer events arrive on
+// views, so the text sits inside one.
+function button(
+  label: string,
+  onpress: () => void,
+  style: { color: string; fontSize?: number; fontWeight?: string } & object
+): any {
+  const { color, fontSize = 12, fontWeight = 'normal', ...box } = style
+  return press(
+    view({ ...box, cursor: 'pointer', alignSelf: 'flex-start' }, [
+      text(label, { color, fontSize, fontWeight })
+    ]),
+    onpress
+  )
+}
+
+function press(node: any, onpress: () => void): any {
+  node.on('pointerup', onpress)
+  return node
+}
+
+function clear(node: any): void {
+  for (const child of node.children) child.destroy()
+}
+
+function address(contact: Contact): string {
+  if (contact.channel) return 'channel · ' + contact.nick
+  return [contact.node, contact.nick && 'irc:' + contact.nick].filter(Boolean).join(' · ')
+}
+
+function time(ms: number): string {
+  const d = new Date(ms)
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+}
