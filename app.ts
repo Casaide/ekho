@@ -155,16 +155,19 @@ const ui = new Ui(
       if (radioBusy) return log.warn('radio: already connecting')
       radioBusy = true
 
+      ui.setRadioBusy(true)
       ui.setRadioStatus('looking for your radio… keep it close and on')
       log.info('radio: connecting')
       connectRadio({
         onstatus: (status) => {
           log.info('radio:', status)
           ui.setRadioStatus(status)
-        }
+        },
+        onlog: (line) => log.info('radio:', line)
       }).then(
         ({ client, disconnect }) => {
           radioBusy = false
+          ui.setRadioBusy(false)
           radio = { id: client.id, disconnect }
           ui.setRadioConnected(client.id)
           messenger.node = client.id
@@ -180,6 +183,7 @@ const ui = new Ui(
         },
         (err: Error) => {
           radioBusy = false
+          ui.setRadioBusy(false)
           log.error('radio:', err)
           ui.setRadioStatus(explainRadio(err), true)
         }

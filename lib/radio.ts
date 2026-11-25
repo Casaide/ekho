@@ -28,9 +28,11 @@ const HINT_AFTER = 20_000
 // The T1000-E pairs with one device at a time, so the Meshtastic app must be
 // disconnected from it first.
 export default function connectRadio(
-  opts: { onstatus?: (status: string) => void } = {}
+  opts: { onstatus?: (status: string) => void; onlog?: (line: string) => void } = {}
 ): Promise<{ client: Radio; disconnect: () => void }> {
   const status = opts.onstatus ?? (() => {})
+  // Detail for the log that would only confuse on screen.
+  const note = opts.onlog ?? (() => {})
 
   return new Promise((resolve, reject) => {
     let central: any = null
@@ -107,7 +109,7 @@ export default function connectRadio(
 
         peripheral.on('error', fail)
         peripheral.on('disconnect', () => fail(new Error('The radio disconnected')))
-        peripheral.on('mtuChanged', (mtu: number) => status('packet size ' + mtu))
+        peripheral.on('mtuChanged', (mtu: number) => note('packet size ' + mtu))
 
         let service: any = null
 
@@ -145,6 +147,15 @@ export default function connectRadio(
             )
 
             client = new Client(mailbox)
+
+            // The radio sends its whole node list before it's ready; count it
+            // so the wait shows progress.
+            let nodes = 0
+            client.on('node', () => {
+              if (settled) return
+              nodes++
+              status('syncing: ' + nodes + (nodes === 1 ? ' node' : ' nodes') + ' so far')
+            })
 
             client.once('ready', () => {
               if (settled) return

@@ -76,6 +76,9 @@ test('errors show as a banner, the radio says what went wrong, and the log copie
 
   ui.setRadioStatus('looking for your radio…')
   ui.setRadioStatus('turn bluetooth on, then try again', true)
+  ui.setRadioBusy(true)
+  ui.setRadioStatus('syncing: 37 nodes so far')
+  ui.setRadioBusy(false)
   ui.setRadioConnected('!0e8666a6')
   ui.setRadioConnected(null)
   ui.setIrcStatus('logged in as dom')

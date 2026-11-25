@@ -6,7 +6,7 @@ import type { Contact, Message } from './types.ts'
 import Log, { line } from './log.ts'
 import type { Entry } from './log.ts'
 
-const { View, Text, TextInput, ScrollView, Clipboard, Keyboard } = native
+const { View, Text, TextInput, ScrollView, Clipboard, Keyboard, ActivityIndicator } = native
 const { colors, font } = theme
 
 export interface UiActions {
@@ -36,6 +36,7 @@ export default class Ui {
   _status: any
   _radio: any
   _radioButton: any
+  _spinner: any
   _irc: any
   _banner: any
   _side: any
@@ -106,6 +107,8 @@ export default class Ui {
     this._nick.value = opts.nick ?? ''
     this._radio = text('not connected', { color: colors.muted, fontSize: 12 })
     this._radioButton = view()
+    this._spinner = new ActivityIndicator()
+    this._spinner.style = { color: colors.accent, display: 'none' }
     this._irc = text('not logged in', { color: colors.muted, fontSize: 12 })
     this._password.value = opts.password ?? ''
 
@@ -114,7 +117,7 @@ export default class Ui {
     this._setup = view({ gap: 8 }, [
       text('// radio', { color: colors.muted, fontSize: 11 }),
       this._radioButton,
-      this._radio,
+      view({ flexDirection: 'row', alignItems: 'center', gap: 8 }, [this._spinner, this._radio]),
       text('// irc fallback · irc.motaba.net', { color: colors.muted, fontSize: 11 }),
       this._nick,
       this._password,
@@ -235,13 +238,20 @@ export default class Ui {
     this.render()
   }
 
+  // A spinner beside the radio status while it connects.
+  setRadioBusy(busy: boolean): void {
+    this._spinner.animating = busy
+    this._spinner.style = { color: colors.accent, display: busy ? 'flex' : 'none' }
+  }
+
   // What the radio is doing, in words: scanning, connected, or what went wrong.
   setRadioStatus(status: string, failed = false): void {
     this._radio.text = status
     this._radio.style = {
       color: failed ? colors.failed : colors.muted,
       fontFamily: font,
-      fontSize: 12
+      fontSize: 12,
+      flex: 1
     }
   }
 
@@ -667,8 +677,15 @@ function button(
   )
 }
 
+// Acts on a tap or click, and dims while pressed so the touch shows.
 function press(node: any, onpress: () => void): any {
-  node.on('pointerup', onpress)
+  const dim = (opacity: number) => (node.style = { ...node.style, opacity })
+  node.on('pointerdown', () => dim(0.5))
+  node.on('pointercancel', () => dim(1))
+  node.on('pointerup', () => {
+    dim(1)
+    onpress()
+  })
   return node
 }
 
