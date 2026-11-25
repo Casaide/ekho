@@ -114,8 +114,8 @@ export default function connectRadio(
         peripheral.on('servicesDiscover', (services: any[]) => {
           service = services.find((s) => same(s.uuid, meshtastic.SERVICE_UUID)) ?? null
           if (service === null) {
-            const found = services.map((s) => s.uuid).join(', ') || 'none'
-            return fail(new Error('No Meshtastic service on this radio. Services: ' + found))
+            const list = services.map((s) => s.uuid).join(', ') || 'none'
+            return fail(new Error('No Meshtastic service on this radio. Services: ' + list))
           }
           step(() => peripheral.discoverCharacteristics(service))
         })
@@ -130,8 +130,8 @@ export default function connectRadio(
             const fromNum = find(meshtastic.FROM_NUM_UUID)
 
             if (!toRadio || !fromRadio || !fromNum) {
-              const found = characteristics.map((c) => c.uuid).join(', ') || 'none'
-              throw new Error('Meshtastic characteristics missing. Found: ' + found)
+              const list = characteristics.map((c) => c.uuid).join(', ') || 'none'
+              throw new Error('Meshtastic characteristics missing. Found: ' + list)
             }
 
             // Queued in order by bare-bluetooth: the MTU first, then the
