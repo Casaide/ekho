@@ -35,6 +35,7 @@ export default function connectRadio(
   return new Promise((resolve, reject) => {
     let central: any = null
     let peripheral: any = null
+    let found = false
     let client: any = null
     let hint: ReturnType<typeof setTimeout> | null = null
     let settled = false
@@ -86,14 +87,17 @@ export default function connectRadio(
         )
       })
 
-      central.on('discover', (found: any) => {
-        if (peripheral !== null || settled) return
+      // A radio is often reported more than once as the scan stops; connecting
+      // twice fails on Android with GATT error 133.
+      central.on('discover', (discovered: any) => {
+        if (found || settled) return
+        found = true
         clearTimeout(hint!)
         hint = null
-        status('found ' + (found.name ?? found.id) + ', connecting')
+        status('found ' + (discovered.name ?? discovered.id) + ', connecting')
         step(() => {
           central.stopScan()
-          central.connect(found)
+          central.connect(discovered)
         })
       })
 
@@ -110,8 +114,8 @@ export default function connectRadio(
         peripheral.on('servicesDiscover', (services: any[]) => {
           service = services.find((s) => same(s.uuid, meshtastic.SERVICE_UUID)) ?? null
           if (service === null) {
-            const found = services.map((s) => s.uuid).join(', ') || 'none'
-            return fail(new Error('No Meshtastic service on this radio. Services: ' + found))
+            const list = services.map((s) => s.uuid).join(', ') || 'none'
+            return fail(new Error('No Meshtastic service on this radio. Services: ' + list))
           }
           step(() => peripheral.discoverCharacteristics(service))
         })
@@ -126,8 +130,8 @@ export default function connectRadio(
             const fromNum = find(meshtastic.FROM_NUM_UUID)
 
             if (!toRadio || !fromRadio || !fromNum) {
-              const found = characteristics.map((c) => c.uuid).join(', ') || 'none'
-              throw new Error('Meshtastic characteristics missing. Found: ' + found)
+              const list = characteristics.map((c) => c.uuid).join(', ') || 'none'
+              throw new Error('Meshtastic characteristics missing. Found: ' + list)
             }
 
             // Queued in order by bare-bluetooth: the MTU first, then the
