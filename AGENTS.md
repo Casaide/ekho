@@ -131,8 +131,16 @@ From the server's welcome and MOTD (seen on 2026-11-25):
 - Mesh users appear on IRC as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The server counted 141 of them, against 4 plain IRC users. A DM to a Meshtastic node is most likely a PRIVMSG to `name|mt` (to confirm).
 - Bridged channels are per region: `#blagoevgrad`, `#bulgaria`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`. There is no `#mesh`; `app.ts` still uses it as a placeholder.
 - Radio airtime is scarce: one message per 10 s goes out to the mesh, 150 bytes at most. `lib/irc.ts` splits at 400 characters today, which is too long.
-- Accounts log in during the handshake: the server answers with numeric 900 ("You are now logged in as dom"), so SASL is supported.
+- Accounts are NickServ accounts (confirmed by the user), so ekho's IDENTIFY after connecting works. The server also answers with numeric 900 ("You are now logged in as dom"), so SASL is supported as well.
 - Hosts are cloaked (`~dom@64a18efa92.irc`), so the IP isn't shown.
+
+## Meshtastic over Bluetooth: what the README example leaves out
+
+`lib/radio.ts` follows the BLE example in the bare-meshtastic README, plus three things it misses (found on a real T1000-E with Android):
+
+- Android ignores the service filter in `discoverServices`, so pick the Meshtastic service by UUID rather than `services[0]`.
+- Request an MTU of 512 before syncing, as the [Meshtastic client API](https://meshtastic.org/docs/development/device/client-api/) asks; Android starts at 23. A no-op on Apple.
+- On any failure, hang up: disconnect the radio and stop the scan, or it stays connected to the phone, stops advertising, and the next attempt never finds it.
 
 ## Open questions
 
