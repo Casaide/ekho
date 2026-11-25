@@ -7,8 +7,13 @@ import Irc from './lib/irc.ts'
 import Store from './lib/store.ts'
 import Ui from './lib/ui.ts'
 import connectRadio from './lib/radio.ts'
+import showCrash from './lib/crash.ts'
 
 const { Window } = native
+
+// Show any error on screen rather than closing.
+Bare.on('uncaughtException', showCrash)
+Bare.on('unhandledRejection', showCrash)
 
 // The community IRC server; it bridges IRC to the mesh both ways.
 const IRC_HOST = 'irc.motaba.net'

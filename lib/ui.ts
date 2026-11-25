@@ -27,6 +27,7 @@ export default class Ui {
 
   _status: any
   _side: any
+  _divider: any
   _main: any
   _list: any
   _thread: any
@@ -61,9 +62,7 @@ export default class Ui {
       {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 14,
-        borderBottomWidth: 1,
-        borderColor: colors.line
+        padding: 14
       },
       [title, this._status]
     )
@@ -76,7 +75,7 @@ export default class Ui {
     this._nick.value = opts.nick ?? ''
     this._password.value = opts.password ?? ''
 
-    const setup = view({ padding: 14, gap: 8, borderTopWidth: 1, borderColor: colors.line }, [
+    const setup = view({ padding: 14, gap: 8 }, [
       text('// radio', { color: colors.muted, fontSize: 11 }),
       button('connect t1000-e', () => this.actions.connectRadio(), chip(colors.accent)),
       text('// irc fallback · irc.motaba.net', { color: colors.muted, fontSize: 11 }),
@@ -88,10 +87,8 @@ export default class Ui {
       ])
     ])
 
-    this._side = view({ width: 300, borderRightWidth: 1, borderColor: colors.line }, [
-      this._list,
-      setup
-    ])
+    this._side = view({ width: 300 }, [this._list, rule(), setup])
+    this._divider = view({ width: 1, backgroundColor: colors.line })
 
     this._thread = new ScrollView()
     this._thread.style = { flex: 1 }
@@ -105,9 +102,7 @@ export default class Ui {
       {
         flexDirection: 'row',
         gap: 8,
-        padding: 12,
-        borderTopWidth: 1,
-        borderColor: colors.line
+        padding: 12
       },
       [
         view({ flex: 1 }, [this._input]),
@@ -126,9 +121,7 @@ export default class Ui {
       alignItems: 'center',
       gap: 8,
       paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderBottomWidth: 1,
-      borderColor: colors.line
+      paddingVertical: 10
     })
 
     // Contact info: every address they're known by, an alias, and joining.
@@ -142,7 +135,14 @@ export default class Ui {
     this._info.style = { flex: 1 }
     this._info.contentStyle = { padding: 16, gap: 10 }
 
-    this._main = view({ flex: 1 }, [this._header, this._info, this._thread, composer])
+    this._main = view({ flex: 1 }, [
+      this._header,
+      rule(),
+      this._info,
+      this._thread,
+      rule(),
+      composer
+    ])
 
     this.root = view(
       {
@@ -151,7 +151,11 @@ export default class Ui {
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
       },
-      [header, view({ flex: 1, flexDirection: 'row' }, [this._side, this._main])]
+      [
+        header,
+        rule(),
+        view({ flex: 1, flexDirection: 'row' }, [this._side, this._divider, this._main])
+      ]
     )
 
     messenger.on('contacts', () => this.render())
@@ -197,6 +201,11 @@ export default class Ui {
       display: showSide ? 'flex' : 'none',
       width: this.compact ? '100%' : 300
     }
+    this._divider.style = {
+      width: 1,
+      backgroundColor: colors.line,
+      display: this.compact ? 'none' : 'flex'
+    }
     this._main.style = { flex: 1, display: showMain ? 'flex' : 'none' }
 
     // A contact merged away no longer exists.
@@ -231,6 +240,8 @@ export default class Ui {
   }
 
   _renderInfo(): void {
+    // The alias field lives across renders, so take it out before clearing.
+    if (this._alias.parent !== null) this._info.content.removeChild(this._alias)
     clear(this._info.content)
     if (this.selected === null || !this._showInfo) return
 
@@ -284,8 +295,6 @@ export default class Ui {
             {
               padding: 14,
               gap: 4,
-              borderBottomWidth: 1,
-              borderColor: colors.line,
               backgroundColor: active ? colors.panel : colors.ground
             },
             [
@@ -297,6 +306,7 @@ export default class Ui {
           () => this.select(contact)
         )
       )
+      this._list.content.appendChild(rule())
     }
   }
 
@@ -329,14 +339,11 @@ export default class Ui {
 
     const children = [
       text(meta, { color: mine ? tone : colors.muted, fontSize: 11 }),
-      text(msg.text, {
-        color: colors.text,
-        fontSize: 14,
-        lineHeight: 20,
-        paddingLeft: 12,
-        borderLeftWidth: 2,
-        borderColor: mine ? tone : colors.edge
-      })
+      // A coloured bar down the left, as a view: borders paint on every side.
+      view({ flexDirection: 'row', gap: 10 }, [
+        view({ width: 2, backgroundColor: mine ? tone : colors.edge }),
+        text(msg.text, { color: colors.text, fontSize: 14, lineHeight: 20, flex: 1 })
+      ])
     ]
 
     if (msg.state === 'received') {
@@ -382,6 +389,11 @@ function view(style: object, children: any[] = []): any {
   v.style = style
   for (const child of children) v.appendChild(child)
   return v
+}
+
+// A one-point line between sections.
+function rule(): any {
+  return view({ height: 1, backgroundColor: colors.line })
 }
 
 function text(value: string, style: object, lines = 0): any {
@@ -441,8 +453,9 @@ function press(node: any, onpress: () => void): any {
   return node
 }
 
+// Destroying a child removes it from its parent, so walk a copy.
 function clear(node: any): void {
-  for (const child of node.children) child.destroy()
+  for (const child of [...node.children]) child.destroy()
 }
 
 function address(contact: Contact): string {

@@ -34,4 +34,7 @@ jobs:
     steps:
       - uses: holepunchto/actions/bare-base@v1
       - uses: holepunchto/actions/setup-gtk@v1
+      # bare-native loads WebKitGTK as soon as it's imported.
+      - if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkitgtk-6.0-4
       - run: npm test -- --platform ${{ matrix.platform }}
