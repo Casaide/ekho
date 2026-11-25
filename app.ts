@@ -116,10 +116,17 @@ function connectIrc(register: boolean) {
   irc.connect()
 }
 
+let radioBusy = false
+
 const ui = new Ui(
   messenger,
   {
     connectRadio() {
+      // One attempt at a time: a second would scan while the first holds the
+      // radio, and never find it.
+      if (radioBusy) return log.warn('radio: already connecting')
+      radioBusy = true
+
       ui.setRadioStatus('looking for your radio… keep it close and on')
       log.info('radio: connecting')
       connectRadio({
@@ -129,12 +136,18 @@ const ui = new Ui(
         }
       }).then(
         ({ client }) => {
+          radioBusy = false
           messenger.node = client.id
           messenger.setRadio(client)
           ui.setRadioStatus('connected as ' + client.id)
           log.info('radio: connected as', client.id)
+          client.on('close', () => {
+            log.warn('radio: disconnected')
+            ui.setRadioStatus('disconnected: press connect to try again', true)
+          })
         },
         (err: Error) => {
+          radioBusy = false
           log.error('radio:', err)
           ui.setRadioStatus(explainRadio(err), true)
         }
