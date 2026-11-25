@@ -11,7 +11,29 @@ A phone and desktop messenger for the Bulgarian Meshtastic community. You messag
 - **Drop-in.** Nobody else needs the app. Recipients keep stock Meshtastic apps or IRC clients.
 - **No MQTT, no hub, no P2P in v1.** A rooftop hub, MeshCore, Nostr and Holepunch hub-to-hub links are later.
 
-Design doc and mockups (owner access): [design doc](https://claude.ai/artifact/FoQHiUT59zJwcn9gLDa5u2), [mockups](https://claude.ai/artifact/764MRSiCRXhoQuWgTLqC2b).
+## Read these first
+
+- **`docs/design.md`**: the full design, including why each decision was made and which alternatives were rejected. Start here if you're new to the project.
+- **`docs/plan.md`**: the phased plan with checkboxes; what's done and what's next.
+- This file: the short version of both, plus conventions and how to work in the repo.
+
+The live design doc and the mockups are artifacts only the owner can open: [design doc](https://claude.ai/artifact/FoQHiUT59zJwcn9gLDa5u2), [mockups](https://claude.ai/artifact/764MRSiCRXhoQuWgTLqC2b). The repo copy in `docs/` is the reference for the code.
+
+## How it fits together
+
+```
+ Phone or desktop: ekho                           Outside world
+ ┌──────────────────────────────────────┐
+ │ ui.ts ── Messenger ──┬── radio.ts ───┼─ BLE/USB ─ T1000-E ─ LoRa ─ mesh
+ │          (route,     │  (bare-       │
+ │           threads,   │   meshtastic) │
+ │           states)    └── irc.ts ─────┼─ TLS ─ irc.motaba.net ─ bridge ─ mesh
+ │                                      │
+ │          Phase 2: pairing + P2P ─────┼─ Hyperswarm (pair topic) ─ other ekho
+ └──────────────────────────────────────┘
+```
+
+`Messenger` is the only piece that knows about both paths. It decides the route, keeps one thread per contact, and tracks each message's state. The radio and IRC sides are thin adapters it's handed once they connect.
 
 ## Decisions already made
 
@@ -40,6 +62,8 @@ Don't relitigate these without the user.
 | `lib/ui.ts`, `lib/theme.ts` | bare-native UI: dark terminal look, chats, conversation, composer, radio and IRC controls. Compact mode below 700 points wide. |
 | `app.ts` | Entry: wires Messenger, UI, radio and TLS IRC. |
 | `test/*.ts`, `test.ts` | bare-tap tests with fake radio and fake IRC stream. |
+| `docs/design.md`, `docs/plan.md` | The design and the phased plan. Update them when a decision changes. |
+| `.claude/skills/` | `ekho` (the working loop) and `js-house-style` (the Holepunch style guide). |
 
 ## Conventions
 
@@ -78,18 +102,24 @@ Roughly in order:
 4. **Contacts UI:** linking a node and a nick into one person.
 5. **bare-meshtastic gaps** (better fixed upstream, in holepunchto/bare-meshtastic):
    - reactions and replies: `Data` needs the reply-to ID and emoji flag fields;
-   - an event for every packet received, so `Heard` sees all traffic;
+   - an event for every packet received, on any port, so `Heard` sees all traffic and pairing can receive private-port packets (dropped today);
    - `from` on `ack`, to tell "relayed" from "delivered";
-   - an event when a packet has gone out over the air, for a "sent" state.
+   - an event when a packet has gone out over the air, for a "sent" state;
+   - whether a received packet was encrypted per contact (needed to accept pairing replies);
+   - the node public key in the user info model.
 6. **Reactions:** over LoRa once bare-meshtastic supports them; over IRC as a short text message.
 
-## First P2P feature (planned, not started)
+## Phase 2: big files over P2P (decided, not started)
 
-Sending large files to another ekho user, which LoRa and IRC can't carry. It uses the Holepunch stack over the internet: either a direct stream between the two devices (Hyperswarm, piped) or replication (a Hypercore or Hyperdrive the sender shares).
+Large files between two ekho users, which LoRa and IRC can't carry. The attach button shows in every conversation but stays greyed out until the contact is paired. Full reasoning and rejected alternatives are in `docs/design.md`.
 
-- The attach button appears in every conversation, but stays greyed out unless the contact is a known ekho user reachable over P2P. Stock Meshtastic and IRC users never get it.
-- Both sides need internet; LoRa can still carry the small "file offered" notice.
-- To be decided: how ekho learns a contact runs ekho and gets their P2P key. One option is a small handshake message over LoRa or IRC; another is a contact card shared by QR code.
+1. **Pair once over LoRa.** A direct message on a private Meshtastic port carries a fresh random pair secret and a challenge. Stock apps ignore unknown ports, so nobody else sees it (confirm on a device). Accept the reply only if it arrived encrypted per contact (firmware 2.5+); otherwise the sender could be faked.
+2. **Find each other by the secret.** Join Hyperswarm on `hash(secret)`. Only the pair can compute it: no public identifier, no presence leak.
+3. **Prove it on the connection.** A Protomux channel where each side sends a keyed hash of the connection's handshake hash, keyed with the secret. Drop peers that can't.
+4. **Join only when there's something to send.** "File offered" goes over LoRa or IRC; both join, transfer, leave.
+5. **The sender holds the file** as an encrypted Hypercore or Hyperdrive until the recipient pulls it. A mailbox comes later, on the user's own always-on hub.
+
+Not used, on purpose: LoRa broadcasts (noisy for everyone), public DHT topics per mesh key (anyone can watch them), a long-lived ekho key on the DHT (a stable identifier), and exporting the radio's private key (keeps the root identity on the T1000-E).
 
 ## Open questions
 

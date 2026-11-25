@@ -5,7 +5,7 @@ description: Use when working on ekho, the LoRa-first messenger with IRC fallbac
 
 # Working on ekho
 
-AGENTS.md at the repo root has the product decisions, layout and open questions. Read it first. This skill is the working loop.
+AGENTS.md at the repo root has the product decisions, layout and open questions; `docs/design.md` has the full design and `docs/plan.md` the phased plan. Read AGENTS.md first. This skill is the working loop.
 
 ## Before changing behaviour
 
@@ -32,4 +32,4 @@ If the fix belongs in bare-meshtastic (reactions, replies, a per-packet event, t
 
 ## Finishing
 
-Update AGENTS.md when a decision, an open question or the state of verification changes. It is how the next session knows where things stand.
+Update AGENTS.md, `docs/design.md` and `docs/plan.md` when a decision, an open question, the plan or the state of verification changes. Tick plan items off as they land. It is how the next session knows where things stand.

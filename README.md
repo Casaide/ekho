@@ -12,6 +12,8 @@ Off-grid messenger for Meshtastic: LoRa first through your own radio, IRC when n
 - If none was heard, messages go over IRC on `irc.motaba.net:6697`, which bridges into the mesh.
 - People you message don't need ekho.
 
+The design and the plan are in [`docs/design.md`](docs/design.md) and [`docs/plan.md`](docs/plan.md).
+
 ## Installation
 
 ```
