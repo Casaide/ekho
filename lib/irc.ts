@@ -17,16 +17,25 @@ interface Parsed {
 // private messages to nicks and channels.
 //
 // Events: ready, line (each line the server sends), message ({ from, to, text,
-// direct }), notice ({ from, text }), error, close.
+// direct }), notice ({ from, text }), reclaim (account), nick (nick), error,
+// close.
+//
+// A nick left behind by a dropped connection is reclaimed when the password
+// is known: log in as `nick_`, ask NickServ to GHOST the old session, then
+// take the nick back.
 export default class Irc extends EventEmitter {
   stream: Duplex
   nick: string
+  account: string
   password: string | null
   realname: string
   channels: string[]
   ready: boolean
+  quitting: boolean
 
   _buffer: string
+  _reclaiming: boolean
+  _reclaimTimer: ReturnType<typeof setTimeout> | null
 
   constructor(
     stream: Duplex,
@@ -36,17 +45,22 @@ export default class Irc extends EventEmitter {
 
     this.stream = stream
     this.nick = opts.nick
+    this.account = opts.nick
     this.password = opts.password ?? null
     this.realname = opts.realname ?? opts.nick
     this.channels = opts.channels ?? []
     this.ready = false
+    this.quitting = false
 
     this._buffer = ''
+    this._reclaiming = false
+    this._reclaimTimer = null
 
     stream.on('data', (data: Uint8Array) => this._ondata(data))
     stream.on('error', (err: Error) => this.emit('error', err))
     stream.on('close', () => {
       this.ready = false
+      if (this._reclaimTimer !== null) clearTimeout(this._reclaimTimer)
       this.emit('close')
     })
   }
@@ -64,8 +78,10 @@ export default class Irc extends EventEmitter {
     this.privmsg('NickServ', 'REGISTER ' + this.password + (email ? ' ' + email : ''))
   }
 
+  // Names the account when logged in under another nick, as when reclaiming.
   identify(): void {
-    this.privmsg('NickServ', 'IDENTIFY ' + this.password)
+    const account = this.nick === this.account ? '' : this.account + ' '
+    this.privmsg('NickServ', 'IDENTIFY ' + account + this.password)
   }
 
   join(channel: string): void {
@@ -80,6 +96,7 @@ export default class Irc extends EventEmitter {
   }
 
   quit(reason = 'bye'): void {
+    this.quitting = true
     this._send('QUIT :' + reason)
     this.stream.end()
   }
@@ -110,16 +127,43 @@ export default class Irc extends EventEmitter {
       case '001':
         this.ready = true
         if (this.password) this.identify()
+        if (this._reclaiming) {
+          this.privmsg('NickServ', 'GHOST ' + this.account + ' ' + this.password)
+          // Give NickServ a moment to drop the old session.
+          this._reclaimTimer = setTimeout(() => {
+            this._reclaimTimer = null
+            this._send('NICK ' + this.account)
+          }, 2000)
+        }
         for (const channel of this.channels) this.join(channel)
         this.emit('ready')
         return
 
       case '433': {
-        const err = new Error('Nick already in use: ' + this.nick) as Error & { code: string }
+        // Taken while logging in, and we can prove it's ours: log in under
+        // another nick for now, and reclaim it once in.
+        if (!this.ready && this.password && !this._reclaiming) {
+          this._reclaiming = true
+          this.nick = this.account + '_'
+          this._send('NICK ' + this.nick)
+          this.emit('reclaim', this.account)
+          return
+        }
+
+        this._reclaiming = false
+        const err = new Error('Nick already in use: ' + this.account) as Error & { code: string }
         err.code = 'NICK_IN_USE'
         this.emit('error', err)
         return
       }
+
+      case 'NICK':
+        if (msg.nick === this.nick) {
+          this.nick = msg.params[0]
+          if (this.nick === this.account) this._reclaiming = false
+          this.emit('nick', this.nick)
+        }
+        return
 
       case 'NOTICE':
         this.emit('notice', { from: msg.nick, text: msg.params[1] ?? '' })

@@ -103,44 +103,85 @@ messenger.on('contacts', save)
 
 let irc: Irc | null = null
 
+// Reconnect after a drop we didn't ask for (Android closes sockets when the
+// app is in the background, or the network changes): soon, then less often.
+const RETRY = [5_000, 15_000, 60_000]
+let retries = 0
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+
 function connectIrc(register: boolean) {
-  // One connection at a time: a second under the same nick is refused.
+  if (retryTimer !== null) clearTimeout(retryTimer)
+  retryTimer = null
+
+  // One connection at a time: close the previous one and wait for it to go,
+  // as a second under the same nick is refused.
   if (irc !== null) {
-    log.info('irc: closing the previous connection')
-    irc.removeAllListeners()
-    irc.quit('reconnecting')
+    const previous = irc
     irc = null
+    log.info('irc: closing the previous connection')
+    let opened = false
+    const open = () => {
+      if (opened) return
+      opened = true
+      openIrc(register)
+    }
+    previous.once('close', open)
+    setTimeout(open, 2000)
+    previous.quit('reconnecting')
+    return
   }
 
+  openIrc(register)
+}
+
+function openIrc(register: boolean) {
   const socket = tls.connect({ host: IRC_HOST, port: IRC_PORT })
-  irc = new Irc(socket, {
+  const current = new Irc(socket, {
     nick: settings.nick,
     password: settings.password,
     channels: [IRC_CHANNEL]
   })
+  irc = current
 
   log.info('irc: connecting to ' + IRC_HOST + ':' + IRC_PORT + ' as ' + settings.nick)
+  ui.setIrcStatus('connecting as ' + settings.nick + '…')
 
   // Every line the server sends, so the log reads like a terminal. Lines we
   // send aren't logged, as they carry the password.
-  irc.on('line', (line: string) => log.info('irc <', line))
-  irc.on('ready', () => log.info('irc: logged in as ' + settings.nick))
-  irc.on('close', () => {
-    log.warn('irc: connection closed')
-    ui.setIrcStatus('disconnected: log in to try again', true)
+  current.on('line', (line: string) => log.info('irc <', line))
+  current.on('ready', () => {
+    retries = 0
+    log.info('irc: logged in as ' + current.nick)
+    ui.setIrcStatus('logged in as ' + current.nick)
   })
-  irc.on('ready', () => ui.setIrcStatus('logged in as ' + settings.nick))
-  irc.on('notice', (n: { from: string; text: string }) => {
+  current.on('reclaim', (account: string) => {
+    log.warn('irc: ' + account + ' is held by an old connection; reclaiming it')
+    ui.setIrcStatus(account + ' is held by an old connection, reclaiming it…')
+  })
+  current.on('nick', (nick: string) => {
+    log.info('irc: now ' + nick)
+    ui.setIrcStatus('logged in as ' + nick)
+  })
+  current.on('notice', (n: { from: string; text: string }) => {
     if (n.from === 'NickServ') ui.setIrcStatus('NickServ: ' + n.text)
   })
-  irc.on('error', (err: Error) => {
+  current.on('error', (err: Error) => {
     log.error('irc:', err)
     ui.setIrcStatus(explainIrc(err), true)
   })
-  if (register) irc.once('ready', () => irc!.register())
+  current.on('close', () => {
+    log.warn('irc: connection closed')
+    if (current.quitting || irc !== current) return
+    irc = null
+    const wait = RETRY[Math.min(retries++, RETRY.length - 1)]
+    log.info('irc: reconnecting in ' + wait / 1000 + ' s')
+    ui.setIrcStatus('disconnected, reconnecting in ' + wait / 1000 + ' s…', true)
+    retryTimer = setTimeout(() => connectIrc(false), wait)
+  })
+  if (register) current.once('ready', () => current.register())
 
-  messenger.setIrc(irc)
-  irc.connect()
+  messenger.setIrc(current)
+  current.connect()
 }
 
 let radioBusy = false

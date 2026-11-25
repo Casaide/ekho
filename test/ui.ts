@@ -124,6 +124,9 @@ test('first run opens on onboarding, then chats; settings holds the same control
   t.teardown(() => window.hide())
 
   t.equal(ui.page, 'onboarding')
+  ui.show('log')
+  ui.back()
+  t.equal(ui.page, 'onboarding', 'the log closes back to onboarding')
   ui.finishOnboarding()
   t.ok(finished)
   t.equal(ui.page, 'chats')

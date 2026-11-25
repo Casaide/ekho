@@ -53,6 +53,7 @@ export default class Ui {
   _showInfo: boolean
   log: Log
   page: Page
+  _back: Page
   _body: any
   _logPanel: any
   _logList: any
@@ -79,6 +80,7 @@ export default class Ui {
     this._showInfo = false
     this.log = opts.log ?? new Log()
     this.page = opts.onboarded === false ? 'onboarding' : 'chats'
+    this._back = this.page
 
     this._status = text('', { color: colors.muted, fontSize: 11 })
 
@@ -188,7 +190,7 @@ export default class Ui {
       view({ flexDirection: 'row', gap: 8, padding: 14 }, [
         text('// log · info, warnings and errors', { color: colors.muted, fontSize: 11, flex: 1 }),
         button('copy', () => this.copyLog(), chip(colors.accent)),
-        button('close', () => this.show('settings'), chip(colors.text))
+        button('close', () => this.back(), chip(colors.text))
       ]),
       rule(),
       this._logList
@@ -288,6 +290,8 @@ export default class Ui {
   }
 
   show(page: Page): void {
+    // The log goes back to where it was opened from.
+    if (page === 'log' && this.page !== 'log') this._back = this.page
     this.page = page
     clear(this._logList.content)
     if (page === 'log') {
@@ -296,6 +300,11 @@ export default class Ui {
     }
     this._fillPage()
     this.render()
+  }
+
+  // Leave the log for the page it was opened from.
+  back(): void {
+    this.show(this._back)
   }
 
   finishOnboarding(): void {
@@ -326,6 +335,7 @@ export default class Ui {
       )
       content.appendChild(this._setup)
       content.appendChild(button('start messaging', () => this.finishOnboarding(), primary()))
+      content.appendChild(button('view log', () => this.show('log'), chip(colors.muted)))
     }
 
     if (this.page === 'settings') {

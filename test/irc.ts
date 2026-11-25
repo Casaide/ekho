@@ -84,3 +84,37 @@ test('emits every line the server sends', (t) => {
     ':irc.motaba.net 900 dom dom!~dom@host dom :You are now logged in as dom'
   ])
 })
+
+test('reclaims a nick left behind by a dropped connection', async (t) => {
+  const { stream, irc } = client({ password: 'secret' })
+  const nicks: string[] = []
+  irc.on('nick', (nick: string) => nicks.push(nick))
+
+  irc.connect()
+  stream.serve(':irc.motaba.net 433 * dom :Nickname is already in use\r\n')
+  t.equal(stream.lines.at(-1), 'NICK dom_')
+
+  stream.serve(':irc.motaba.net 001 dom_ :Welcome\r\n')
+  t.deepStrictEqual(stream.lines.slice(-2), [
+    'PRIVMSG NickServ :IDENTIFY dom secret',
+    'PRIVMSG NickServ :GHOST dom secret'
+  ])
+
+  await new Promise((resolve) => setTimeout(resolve, 2100))
+  t.equal(stream.lines.at(-1), 'NICK dom')
+
+  stream.serve(':dom_!~dom@host NICK :dom\r\n')
+  t.equal(irc.nick, 'dom')
+  t.deepStrictEqual(nicks, ['dom'])
+})
+
+test('without a password, a nick in use is an error', (t) => {
+  const { stream, irc } = client()
+  let code = null
+  irc.on('error', (err: Error & { code: string }) => (code = err.code))
+
+  irc.connect()
+  stream.serve(':irc.motaba.net 433 * dom :Nickname is already in use\r\n')
+
+  t.equal(code, 'NICK_IN_USE')
+})
