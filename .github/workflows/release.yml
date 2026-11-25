@@ -58,6 +58,11 @@ jobs:
       - name: Android SDK platform and build tools
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
       - run: npm install
+      # A fixed, public debug key, so each build installs over the last one.
+      # Temporary: replace with a private release key (see README) before
+      # handing the app out widely.
+      - name: Stable debug key
+        run: mkdir -p ~/.android && cp android/debug.keystore ~/.android/debug.keystore
       # bare-build reads the app version from package.json.
       - run: npm pkg set version="$VERSION"
       - name: Signing key
@@ -77,6 +82,7 @@ jobs:
           --name ekho
           --identifier casa.cassidy.ekho
           --android-manifest android/AndroidManifest.xml
+          --resources android/res
           --out build
           $SIGN
       - name: Publish release

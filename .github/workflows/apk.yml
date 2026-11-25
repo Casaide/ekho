@@ -3,7 +3,9 @@ on:
   push:
     branches:
       - main
-      - first-attempt
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,6 +30,11 @@ jobs:
       - name: Dependencies against npm
         run: node -e "const p=require('./package.json');for(const [n,r] of Object.entries({...p.dependencies,...p.devDependencies}))console.log(n,r)" | while read n r; do echo "$n $r latest $(npm view $n version)"; done
       - run: npm install
+      # A fixed, public debug key, so each build installs over the last one.
+      # Temporary: replace with a private release key (see README) before
+      # handing the app out widely.
+      - name: Stable debug key
+        run: mkdir -p ~/.android && cp android/debug.keystore ~/.android/debug.keystore
       - name: Build
         run: >
           npx bare-build app.ts
@@ -36,6 +43,7 @@ jobs:
           --name ekho
           --identifier casa.cassidy.ekho
           --android-manifest android/AndroidManifest.xml
+          --resources android/res
           --out build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

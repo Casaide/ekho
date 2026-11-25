@@ -61,7 +61,7 @@ export default class Ui {
     this.log = opts.log ?? new Log()
     this._showLog = false
 
-    this._status = text('', { color: colors.muted, fontSize: 12, flex: 1, textAlign: 'right' })
+    this._status = text('', { color: colors.muted, fontSize: 11 })
 
     const title = button('~/ekho', () => this.select(null), {
       color: colors.text,
@@ -69,14 +69,16 @@ export default class Ui {
       fontWeight: 'bold'
     })
 
-    const header = view(
-      {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 14
-      },
-      [title, this._status, button('log', () => this.toggleLog(), chip(colors.muted))]
-    )
+    // The app name and the log on one line, where the radio and IRC stand on
+    // the next, so neither crowds the other on a phone.
+    const header = view({ paddingHorizontal: 14, paddingVertical: 10, gap: 4 }, [
+      view({ flexDirection: 'row', alignItems: 'center', gap: 8 }, [
+        mark(),
+        view({ flex: 1 }, [title]),
+        button('log', () => this.toggleLog(), chip(colors.muted))
+      ]),
+      this._status
+    ])
 
     this._list = new ScrollView()
     this._list.style = { flex: 1 }
@@ -200,7 +202,11 @@ export default class Ui {
   // What the radio is doing, in words: scanning, connected, or what went wrong.
   setRadioStatus(status: string, failed = false): void {
     this._radio.text = status
-    this._radio.style = { color: failed ? colors.failed : colors.muted, fontSize: 12 }
+    this._radio.style = {
+      color: failed ? colors.failed : colors.muted,
+      fontFamily: font,
+      fontSize: 12
+    }
   }
 
   showError(message: string): void {
@@ -463,6 +469,19 @@ function logLine(entry: Entry): any {
   return text(line(entry), { color, fontSize: 11 })
 }
 
+// The ekho mark, a node and its echo, drawn from views: a dot and three
+// widening bars that fade out.
+function mark(): any {
+  const bar = (height: number, opacity: number) =>
+    view({ width: 3, height, borderRadius: 2, backgroundColor: colors.accent, opacity })
+  return view({ flexDirection: 'row', alignItems: 'center', gap: 3 }, [
+    view({ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent }),
+    bar(9, 1),
+    bar(14, 0.6),
+    bar(19, 0.3)
+  ])
+}
+
 // A one-point line between sections.
 function rule(): any {
   return view({ height: 1, backgroundColor: colors.line })
@@ -513,7 +532,7 @@ function button(
 ): any {
   const { color, fontSize = 12, fontWeight = 'normal', ...box } = style
   return press(
-    view({ ...box, cursor: 'pointer', alignSelf: 'flex-start' }, [
+    view({ alignSelf: 'flex-start', ...box, cursor: 'pointer' }, [
       text(label, { color, fontSize, fontWeight })
     ]),
     onpress

@@ -28,6 +28,8 @@ export default function connectRadio(
       }
     }
 
+    let hint: ReturnType<typeof setTimeout> | null = null
+
     step(() => {
       const central = new Central()
 
@@ -38,10 +40,17 @@ export default function connectRadio(
         if (state === 'poweredOn') {
           step(() => central.startScan([meshtastic.SERVICE_UUID]))
           status('scanning for a meshtastic radio')
+          // A radio paired with another phone doesn't advertise, so say so.
+          hint = setTimeout(
+            () =>
+              status('still looking: is the radio on, and disconnected from the Meshtastic app?'),
+            20_000
+          )
         }
       })
 
       central.on('discover', (peripheral: any) => {
+        clearTimeout(hint!)
         status('found ' + (peripheral.name ?? peripheral.id) + ', connecting')
         step(() => {
           central.stopScan()
@@ -54,17 +63,29 @@ export default function connectRadio(
 
         peripheral.on('error', reject)
 
-        peripheral.on('servicesDiscover', (services: unknown[]) => {
-          if (services.length === 0) return reject(new Error('No Meshtastic service on this radio'))
-          step(() => peripheral.discoverCharacteristics(services[0]))
+        // Android lists every service on the radio, not just the one asked for.
+        let service: any = null
+
+        peripheral.on('servicesDiscover', (services: any[]) => {
+          service = services.find((s) => same(s.uuid, meshtastic.SERVICE_UUID)) ?? null
+          if (service === null) {
+            const found = services.map((s) => s.uuid).join(', ') || 'none'
+            return reject(new Error('No Meshtastic service on this radio. Services: ' + found))
+          }
+          step(() => peripheral.discoverCharacteristics(service))
         })
 
-        peripheral.on('characteristicsDiscover', (_service: unknown, characteristics: any[]) => {
+        peripheral.on('characteristicsDiscover', (from: any, characteristics: any[]) => {
+          if (from !== null && service !== null && !same(from.uuid, service.uuid)) return
           status('syncing with the radio')
           step(() => {
-            const find = (uuid: string) =>
-              characteristics.find((c) => c.uuid.toLowerCase() === uuid)
+            const find = (uuid: string) => characteristics.find((c) => same(c.uuid, uuid))
             const fromNum = find(meshtastic.FROM_NUM_UUID)
+
+            if (!find(meshtastic.TO_RADIO_UUID) || !find(meshtastic.FROM_RADIO_UUID) || !fromNum) {
+              const found = characteristics.map((c) => c.uuid).join(', ') || 'none'
+              throw new Error('Meshtastic characteristics missing. Found: ' + found)
+            }
 
             const disconnect = () => central.disconnect(peripheral)
 
@@ -93,4 +114,9 @@ export default function connectRadio(
       })
     })
   })
+}
+
+// UUIDs compare without case, whichever way the platform writes them.
+function same(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase()
 }
