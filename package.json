@@ -16,7 +16,7 @@
   "scripts": {
     "start": "bare-build --out build --runtime bare-native/runtime app.ts",
     "format": "prettier --write . && lunte --fix",
-    "lint": "prettier --check . || (prettier --write . && git --no-pager diff; exit 1)",
+    "lint": "prettier --check . && lunte",
     "typecheck": "tsc --noEmit",
     "test": "bare-native-test test.ts --out test/native"
   },

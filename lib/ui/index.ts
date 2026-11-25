@@ -30,14 +30,7 @@ export interface UiActions {
 }
 
 export type Page =
-  | 'onboarding'
-  | 'chats'
-  | 'contacts'
-  | 'radio'
-  | 'thread'
-  | 'contact'
-  | 'setup'
-  | 'log'
+  'onboarding' | 'chats' | 'contacts' | 'radio' | 'thread' | 'contact' | 'setup' | 'log'
 
 const TABS: Page[] = ['chats', 'contacts', 'radio']
 
