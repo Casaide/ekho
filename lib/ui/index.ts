@@ -29,8 +29,18 @@ export interface UiActions {
   toggleChannel(name: string): void
 }
 
-export type Page =
-  'onboarding' | 'chats' | 'contacts' | 'radio' | 'thread' | 'contact' | 'setup' | 'log'
+const PAGES = [
+  'onboarding',
+  'chats',
+  'contacts',
+  'radio',
+  'thread',
+  'contact',
+  'setup',
+  'log'
+] as const
+
+export type Page = (typeof PAGES)[number]
 
 const TABS: Page[] = ['chats', 'contacts', 'radio']
 

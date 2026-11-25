@@ -224,10 +224,11 @@ export default class Thread {
     const via = this._via(contact)
     const { messenger } = this.ui
     let why: string
-    if (contact.channel && messenger.radioChannel(contact) === null) why = 'irc only'
-    else if (via === 'irc')
+    if (contact.channel && messenger.radioChannel(contact) === null) {
+      why = 'irc only'
+    } else if (via === 'irc') {
       why = messenger.radio === null ? 'radio not connected' : 'no nodes heard'
-    else {
+    } else {
       const heard = contact.nodes.map((n) => messenger.heard.since(n)).sort((a, b) => a - b)[0]
       why =
         heard !== undefined && heard !== Infinity

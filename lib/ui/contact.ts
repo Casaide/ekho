@@ -146,8 +146,9 @@ export default class ContactScreen {
 
     if (contact.channel) {
       const index = messenger.radioChannel(contact)
-      if (index !== null)
+      if (index !== null) {
         content.appendChild(row('lora', 'radio channel ' + index, '', colors.lora))
+      }
       content.appendChild(row('irc', contact.id, '', colors.irc))
     } else {
       for (const node of contact.nodes) {

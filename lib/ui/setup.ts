@@ -114,8 +114,9 @@ export default class Setup {
       },
       []
     )
-    if (lines.length === 0)
+    if (lines.length === 0) {
       box.appendChild(text('> nothing yet', { color: colors.muted, fontSize: 11 }))
+    }
     for (const entry of lines) {
       box.appendChild(
         text(
