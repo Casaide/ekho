@@ -29,7 +29,7 @@ The live design doc and the mockups are artifacts only the owner can open: [desi
  │           threads,   │   meshtastic) │
  │           states)    └── irc.ts ─────┼─ TLS ─ irc.motaba.net ─ bridge ─ mesh
  │                                      │
- │          Phase 2: pairing + P2P ─────┼─ Hyperswarm (rendezvous) ─ other ekho
+ │          Phase 2: mailbox ───────────┼─ Hyperswarm (address) ─ other ekho
  └──────────────────────────────────────┘
 ```
 
@@ -102,26 +102,23 @@ Roughly in order:
 4. **Contacts UI:** linking a node and a nick into one person.
 5. **bare-meshtastic gaps** (better fixed upstream, in holepunchto/bare-meshtastic):
    - reactions and replies: `Data` needs the reply-to ID and emoji flag fields;
-   - an event for every packet received, on any port, so `Heard` sees all traffic and pairing can receive private-port packets (dropped today);
+   - an event for every packet received, on any port, so `Heard` sees all traffic and ekho can receive private-port packets (dropped today);
    - `from` on `ack`, to tell "relayed" from "delivered";
    - an event when a packet has gone out over the air, for a "sent" state;
-   - whether a received packet was encrypted per contact (needed to accept pairing replies);
-   - the node public key in the user info model.
+   - whether a received packet was encrypted per contact (so a shared mailbox address can't be spoofed).
 6. **Reactions:** over LoRa once bare-meshtastic supports them; over IRC as a short text message.
 
 ## Phase 2: big files over P2P (decided, not started)
 
-Large files between two ekho users, which LoRa and IRC can't carry. The attach button shows in every conversation but stays greyed out until the contact is paired. Full reasoning and rejected alternatives are in `docs/design.md`.
+Keep it focused: follow the mailbox pattern from [cero-base](https://github.com/lekinox/cero-base/blob/main/docs/core.md) (address from a secret, sealed note in a fresh core, announced on a topic derived from the address via protomux-wakeup). Follow the pattern; don't depend on cero-base. Detail in `docs/design.md`.
 
-1. **Pair once over LoRa.** A direct message on a private Meshtastic port carries a fresh pair secret, a challenge and our rendezvous secret. Stock apps ignore unknown ports, so nobody else sees it (confirm on a device). Accept the reply only if it arrived encrypted per contact (firmware 2.5+); otherwise the sender could be faked.
-2. **One topic per person, for finding each other only.** Each user announces on `hash(own rendezvous secret)` while online; paired contacts look it up to connect. Never announce on other people's topics. Topics do nothing after peers find each other.
-3. **Prove the pair on the connection.** A Protomux channel where each side sends a keyed hash of the connection's handshake hash, keyed with the pair secret. Knowing a topic isn't enough.
-4. **Data flows over the connection.** "File offered" goes over LoRa or IRC so the recipient knows to connect.
-5. **The sender holds the file** as an encrypted Hypercore or Hyperdrive until the recipient pulls it. A mailbox comes later, on the user's own always-on hub, on the same rendezvous topic.
+1. Each install has a mailbox secret; its public key is the address.
+2. Share the address in a private-port LoRa direct message (accepted only if encrypted per contact) or by QR. Knowing a contact's address is what enables the attach button.
+3. A file is an encrypted Hyperdrive or Hypercore; its keys go in a note sealed to the recipient's address.
+4. The recipient's inbox fetches and opens the note, then replicates the drive.
+5. Mirrors for offline recipients are later, not MVP.
 
-Trade-off accepted: paired contacts can see when you're online; rotate the rendezvous secret to drop someone. Groups later get one topic per private channel (`hash(channel key + name)`); public channels share the default key, so they get none.
-
-Not used, on purpose: LoRa broadcasts (noisy for everyone), public DHT topics per mesh key (anyone can watch them), a long-lived ekho key on the DHT (a stable identifier), one topic per pair (battery and bookkeeping), public channel topics (shared default key), and exporting the radio's private key (keeps the root identity on the T1000-E).
+Privacy first: nothing usable in the clear, notes anonymous unless signed. Accepted trade-off: anyone holding your address can see when your inbox is online, so only contacts get it, the inbox runs only in the foreground, and the address can be rotated.
 
 ## Open questions
 

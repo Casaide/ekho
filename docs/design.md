@@ -110,32 +110,21 @@ Out: MQTT (including the client proxy), a hub, a second radio, MeshCore, Nostr, 
 
 ## First P2P feature: big files between ekho users
 
-LoRa and IRC can't carry files. Between two ekho users with internet, the Holepunch stack can. The attach icon shows in every conversation but stays greyed out until the contact is paired as an ekho user. Stock users never see any of this.
+LoRa and IRC can't carry files. Between two ekho users with internet, the Holepunch stack can. Keep it to the minimum: the mailbox pattern from [cero-base](https://github.com/lekinox/cero-base/blob/main/docs/core.md), followed rather than depended on.
 
-1. **Pair once over LoRa.** A direct message on a private Meshtastic port carries a fresh random pair secret, a challenge, and your rendezvous secret (below). Stock apps ignore unknown ports, so nobody else sees it (to confirm on a device). Firmware 2.5+ encrypts direct messages per contact, so only that contact's radio can read it or answer. Pairing replies are only accepted if they arrived encrypted per contact; on older firmware a direct message falls back to the shared channel key and the sender could be faked.
-2. **One topic per person, for finding each other only.** Each ekho user has one random rendezvous secret and announces on `hash(rendezvous secret)` whenever ekho is online. Paired contacts know it; nobody else can compute it. To reach Ivan, look up his topic. You only ever announce on your own topic, never on per-contact ones, which keeps swarming simple and implicit. The topic does nothing once two peers have found each other.
-3. **Prove the pair on the connection.** A small Protomux channel where each side sends a keyed hash of the connection's handshake hash, keyed with the pair secret. Knowing someone's topic isn't enough to get in; a peer without the pair secret is dropped, and the proof can't be relayed or replayed.
-4. **Data flows over that connection,** not via any topic. The "file offered" notice goes over LoRa or IRC so the recipient knows to connect.
-5. **The sender holds the file at first,** shared as a Hypercore or Hyperdrive and encrypted to the recipient with a key derived from the pair secret. The recipient pulls it when both are online. A mailbox comes later, on the user's own always-on hub, announcing on the user's same rendezvous topic.
+1. **Each ekho install has a mailbox.** A 32-byte secret stays on the device; its public key is the mailbox address. Anyone can send to the address; only the secret opens what arrives.
+2. **Share the address once.** In a direct message on a private Meshtastic port (stock apps ignore unknown ports; confirm on a device), accepted only if it arrived encrypted per contact (firmware 2.5+), or by QR code in person. Receiving someone's address is how ekho learns they run ekho; until then the attach button is greyed out.
+3. **Send a file:** put it in a Hyperdrive or Hypercore encrypted with its own key. Mail the recipient a note with the drive's keys, sealed to their address. Nothing usable travels or is stored in the clear.
+4. **Deliver the note:** the note goes in a fresh core of the sender's, announced to whoever receives at the address, on the swarm topic derived from the address (protomux-wakeup). The recipient's inbox fetches the core, opens the note, then replicates the drive from the sender.
+5. **Later, mirrors:** blind peers that hold notes and drives for a recipient who's offline. Not in the first version: both must be online at some point together.
 
-**Trade-off:** every paired contact can see when you're online. To drop someone, rotate your rendezvous secret and re-share it with the rest, one direct message each next time you're in range.
+Privacy, as it stands:
 
-**Groups:** a private Meshtastic channel can have one topic, `hash(channel key + name)`, that every ekho member of that channel can find. It proves channel membership only, the same trust as the channel itself. Public channels all use the same default key, so a topic made from it would be public; they get no topic.
+- Notes are sealed to the recipient and drives are encrypted, so peers, DHT nodes and mirrors only ever see ciphertext.
+- A note carries no sender unless it signs itself.
+- **Presence:** receiving means joining the topic derived from your address, so anyone who has your address can see when your inbox is online. Only contacts you gave it to have it. The inbox could also be open only while ekho is in the foreground, and the address rotated if it leaks.
 
-| Topic | Who can find you | Used for |
-| --- | --- | --- |
-| Your rendezvous topic | Your paired contacts | One-to-one, always on while online |
-| A private channel's topic | Members of that channel | Groups (later) |
-
-Rejected alternatives, and why:
-
-- **A handshake broadcast over LoRa:** noisy for everyone on the mesh.
-- **A public DHT topic per mesh key:** anyone could announce on it, or watch it to see who runs ekho, when they're online and from which IP.
-- **A DHT server on a long-lived ekho key:** a stable public identifier anyone who learns it can watch. The rendezvous topic is only computable by paired contacts, and can be rotated.
-- **One topic per pair:** private, but a phone announcing on every contact's topic drains battery and needs bookkeeping. One rendezvous topic per person replaces it.
-- **Public channel topics:** public channels share the default key, so their topic would be public.
-- **Key agreement from the mesh keys:** needs the radio's private key exported to the phone, which breaks "the root identity stays on the T1000-E".
-- **Other ekho users as mailboxes:** strangers storing your data brings storage limits and abuse problems.
+Not used, and why: LoRa broadcasts (noisy for everyone), topics derived from mesh keys (anyone can watch them), sending drive keys unsealed (anyone who sees them can read), and exporting the radio's private key (the root identity stays on the T1000-E).
 
 ## Building it on Bare
 
@@ -153,11 +142,10 @@ One Bare codebase covers phone and desktop.
 **Gaps in bare-meshtastic**, best fixed upstream:
 
 1. **Reactions and replies:** `Data` needs the reply-to ID and emoji flag fields.
-2. **Every packet:** an event for every packet received, from any node, on any port. `Heard` needs it to see all traffic, and pairing needs it to receive private-port packets, which are dropped today.
+2. **Every packet:** an event for every packet received, from any node, on any port. `Heard` needs it to see all traffic, and ekho needs it to receive private-port packets, which are dropped today.
 3. **Ack sender:** `from` on the `ack` event, to tell relayed from delivered.
 4. **Sent over the air:** an event when a packet has been transmitted.
-5. **Per-contact encryption flag:** whether a received packet was encrypted per contact, so pairing can reject anything else.
-6. **Node public key:** the user info model has no field for a node's public key.
+5. **Per-contact encryption flag:** whether a received packet was encrypted per contact, so a shared mailbox address can't be spoofed.
 
 ## Prior art
 
@@ -171,7 +159,7 @@ Most pieces exist; nobody has one phone app with one contact per person across n
 | [Nostrastic](https://github.com/quixotesystems/nostrastic) | Nostr over LoRa via a Meshtastic gateway | One network pair |
 | [Akita Meshtastic IRC Gateway](https://github.com/AkitaEngineering/Akita-Meshtastic-IRC-Gateway) | IRC channel to Meshtastic and back | One network pair; experimental |
 | [Reticulum](https://simeononsecurity.com/articles/meshtastic-vs-meshcore-vs-reticulum-comparison-guide/) and [Sideband](https://www.github.com/markqvist/Sideband) | One identity across LoRa, WiFi, TCP and more | Everyone must run Reticulum |
-| [blind-pairing](https://github.com/holepunchto/blind-pairing) | Holepunch pairing: secret shared out of band, discovery and proof derived from it | Built for one-time Autobase invites; ekho's P2P pairing follows the same pattern |
+| [cero-base](https://github.com/lekinox/cero-base) mailbox | Sealed, anonymous messages to a 32-byte address, delivered as cores, with mirrors for offline owners | ekho follows its pattern for P2P |
 
 ## Mockups
 

@@ -25,19 +25,19 @@ Upstream, in bare-meshtastic (see `docs/design.md` for detail):
 - [ ] `from` on `ack`
 - [ ] An event when a packet is sent over the air
 - [ ] Whether a packet was encrypted per contact
-- [ ] The node public key in user info
 
-## Phase 2: big files between ekho users over P2P
+## Phase 2: big files between ekho users (mailbox pattern, MVP)
 
-- [ ] Pairing over a LoRa direct message on a private port: pair secret, challenge and rendezvous secret, accepted only if encrypted per contact
-- [ ] Pair secret and the contact's rendezvous secret stored with the contact; attach icon greyed out until paired
-- [ ] Announce on our own rendezvous topic while online; look up a contact's topic only to connect
-- [ ] Protomux proof: keyed hash of the handshake hash with the pair secret
-- [ ] Rendezvous secret rotation, to drop a contact
-- [ ] Sender-held file as an encrypted Hypercore or Hyperdrive; "file offered" notice over LoRa or IRC
-- [ ] Contact card by QR code, for pairing in person without LoRa
+- [ ] Mailbox secret per install; address derived from it
+- [ ] Share the address in a private-port LoRa direct message (accepted only if encrypted per contact), or by QR code
+- [ ] Store contacts' addresses; attach button greyed out until a contact's address is known
+- [ ] Send: encrypted Hyperdrive or Hypercore, plus a note with its keys sealed to the recipient's address, in a fresh core announced on the address topic
+- [ ] Receive: inbox on our own address topic, open notes, replicate the drive
+- [ ] Inbox open only while ekho is in the foreground
 
 ## Later
+
+- Mirrors (blind peers) so notes and files wait for a recipient who's offline
 
 - Group topics for private Meshtastic channels (public channels share the default key, so they get none)
 
