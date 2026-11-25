@@ -126,13 +126,13 @@ Privacy first: nothing usable in the clear, notes anonymous unless signed. Accep
 
 ## What irc.motaba.net told us
 
-From the server's welcome and MOTD (seen on 2026-11-25):
+From the server's welcome, MOTD and NickServ (seen on 2026-11-25):
 
-- Mesh users appear on IRC as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The server counted 141 of them, against 4 plain IRC users. A DM to a Meshtastic node is most likely a PRIVMSG to `name|mt` (to confirm).
-- Bridged channels are per region: `#blagoevgrad`, `#bulgaria`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`. There is no `#mesh`; `app.ts` still uses it as a placeholder.
-- Radio airtime is scarce: one message per 10 s goes out to the mesh, 150 bytes at most. `lib/irc.ts` splits at 400 characters today, which is too long.
-- Accounts are NickServ accounts (confirmed by the user), so ekho's IDENTIFY after connecting works. The server also answers with numeric 900 ("You are now logged in as dom"), so SASL is supported as well.
-- Hosts are cloaked (`~dom@64a18efa92.irc`), so the IP isn't shown.
+- **Accounts:** only registered nicks may stay. NickServ gives 60 seconds to `IDENTIFY`, which is what ekho does, and suggests SASL PLAIN as the smoother way. One connection per nick: a second gets 433.
+- **Channels:** everyone is joined to `#bulgaria`, which ekho uses. Regional ones are bridged too: `#blagoevgrad`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`, `#burgas`, `#gabrovo`, `#petrich`, `#shumen`, `#varna`, `#vratsa`, `#vt`, `#gorna`. Joining a channel that doesn't exist creates it (ekho once made `#mesh`).
+- **Mesh users** appear as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The name is the node's long name with spaces as `_`, cut to fit `NICKLEN=30` (the user's T1000-E, long name "Dom", is `Dom|mt`). A DM to a node is most likely a PRIVMSG to that nick (to confirm).
+- **Airtime:** one message per 10 s goes out to the mesh, 150 bytes at most; faster ones wait their turn. `lib/irc.ts` splits at 400 characters today, which is too long.
+- **Hosts** are cloaked (`~dom@64a18efa92.irc`), so the IP isn't shown.
 
 ## Meshtastic over Bluetooth: what the README example leaves out
 
@@ -144,9 +144,8 @@ From the server's welcome and MOTD (seen on 2026-11-25):
 
 ## Open questions
 
-- Is `name|mt` the node's short name, long name or ID, and is a DM to it delivered as a Meshtastic DM to that node?
-- Which channel maps to the default LongFast mesh channel?
-- Does irc.motaba.net enforce registered nicks?
+- Is a DM to `name|mt` delivered as a Meshtastic DM to that node?
+- Which channel maps to the default LongFast mesh channel? `#bulgaria` is the guess.
 - Can the T1000-E sign an arbitrary message with its key (XEdDSA), asked over Bluetooth? That would let app users verify each other on IRC.
 - Would motaba add a verified nick-to-node link?
 - What window should "recently heard" use? 15 minutes is a placeholder.

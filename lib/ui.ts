@@ -11,6 +11,7 @@ const { colors, font } = theme
 
 export interface UiActions {
   connectRadio(): void
+  disconnectRadio(): void
   connectIrc(opts: { nick: string; password: string; register: boolean }): void
   finishOnboarding(): void
 }
@@ -34,6 +35,8 @@ export default class Ui {
 
   _status: any
   _radio: any
+  _radioButton: any
+  _irc: any
   _banner: any
   _side: any
   _divider: any
@@ -102,13 +105,15 @@ export default class Ui {
     this._password = input('password, stored on this device', { secureTextEntry: true })
     this._nick.value = opts.nick ?? ''
     this._radio = text('not connected', { color: colors.muted, fontSize: 12 })
+    this._radioButton = view()
+    this._irc = text('not logged in', { color: colors.muted, fontSize: 12 })
     this._password.value = opts.password ?? ''
 
     // The radio and IRC controls: on the onboarding page the first time, in
     // settings after that. One set, moved between the two.
     this._setup = view({ gap: 8 }, [
       text('// radio', { color: colors.muted, fontSize: 11 }),
-      button('connect t1000-e', () => this.actions.connectRadio(), chip(colors.accent)),
+      this._radioButton,
       this._radio,
       text('// irc fallback · irc.motaba.net', { color: colors.muted, fontSize: 11 }),
       this._nick,
@@ -116,8 +121,10 @@ export default class Ui {
       view({ flexDirection: 'row', gap: 8 }, [
         button('log in', () => this._connectIrc(false), chip(colors.text)),
         button('register', () => this._connectIrc(true), chip(colors.irc))
-      ])
+      ]),
+      this._irc
     ])
+    this.setRadioConnected(null)
 
     this._side = view({ width: 300 }, [this._list])
     this._divider = view({ width: 1, backgroundColor: colors.line })
@@ -232,6 +239,26 @@ export default class Ui {
   setRadioStatus(status: string, failed = false): void {
     this._radio.text = status
     this._radio.style = {
+      color: failed ? colors.failed : colors.muted,
+      fontFamily: font,
+      fontSize: 12
+    }
+  }
+
+  // The radio's button: connect when there's none, disconnect when there is.
+  setRadioConnected(id: string | null): void {
+    clear(this._radioButton)
+    this._radioButton.appendChild(
+      id === null
+        ? button('connect t1000-e', () => this.actions.connectRadio(), chip(colors.accent))
+        : button('disconnect ' + id, () => this.actions.disconnectRadio(), chip(colors.muted))
+    )
+  }
+
+  // What IRC is doing, in words: logged in, what NickServ said, or what failed.
+  setIrcStatus(status: string, failed = false): void {
+    this._irc.text = status
+    this._irc.style = {
       color: failed ? colors.failed : colors.muted,
       fontFamily: font,
       fontSize: 12

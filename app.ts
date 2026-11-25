@@ -35,6 +35,13 @@ function crash(err: unknown) {
 Bare.on('uncaughtException', crash)
 Bare.on('unhandledRejection', crash)
 
+function explainIrc(err: Error & { code?: string }): string {
+  if (err.code === 'NICK_IN_USE') {
+    return 'that nick is in use: is another IRC app connected as it? close it, then log in'
+  }
+  return 'irc: ' + err.message
+}
+
 // Bluetooth failures, in words someone can act on.
 function explainRadio(err: Error): string {
   const text = err.message
@@ -48,8 +55,9 @@ function explainRadio(err: Error): string {
 // The community IRC server; it bridges IRC to the mesh both ways.
 const IRC_HOST = 'irc.motaba.net'
 const IRC_PORT = 6697
-// The IRC channel motaba mirrors the mesh channel to. Not confirmed yet.
-const IRC_CHANNEL = '#mesh'
+// The country-wide channel motaba bridges to the mesh, and joins everyone to.
+// Regional ones (#sofia, #varna, …) can come later as a setting.
+const IRC_CHANNEL = '#bulgaria'
 
 // Below this width, show the chats or the conversation, one at a time.
 const COMPACT = 700
@@ -93,9 +101,19 @@ messenger.on('message', save)
 messenger.on('update', save)
 messenger.on('contacts', save)
 
+let irc: Irc | null = null
+
 function connectIrc(register: boolean) {
+  // One connection at a time: a second under the same nick is refused.
+  if (irc !== null) {
+    log.info('irc: closing the previous connection')
+    irc.removeAllListeners()
+    irc.quit('reconnecting')
+    irc = null
+  }
+
   const socket = tls.connect({ host: IRC_HOST, port: IRC_PORT })
-  const irc = new Irc(socket, {
+  irc = new Irc(socket, {
     nick: settings.nick,
     password: settings.password,
     channels: [IRC_CHANNEL]
@@ -107,18 +125,26 @@ function connectIrc(register: boolean) {
   // send aren't logged, as they carry the password.
   irc.on('line', (line: string) => log.info('irc <', line))
   irc.on('ready', () => log.info('irc: logged in as ' + settings.nick))
-  irc.on('close', () => log.warn('irc: connection closed'))
+  irc.on('close', () => {
+    log.warn('irc: connection closed')
+    ui.setIrcStatus('disconnected: log in to try again', true)
+  })
+  irc.on('ready', () => ui.setIrcStatus('logged in as ' + settings.nick))
+  irc.on('notice', (n: { from: string; text: string }) => {
+    if (n.from === 'NickServ') ui.setIrcStatus('NickServ: ' + n.text)
+  })
   irc.on('error', (err: Error) => {
     log.error('irc:', err)
-    ui.showError('irc: ' + err.message)
+    ui.setIrcStatus(explainIrc(err), true)
   })
-  if (register) irc.once('ready', () => irc.register())
+  if (register) irc.once('ready', () => irc!.register())
 
   messenger.setIrc(irc)
   irc.connect()
 }
 
 let radioBusy = false
+let radio: { id: string; disconnect: () => void } | null = null
 
 const ui = new Ui(
   messenger,
@@ -137,13 +163,17 @@ const ui = new Ui(
           ui.setRadioStatus(status)
         }
       }).then(
-        ({ client }) => {
+        ({ client, disconnect }) => {
           radioBusy = false
+          radio = { id: client.id, disconnect }
+          ui.setRadioConnected(client.id)
           messenger.node = client.id
           messenger.setRadio(client)
           ui.setRadioStatus('connected as ' + client.id)
           log.info('radio: connected as', client.id)
           client.on('close', () => {
+            radio = null
+            ui.setRadioConnected(null)
             log.warn('radio: disconnected')
             ui.setRadioStatus('disconnected: press connect to try again', true)
           })
@@ -154,6 +184,11 @@ const ui = new Ui(
           ui.setRadioStatus(explainRadio(err), true)
         }
       )
+    },
+
+    disconnectRadio() {
+      log.info('radio: disconnecting')
+      radio?.disconnect()
     },
 
     finishOnboarding() {
