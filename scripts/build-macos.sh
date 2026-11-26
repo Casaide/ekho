@@ -22,6 +22,7 @@ npx bare-build app.ts \
   --defer bare-navigation-android \
   --defer bare-notifications-android \
   --defer bare-foreground-service-android \
+  --defer bare-open-url-android \
   --name ekho \
   --identifier casa.cassidy.ekho \
   --icon "$out/ekho.icns" \

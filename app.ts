@@ -12,11 +12,13 @@ import Link, { FatalError } from './lib/link.ts'
 import Presence from './lib/presence.ts'
 import Notifier from './lib/notifier.ts'
 import Linker from './lib/linker.ts'
+import Previews from './lib/previews.ts'
+import fetch from 'bare-fetch'
 import type { RadioState } from './lib/types.ts'
 import showCrash from './lib/crash.ts'
 import Log from './lib/log.ts'
 
-const { Window } = native
+const { Window, Clipboard } = native
 
 // Everything printed goes into the log too, readable and copyable in the app.
 const log = new Log()
@@ -97,6 +99,8 @@ let radioNames: string[] = []
 let askedNotifications: boolean = saved?.askedNotifications ?? false
 // Ask for it: set where notifications exist, on Android.
 let askToNotify = () => {}
+// Open a link in the browser: set where an addon for it exists.
+let openUrl: ((url: string) => void) | null = null
 
 // Other devices linked to this one, or the one this is linked to: then that
 // device holds the radio and IRC, and this one mirrors it (lib/linker.ts).
@@ -365,6 +369,19 @@ const ui = new Ui(
       linker.forget(name)
     },
 
+    openUrl(url: string) {
+      if (openUrl === null) {
+        Clipboard.setString(url)
+        log.info('app: no browser to open links here; copied ' + url)
+        return
+      }
+      try {
+        openUrl(url)
+      } catch (err) {
+        log.warn('app: could not open ' + url + ': ' + (err as Error).message)
+      }
+    },
+
     finishOnboarding() {
       onboarded = true
       save()
@@ -393,7 +410,8 @@ const ui = new Ui(
     onboarded,
     radio: radioLink,
     irc: ircLink,
-    presence
+    presence,
+    previews: new Previews(fetch)
   }
 )
 
@@ -473,6 +491,15 @@ if (Bare.platform === 'android') {
     if (!ui.goBack()) back.close()
   })
 }
+
+// Links open in the browser, through our own addon for each platform
+// (packages/), built for it alone. Elsewhere they're copied instead.
+openUrl =
+  Bare.platform === 'android'
+    ? (await import('bare-open-url-android')).default
+    : Bare.platform === 'darwin'
+      ? (await import('bare-open-url-darwin')).default
+      : null
 
 // A notification when a message is for you and ekho isn't in front, on
 // Android and macOS. Each platform's is our own addon (packages/), built for

@@ -26,6 +26,7 @@ function actions(own = {}) {
     joinLink() {},
     unlink() {},
     forgetDevice() {},
+    openUrl() {},
     ...own
   }
 }
