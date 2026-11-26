@@ -2,6 +2,7 @@ import native from 'bare-native'
 import type Ui from './index.ts'
 import type { Contact, Message } from '../types.ts'
 import { displayName } from '../contacts.ts'
+import { parts, links, host } from '../links.ts'
 import {
   colors,
   view,
@@ -42,7 +43,7 @@ const REASONS: Record<string, string> = {
   INTERRUPTED: 'interrupted'
 }
 
-const { Clipboard } = native
+const { Clipboard, TextFragment } = native
 
 // The reactions offered first; any other can be typed.
 const EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅', '👎', '📡']
@@ -399,7 +400,7 @@ export default class Thread {
       width: 2,
       backgroundColor: failed ? colors.failed : mine ? colors.accent : colors.edge
     })
-    const body = text(msg.text, { color: colors.text, fontSize: 14, lineHeight: 20, flexShrink: 1 })
+    const body = this._body(msg.text)
     const children = [
       view(
         {
@@ -429,14 +430,12 @@ export default class Thread {
     }
 
     const selected = this._open !== null && this._open.id === msg.id
-    return press(
+    const bubble = press(
       view(
         {
           gap: 6,
           padding: 6,
           borderRadius: 6,
-          alignSelf: mine ? 'flex-end' : 'flex-start',
-          maxWidth: '85%',
           backgroundColor: selected ? colors.panel : colors.ground,
           cursor: 'pointer'
         },
@@ -445,6 +444,66 @@ export default class Thread {
       () => this._toggle(msg),
       () => this._hold(msg)
     )
+    // Links open from their own cards, beside the message rather than in
+    // it, so a tap on one doesn't also open the message's details.
+    return view({ gap: 6, alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '85%' }, [
+      bubble,
+      ...links(msg.text)
+        .slice(0, 2)
+        .map((url) => this._link(url))
+    ])
+  }
+
+  // A message's text, its links marked.
+  _body(value: string): any {
+    const style = { color: colors.text, fontSize: 14, lineHeight: 20, flexShrink: 1 }
+    const split = parts(value)
+    if (split.length === 1 && split[0].url === null) return text(value, style)
+    const body = text('', style)
+    for (const part of split) {
+      const fragment = new TextFragment(part.text)
+      if (part.url !== null) {
+        fragment.style = { color: colors.accent, textDecorationLine: 'underline' }
+      }
+      body.appendChild(fragment)
+    }
+    return body
+  }
+
+  // A link to open: its preview once fetched, else just where it goes.
+  _link(url: string): any {
+    const preview = this.ui.previews?.get(url) ?? null
+    const open = () => this.ui.actions.openUrl(url)
+    if (preview === null) {
+      return button('↗ ' + host(url), open, { ...chip(colors.accent), fontSize: 11 })
+    }
+    const lines = [
+      text(preview.site, { color: colors.muted, fontSize: 11 }, 1),
+      text(preview.title, { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2)
+    ]
+    if (preview.description !== null) {
+      lines.push(text(preview.description, { color: colors.soft, fontSize: 12 }, 3))
+    }
+    return press(
+      view(
+        {
+          gap: 4,
+          padding: 10,
+          borderWidth: 1,
+          borderColor: colors.line,
+          borderRadius: 6,
+          backgroundColor: colors.panel,
+          cursor: 'pointer'
+        },
+        lines
+      ),
+      open
+    )
+  }
+
+  // A preview came in: show it.
+  invalidate(): void {
+    this._shown = ''
   }
 
   // Hold a message for what to do with it: reply, react, copy, retry.

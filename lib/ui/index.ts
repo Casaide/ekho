@@ -5,6 +5,7 @@ import type { Contact, Message } from '../types.ts'
 import Log from '../log.ts'
 import Link from '../link.ts'
 import Presence from '../presence.ts'
+import type Previews from '../previews.ts'
 import {
   colors,
   view,
@@ -49,6 +50,8 @@ export interface UiActions {
   joinLink(code: string): void
   unlink(): void
   forgetDevice(name: string): void
+  // Open a link in the browser.
+  openUrl(url: string): void
 }
 
 const PAGES = [
@@ -94,6 +97,8 @@ export default class Ui extends EventEmitter {
   radio: Link
   irc: Link
   presence: Presence
+  // Link previews, where links can be fetched; null in tests and offline.
+  previews: Previews | null
   radioInfo: RadioInfo
   compact: boolean
   // On screen: off while Android has the app paused.
@@ -147,6 +152,7 @@ export default class Ui extends EventEmitter {
       radio?: Link
       irc?: Link
       presence?: Presence
+      previews?: Previews
     } = {}
   ) {
     super()
@@ -158,6 +164,7 @@ export default class Ui extends EventEmitter {
     this.radio = opts.radio ?? new Link('radio', () => new Promise(() => {}))
     this.irc = opts.irc ?? new Link('irc', () => new Promise(() => {}))
     this.presence = opts.presence ?? new Presence(messenger.heard)
+    this.previews = opts.previews ?? null
     this.radioInfo = { longName: null, shortName: null, region: null, preset: null, channels: [] }
     this.compact = opts.compact ?? false
     this.visible = true
@@ -261,6 +268,10 @@ export default class Ui extends EventEmitter {
     this.radio.on('change', () => this.schedule())
     this.irc.on('change', () => this.schedule())
     this.presence.on('change', () => this.schedule())
+    this.previews?.on('preview', () => {
+      this._thread.invalidate()
+      this.schedule()
+    })
     this.log.on('entry', () => {
       if (this.page === 'setup') this._setup.render()
     })

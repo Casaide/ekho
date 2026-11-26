@@ -49,6 +49,7 @@ jobs:
           --resources android/res
           --minimum-version 33
           --defer bare-notifications-darwin
+          --defer bare-open-url-darwin
           --out build
       - name: What's inside
         # Native libraries and Java code packed into the APK, to check that

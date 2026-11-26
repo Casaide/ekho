@@ -1,0 +1,32 @@
+{
+  "name": "bare-open-url-darwin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open a link in the default browser, on macOS, for the Bare runtime",
+  "exports": {
+    "./package": "./package.json",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "binding.m",
+    "binding.js",
+    "CMakeLists.txt",
+    "prebuilds",
+    "index.d.ts"
+  ],
+  "addon": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Casaide/ekho.git",
+    "directory": "packages/bare-open-url-darwin"
+  },
+  "author": "Dominic Cassidy",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "cmake-bare": "^1.19.1"
+  }
+}

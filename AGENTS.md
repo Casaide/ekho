@@ -44,7 +44,7 @@ Don't relitigate these without the user.
 2. **Never send both ways at once.** The bridge already mirrors one path onto the other, so both would arrive twice on stock clients.
 3. **No automatic fallback on failure.** A failed LoRa message shows "retry on lora" and "send via irc"; the user decides.
 4. **No dedupe.** The user has not seen duplicates in practice; Meshtastic devices dedupe by packet ID themselves. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are dropped, since the radio hears those itself. Everything else on IRC is kept: plain IRC users, MeshCore and Bitchat users, and IRC-only channels never reach the radio (an earlier, broader rule hid them all).
-5. **Reactions and replies over IRC go as a new text message,** written as mirco (motaba) suggested: `↩️ "mirco: and the…": 👍`, who said it and the first two words of what's answered, then the answer. No other option exists on IRC.
+5. **Reactions and replies over IRC go as a new text message,** written as mirco (an operator in #bulgaria) suggested: `↩️ "mirco: and the…": 👍`, who said it and the first two words of what's answered, then the answer. No other option exists on IRC.
 6. **The T1000-E pairs with one device at a time,** so ekho replaces the Meshtastic app on the phone.
 7. **"Heard" means any packet** (message, position, telemetry), not node info, which radios broadcast only every 3 hours by default.
 8. **The motaba bridge doesn't know a nick and a node are the same person.** ekho no longer tags IRC messages with our node ID: it confused people and proved nothing, as anyone can type it. Real protection needs motaba to verify a nick-to-node link (code sent over LoRa, confirmed on IRC).
@@ -52,25 +52,26 @@ Don't relitigate these without the user.
 
 ## Layout
 
-| Path                                             | What it is                                                                                                                                               |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib/messenger.ts`                               | The core: threads, routing, sending, ack matching, retry and send via IRC. Radio and IRC are attached with `setRadio` and `setIrc` as they connect.      |
-| `lib/irc.ts`                                     | Minimal IRC client over any duplex stream: SASL or NickServ login, reclaiming a ghosted nick, PING and a silence check, LIST, join, part, privmsg.       |
-| `lib/link.ts`                                    | One connection kept up while wanted: a single state (off, connecting, on, waiting, failed), retries, pause and resume. See `docs/connections.md`.        |
-| `lib/heard.ts`                                   | Last-heard time per node, and the window.                                                                                                                |
-| `lib/contacts.ts`                                | People linking a node ID and an IRC nick; a channel contact for the mesh channel.                                                                        |
-| `lib/types.ts`                                   | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses.                                                                 |
-| `lib/radio.ts`                                   | Bluetooth connect: bare-bluetooth plus bare-meshtastic `Mailbox` and `Client`. Device code, untested here.                                               |
-| `lib/ui/`, `lib/theme.ts`                        | bare-native UI after the mockups (`docs/mockups/`): `index.ts` (navigation, tabs or panes), `kit.ts` (shared pieces), one module per screen.             |
-| `lib/notifier.ts`                                | What to notify while off screen: messages to you, and channel lines naming you.                                                                          |
-| `lib/hub.ts`, `lib/mirror.ts`                    | Linking devices: the phone's feed of everything its Messenger does, and a linked device applying it and sending through the phone's outbox reader.       |
-| `lib/devices.ts`, `lib/linker.ts`, `lib/code.ts` | The P2P side: Corestore, Hyperswarm, blind-pairing by a ten-character code; and the app's use of it. See docs/design.md.                                 |
-| `lib/presence.ts`                                | Who's around: radio nodes heard and IRC nicks in our channels, one entry per person (bridged `name\|mt` nicks matched to radio nodes).                   |
-| `packages/`                                      | Our own native addons (C++ and Java, built like bare-navigation-android): notifications and a foreground service. Compiled by `scripts/build-addons.sh`. |
-| `app.ts`                                         | Entry: wires Messenger, UI, radio and TLS IRC.                                                                                                           |
-| `test/*.ts`, `test.ts`                           | bare-tap tests with fake radio and fake IRC stream.                                                                                                      |
-| `docs/design.md`, `docs/plan.md`                 | The design and the phased plan. Update them when a decision changes.                                                                                     |
-| `.claude/skills/`                                | `ekho` (the working loop) and `js-house-style` (the Holepunch style guide).                                                                              |
+| Path                                             | What it is                                                                                                                                                                        |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/messenger.ts`                               | The core: threads, routing, sending, ack matching, retry and send via IRC. Radio and IRC are attached with `setRadio` and `setIrc` as they connect.                               |
+| `lib/irc.ts`                                     | Minimal IRC client over any duplex stream: SASL or NickServ login, reclaiming a ghosted nick, PING and a silence check, LIST, join, part, privmsg.                                |
+| `lib/link.ts`                                    | One connection kept up while wanted: a single state (off, connecting, on, waiting, failed), retries, pause and resume. See `docs/connections.md`.                                 |
+| `lib/heard.ts`                                   | Last-heard time per node, and the window.                                                                                                                                         |
+| `lib/contacts.ts`                                | People linking a node ID and an IRC nick; a channel contact for the mesh channel.                                                                                                 |
+| `lib/types.ts`                                   | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses.                                                                                          |
+| `lib/radio.ts`                                   | Bluetooth connect: bare-bluetooth plus bare-meshtastic `Mailbox` and `Client`. Device code, untested here.                                                                        |
+| `lib/ui/`, `lib/theme.ts`                        | bare-native UI after the mockups (`docs/mockups/`): `index.ts` (navigation, tabs or panes), `kit.ts` (shared pieces), one module per screen.                                      |
+| `lib/notifier.ts`                                | What to notify while off screen: messages to you, and channel lines naming you.                                                                                                   |
+| `lib/hub.ts`, `lib/mirror.ts`                    | Linking devices: the phone's feed of everything its Messenger does, and a linked device applying it and sending through the phone's outbox reader.                                |
+| `lib/devices.ts`, `lib/linker.ts`, `lib/code.ts` | The P2P side: Corestore, Hyperswarm, blind-pairing by a ten-character code; and the app's use of it. See docs/design.md.                                                          |
+| `lib/links.ts`, `lib/previews.ts`                | Links in messages, and their previews from each page's Open Graph tags, fetched once per session. They open through `packages/bare-open-url-*`.                                   |
+| `lib/presence.ts`                                | Who's around: radio nodes heard and IRC nicks in our channels, one entry per person (bridged `name\|mt` nicks matched to radio nodes).                                            |
+| `packages/`                                      | Our own native addons (C++, Java and Objective-C, built like bare-navigation-android): notifications, a foreground service, opening links. Compiled by `scripts/build-addons.sh`. |
+| `app.ts`                                         | Entry: wires Messenger, UI, radio and TLS IRC.                                                                                                                                    |
+| `test/*.ts`, `test.ts`                           | bare-tap tests with fake radio and fake IRC stream.                                                                                                                               |
+| `docs/design.md`, `docs/plan.md`                 | The design and the phased plan. Update them when a decision changes.                                                                                                              |
+| `.claude/skills/`                                | `ekho` (the working loop) and `js-house-style` (the Holepunch style guide).                                                                                                       |
 
 ## Conventions
 
@@ -142,7 +143,7 @@ From the server's welcome, MOTD and NickServ (seen on 2026-11-25):
 
 - **Accounts:** only registered nicks may stay. NickServ gives 60 seconds to `IDENTIFY` and suggests SASL PLAIN, which ekho uses (falling back to `IDENTIFY`). One connection per nick: a second gets 433, so ekho reclaims a ghosted nick (see `docs/connections.md`).
 - **Channels:** the server joins everyone to `#bulgaria`, ekho's mesh channel. ekho asks for `LIST` once logged in and shows the rest as a list to join or leave (saved, rejoined on reconnect); those are IRC only. Regional ones are bridged too: `#blagoevgrad`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`, `#burgas`, `#gabrovo`, `#petrich`, `#shumen`, `#varna`, `#vratsa`, `#vt`, `#gorna`. Joining a channel that doesn't exist creates it (ekho once made `#mesh`).
-- **Mesh users** appear as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The name is the node's long name with spaces as `_`, cut to fit `NICKLEN=30` (the user's T1000-E, long name "Dom", is `Dom|mt`). A DM to a node is a PRIVMSG to that nick: mirco (motaba's operator) confirmed DMs work IRC to IRC and IRC to a Meshtastic node (`/msg Dom|mt hi`).
+- **Mesh users** appear as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The name is the node's long name with spaces as `_`, cut to fit `NICKLEN=30` (the user's T1000-E, long name "Dom", is `Dom|mt`). A DM to a node is a PRIVMSG to that nick: mirco (an operator in #bulgaria) confirmed DMs work IRC to IRC and IRC to a Meshtastic node (`/msg Dom|mt hi`).
 - **Airtime:** one message per 10 s goes out to the mesh, 150 bytes at most; faster ones wait their turn. `lib/irc.ts` splits at 400 characters today, which is too long.
 - **Hosts** are cloaked (`~dom@64a18efa92.irc`), so the IP isn't shown.
 

@@ -206,7 +206,7 @@ export default class Messenger extends EventEmitter {
 
   // Replies and reactions travel as a short text message for now. Meshtastic
   // has native ones, which need bare-meshtastic support; IRC never will. As
-  // mirco (motaba) suggested, they read the way motaba's own app writes them:
+  // mirco suggested, they read the way motaba's own app writes them:
   // ↩️, then who said it and the first two words, then the answer:
   // `↩️ "mirco: and the…": 👍`.
   reply(msg: Message, text: string): Message {

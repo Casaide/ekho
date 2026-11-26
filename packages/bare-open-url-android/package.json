@@ -1,0 +1,36 @@
+{
+  "name": "bare-open-url-android",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open a link in the default browser, on Android, for the Bare runtime",
+  "exports": {
+    "./package": "./package.json",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "binding.cc",
+    "binding.js",
+    "CMakeLists.txt",
+    "android/",
+    "prebuilds",
+    "index.d.ts"
+  ],
+  "addon": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Casaide/ekho.git",
+    "directory": "packages/bare-open-url-android"
+  },
+  "author": "Dominic Cassidy",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "cmake-android": "^0.1.9",
+    "cmake-bare": "^1.19.1",
+    "cmake-fetch": "^1.6.0",
+    "cmake-java": "^0.1.3"
+  }
+}
