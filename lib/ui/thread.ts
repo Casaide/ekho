@@ -431,14 +431,11 @@ export default class Thread {
     return messenger.route()
   }
 
-  // Room left: LoRa packets and motaba's bridge both have a byte limit, and
-  // over IRC our node tag takes some of it.
+  // Room left: LoRa packets and motaba's bridge both have a byte limit.
   _limit(): number {
     const contact = this.ui.selected
-    if (contact === null) return LIMIT.lora
-    if (this._via(contact) === 'lora') return LIMIT.lora
-    const node = this.ui.messenger.node
-    return LIMIT.irc - (node ? bytes(' [' + node + ']') : 0)
+    if (contact === null || this._via(contact) === 'lora') return LIMIT.lora
+    return LIMIT.irc
   }
 
   _renderCount(): void {
