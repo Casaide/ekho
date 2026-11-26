@@ -1,0 +1,18 @@
+default_platform(:android)
+
+platform :android do
+  desc "Send an app bundle, already built and signed with the upload key, to Google Play internal testing."
+  desc "Options: aab (its path), release_status (completed, or draft while the app itself is still a draft)"
+  lane :internal do |options|
+    upload_to_play_store(
+      track: "internal",
+      aab: File.expand_path(options.fetch(:aab), File.join(__dir__, "..")),
+      release_status: options[:release_status] || "completed",
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end

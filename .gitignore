@@ -6,3 +6,6 @@ sandbox
 sandbox.js
 test/native/*
 !test/native/package.json
+fastlane/play-service-account.json
+fastlane/report.xml
+fastlane/README.md
