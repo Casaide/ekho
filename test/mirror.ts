@@ -97,3 +97,29 @@ test('the phone restarting keeps numbering where it was, without a new snapshot'
 
   t.equal(feed.length, before)
 })
+
+test('numbering carries on from the feed when the saved state is older', async (t) => {
+  const { stream, messenger, feed } = await linked()
+  const stale = messenger.toJSON()
+  stream.serve(':georgi!u@h PRIVMSG dom :one more\r\n')
+  await settle()
+  const last = messenger.thread(messenger.contacts.byNick('georgi')!).at(-1)!
+
+  // Restarted before saving: the state on disk doesn't have the last message.
+  const again = new Messenger({ ircChannel: '#bulgaria', state: JSON.parse(JSON.stringify(stale)) })
+  const hub = new Hub(again, feed)
+  await hub.ready()
+  const georgi = again.contacts.byNick('georgi')!
+  again.receive(georgi, { ...last, ref: undefined, id: 1 })
+  t.ok(again.thread(georgi).at(-1)!.ref! > last.ref!, 'a new number, not one already used')
+})
+
+test('applying the feed again from the start changes nothing', async (t) => {
+  const { feed, outbox, mac } = await linked()
+  const before = JSON.stringify(mac.toJSON().threads)
+
+  const again = new Mirror(mac, feed, outbox)
+  await again.update()
+
+  t.equal(JSON.stringify(mac.toJSON().threads), before)
+})

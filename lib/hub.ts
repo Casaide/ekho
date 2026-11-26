@@ -5,12 +5,15 @@ import type { Command, Contact, Message } from './types.ts'
 import type { Log } from './mirror.ts'
 
 // What goes in the feed, in order: the whole state first, then each change.
-export type Entry =
+// Each carries the next message number, so numbering carries on from the
+// feed after a restart, even if the state saved on disk is older.
+export type Entry = { next?: number } & (
   | { type: 'state'; state: ReturnType<Messenger['toJSON']>; status: Status }
   | { type: 'message'; contact: Contact; msg: Message }
   | { type: 'update'; msg: Message }
   | { type: 'contacts'; contacts: Contact[] }
   | { type: 'status'; status: Status }
+)
 
 // On the device holding the radio and IRC: everything the Messenger does goes
 // into a feed that linked devices replicate, and what they ask for, in an
@@ -72,7 +75,11 @@ export default class Hub extends EventEmitter {
 
   // Number what isn't yet, and start the feed with the whole state if it's
   // new or messages came from before it.
-  ready(): Promise<unknown> {
+  async ready(): Promise<unknown> {
+    if (this.feed.length > 0) {
+      const last = await this.feed.get(this.feed.length - 1)
+      this._next = Math.max(this._next, last.next ?? 1)
+    }
     let unnumbered = false
     for (const contact of this.messenger.contacts.all()) {
       for (const msg of this.messenger.thread(contact)) {
@@ -151,6 +158,7 @@ export default class Hub extends EventEmitter {
 
   // In order: each append waits for the one before.
   _append(entry: Entry): void {
+    entry.next = this._next
     this._tail = this._tail.then(() => this.feed.append(entry))
   }
 }

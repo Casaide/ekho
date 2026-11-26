@@ -81,7 +81,12 @@ export default class Devices extends EventEmitter {
 
     // Replicate with devices we know, and the hub; pairing has its own
     // channel on the same connections.
-    this.swarm.on('connection', (conn: any) => this._replicate(conn))
+    this.swarm.on('connection', (conn: any) => {
+      // A peer dropping is ordinary: without a listener, its error would be
+      // thrown, and every connection gets one, replicated or not.
+      conn.on('error', noop)
+      this._replicate(conn)
+    })
   }
 
   async ready(): Promise<void> {
@@ -231,3 +236,5 @@ function keys(code: string): { seed: Uint8Array; key: Uint8Array } {
     key: crypto.hash(b4a.from('ekho link key ' + code))
   }
 }
+
+function noop() {}
