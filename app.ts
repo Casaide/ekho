@@ -15,6 +15,7 @@ import Notifier from './lib/notifier.ts'
 import Linker from './lib/linker.ts'
 import type { Around } from './lib/hub.ts'
 import Previews from './lib/previews.ts'
+import KeptPreviews from './lib/kept.ts'
 import fetch from 'bare-fetch'
 import type { RadioState } from './lib/types.ts'
 import showCrash from './lib/crash.ts'
@@ -422,7 +423,10 @@ const ui = new Ui(
     irc: ircLink,
     presence,
     // Preview images go in a cache folder: the image view reads files.
+    // Previews are kept between sessions in a Hyperbee of their own, beside
+    // the linking cores, with their pictures when small.
     previews: new Previews(fetch, {
+      kept: new KeptPreviews(linker.devices.store.get({ name: 'previews' })),
       async save(name: string, bytes: Uint8Array) {
         const dir = path.join(DATA, 'previews')
         await fs.promises.mkdir(dir, { recursive: true })

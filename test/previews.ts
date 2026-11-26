@@ -104,3 +104,61 @@ test('a video’s preview comes from its oEmbed, with its thumbnail', async (t) 
   t.ok(video.image!.endsWith('.jpg'))
   t.equal(asked.length, 2, 'the oEmbed and the thumbnail, not the page')
 })
+
+// Previews kept between sessions, as a Map.
+function keeper() {
+  const map = new Map<string, any>()
+  return {
+    map,
+    get: async (url: string) => map.get(url) ?? null,
+    put: async (url: string, value: any) => map.set(url, value)
+  }
+}
+
+test('a preview is kept, with its small picture, and the next session needs no fetch', async (t) => {
+  const kept = keeper()
+  let fetches = 0
+  const fetch = async (url: string) => {
+    fetches++
+    return url.endsWith('.png')
+      ? page('png bytes', 'image/png')
+      : page('<title>hut</title><meta property="og:image" content="/card.png">')
+  }
+  const save = async (name: string) => '/cache/' + name
+
+  const first = new Previews(fetch, { save, kept })
+  const ready = new Promise((resolve) => first.on('preview', resolve))
+  first.get('https://a.bg/hut')
+  await ready
+  t.equal(fetches, 2, 'the page and its picture')
+
+  const next = new Previews(fetch, { save, kept })
+  const again = new Promise((resolve) => next.on('preview', resolve))
+  next.get('https://a.bg/hut')
+  await again
+  const hut = next.get('https://a.bg/hut')!
+  t.equal(hut.title, 'hut')
+  t.ok(hut.image!.startsWith('/cache/'), 'its picture, from what was kept')
+  t.equal(fetches, 2, 'nothing fetched')
+})
+
+test('a kept preview is fetched again once it is a week old', async (t) => {
+  const kept = keeper()
+  let now = 0
+  let fetches = 0
+  const fetch = async () => {
+    fetches++
+    return page('<title>hut</title>')
+  }
+  const first = new Previews(fetch, { kept, now: () => now })
+  const ready = new Promise((resolve) => first.on('preview', resolve))
+  first.get('https://a.bg/hut')
+  await ready
+
+  now = 8 * 24 * 60 * 60 * 1000
+  const next = new Previews(fetch, { kept, now: () => now })
+  const again = new Promise((resolve) => next.on('preview', resolve))
+  next.get('https://a.bg/hut')
+  await again
+  t.equal(fetches, 2)
+})
