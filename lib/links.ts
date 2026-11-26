@@ -141,3 +141,48 @@ function clean(value: string | null, max: number): string | null {
   if (text === '') return null
   return text.length > max ? text.slice(0, max - 1).trimEnd() + '…' : text
 }
+
+// A picture on GitHub, linked to its page: the picture itself, from where
+// GitHub serves the raw file. Null for any other link.
+export function rawImage(url: string): string | null {
+  const match = url.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+\.(?:png|jpe?g|gif|webp))(?:\?.*)?$/i
+  )
+  if (match === null) return null
+  const path = match[3].replace(/%2F/gi, '/')
+  return 'https://raw.githubusercontent.com/' + match[1] + '/' + match[2] + '/' + path
+}
+
+// A YouTube video: its oEmbed address, which gives its title, channel and
+// thumbnail without the page, a cookie consent page in the EU. Null for any
+// other link.
+export function oembed(url: string): string | null {
+  if (!/^https:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?|shorts\/)|youtu\.be\/)/i.test(url)) {
+    return null
+  }
+  return 'https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(url)
+}
+
+// A link in lines of at most `width` characters, broken after a `/`, `.`,
+// `-` or the like where one is near enough, else anywhere. Android wraps a
+// long link differently from how bare-native measured it, drawing a line
+// more than its box holds, into the card below; lines ending in a newline of
+// our own wrap the same everywhere.
+export function lines(url: string, width: number): string[] {
+  const result: string[] = []
+  let rest = url
+  while (rest.length > width) {
+    let cut = -1
+    for (let i = width; i > width / 2; i--) {
+      if ('/.-_?&=#'.includes(rest[i - 1])) {
+        cut = i
+        break
+      }
+    }
+    if (cut === -1) cut = width
+    result.push(rest.slice(0, cut))
+    rest = rest.slice(cut)
+  }
+  result.push(rest)
+  return result
+}

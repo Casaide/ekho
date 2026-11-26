@@ -1,5 +1,5 @@
 import tap from 'bare-tap'
-import { parts, links, preview, host, media } from '../lib/links.ts'
+import { parts, links, preview, host, media, rawImage, oembed, lines } from '../lib/links.ts'
 
 const { test } = tap
 
@@ -63,4 +63,37 @@ test('a link to a sound or a video plays, by its file’s extension', (t) => {
   t.equal(media('https://a.bg/page.html'), null)
   t.equal(media('https://mp3.bg/'), null, 'not the host')
   t.equal(media('https://a.bg/mp3/list'), null, 'not a folder')
+})
+
+test('a picture on GitHub previews as the picture, from its raw file', (t) => {
+  t.equal(
+    rawImage('https://github.com/Casaide/ekho/blob/main/docs%2Fscreenshots%2Fphone-thread.png'),
+    'https://raw.githubusercontent.com/Casaide/ekho/main/docs/screenshots/phone-thread.png'
+  )
+  t.equal(rawImage('https://github.com/Casaide/ekho/blob/main/README.md'), null)
+  t.equal(rawImage('https://github.com/Casaide/ekho'), null)
+})
+
+test('a YouTube video previews from its oEmbed', (t) => {
+  t.equal(
+    oembed('https://www.youtube.com/watch?v=jqGIDP7ZqHg&list=PLdTsEXMtfOYM'),
+    'https://www.youtube.com/oembed?format=json&url=' +
+      encodeURIComponent('https://www.youtube.com/watch?v=jqGIDP7ZqHg&list=PLdTsEXMtfOYM')
+  )
+  t.ok(oembed('https://youtu.be/jqGIDP7ZqHg'))
+  t.equal(oembed('https://www.youtube.com/@motaba'), null)
+})
+
+test('a long link is broken into lines that fit, after a / or the like if near', (t) => {
+  t.deepStrictEqual(lines('https://www.youtube.com/watch?v=jqGIDP7ZqHg&list=PLdTsEXMtfOYM', 30), [
+    'https://www.youtube.com/watch?',
+    'v=jqGIDP7ZqHg&list=',
+    'PLdTsEXMtfOYM'
+  ])
+  t.deepStrictEqual(lines('https://a.bg/' + 'x'.repeat(40), 20), [
+    'https://a.bg/',
+    'xxxxxxxxxxxxxxxxxxxx',
+    'xxxxxxxxxxxxxxxxxxxx'
+  ])
+  t.deepStrictEqual(lines('https://a.bg/', 20), ['https://a.bg/'])
 })

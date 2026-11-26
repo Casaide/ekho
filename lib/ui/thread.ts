@@ -2,7 +2,7 @@ import native from 'bare-native'
 import type Ui from './index.ts'
 import type { Contact, Message } from '../types.ts'
 import { displayName } from '../contacts.ts'
-import { parts, links, host, media } from '../links.ts'
+import { parts, links, host, media, lines } from '../links.ts'
 import type { Media } from '../links.ts'
 import { mentions } from '../mentions.ts'
 import type { Mention } from '../mentions.ts'
@@ -87,6 +87,8 @@ export default class Thread {
   // characters fit on one of its lines.
   _box: any
   _perLine: number
+  // The list's width, to break links to fit it.
+  _width: number
   _detail: any
   _open: Message | null
   // The message being answered, and the line saying so above the box.
@@ -112,6 +114,13 @@ export default class Thread {
     this._title = text('', { color: colors.text, fontSize: 15, fontWeight: 'bold' }, 1)
     this._sub = text('', { color: colors.muted, fontSize: 11 }, 1)
     this._list = scroll({ padding: 16, gap: 14 })
+    this._width = 390
+    this._list.on('layout', (frame: { width: number }) => {
+      if (Math.abs(frame.width - this._width) < 1) return
+      this._width = frame.width
+      this._shown = ''
+      this.ui.schedule()
+    })
     this._route = text('', { color: colors.muted, fontSize: 11 })
     this._count = text('', { color: colors.muted, fontSize: 11 })
     // A message's details, when one is tapped.
@@ -496,7 +505,13 @@ export default class Thread {
         },
         children
       ),
-      () => this._toggle(msg),
+      // A tap on a message with a link opens the link; the message's details
+      // and actions are a hold away. A failed one still opens its choices.
+      () => {
+        const url = links(msg.text)[0]
+        if (url !== undefined && !failed) this.ui.actions.openUrl(url)
+        else this._toggle(msg)
+      },
       () => this._hold(msg)
     )
     // Links open from their own cards, beside the message rather than in
@@ -509,8 +524,8 @@ export default class Thread {
     ])
   }
 
-  // A message's text, its links marked.
-  // A message's text, its links and mentions marked.
+  // A message's text, its links and mentions marked. A link goes on lines
+  // of its own, broken by us to fit (see `lines`).
   _body(value: string): any {
     const style = { color: colors.text, fontSize: 14, lineHeight: 20, flexShrink: 1 }
     const split = parts(value)
@@ -518,16 +533,28 @@ export default class Thread {
     const plain = (m: Mention) => m.name === null && m.node === null
     if (split.every((part) => part.url === null) && named.every(plain)) return text(value, style)
     const body = text('', style)
-    for (const part of split) {
+    split.forEach((part, i) => {
       if (part.url !== null) {
-        const fragment = new TextFragment(breakable(part.text))
+        const fragment = new TextFragment(lines(part.text, this._linkWidth()).join('\n'))
         fragment.style = { color: colors.accent, textDecorationLine: 'underline' }
         body.appendChild(fragment)
-        continue
+        return
       }
-      for (const m of mentions(part.text)) body.appendChild(this._mention(m))
-    }
+      let around = part.text
+      if (i > 0) around = '\n' + around.replace(/^ +/, '')
+      if (i < split.length - 1) around = around.replace(/ +$/, '') + '\n'
+      if (around.trim() === '') return
+      for (const m of mentions(around)) body.appendChild(this._mention(m))
+    })
     return body
+  }
+
+  // How many characters of a message's monospace text fit on a line, from
+  // the list's width: the most a message takes (85%), less its padding, bar
+  // and gap, with one to spare.
+  _linkWidth(): number {
+    const width = (this._width - 32) * 0.85 - 24
+    return Math.max(12, Math.floor(width / (14 * 0.6)) - 1)
   }
 
   // `@Root 👾`, or a node's name for its ID; in another colour if it's us.
@@ -801,14 +828,6 @@ export default class Thread {
     this._reply(null)
     this._renderCount()
   }
-}
-
-// A link with places to wrap: after each `/`, `.`, `-` and the like, and
-// within a long run of letters. bare-native measures a run too long for the
-// line as if it fit, while the platform breaks it anywhere, so the text was
-// drawn a line taller than its box and ran into the card below it.
-function breakable(url: string): string {
-  return url.replace(/[/.\-_?&=#]+/g, '$&\u200b').replace(/[^\u200b]{16}(?=[^\u200b])/g, '$&\u200b')
 }
 
 // The message input: its font size, the height of one of its lines, its
