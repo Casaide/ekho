@@ -1,3 +1,4 @@
+import native from 'bare-native'
 import type Ui from './index.ts'
 import type { Contact, Message } from '../types.ts'
 import { displayName } from '../contacts.ts'
@@ -11,7 +12,9 @@ import {
   chip,
   primary,
   link,
+  press,
   clear,
+  label,
   rule,
   ago,
   clock,
@@ -37,6 +40,19 @@ const REASONS: Record<string, string> = {
   INTERRUPTED: 'interrupted'
 }
 
+const { Clipboard } = native
+
+// What a state means, for the details of a message.
+function meaning(msg: Message): string {
+  if (msg.state === 'received') return 'received over ' + msg.via
+  if (msg.state === 'delivered') return 'their radio confirmed it arrived'
+  if (msg.state === 'sending') return 'waiting for their radio to confirm'
+  if (msg.state === 'failed') return 'not delivered: ' + (REASONS[msg.reason ?? ''] ?? msg.reason)
+  if (msg.via === 'irc')
+    return 'the server took it; irc has no delivery receipts, so this is as far as ekho can see'
+  return 'sent on the channel; channels have no receipts'
+}
+
 // A conversation, log style: one line per message with time, who, the path
 // it took and its state, then the text. The composer shows the route the
 // next message will take, and how much room is left.
@@ -51,6 +67,8 @@ export default class Thread {
   _route: any
   _input: any
   _count: any
+  _detail: any
+  _open: Message | null
 
   constructor(ui: Ui) {
     this.ui = ui
@@ -61,6 +79,9 @@ export default class Thread {
     this._list = scroll({ padding: 16, gap: 14 })
     this._route = text('', { color: colors.muted, fontSize: 11 })
     this._count = text('', { color: colors.muted, fontSize: 11 })
+    // A message's details, when one is tapped.
+    this._detail = view({ display: 'none' })
+    this._open = null
 
     this._input = input('message')
     this._input.returnKeyType = 'send'
@@ -85,6 +106,7 @@ export default class Thread {
       ),
       rule(),
       this._list,
+      this._detail,
       rule(),
       view({ paddingHorizontal: 14, paddingTop: 8, gap: 6 }, [
         view({ flexDirection: 'row', alignItems: 'center', gap: 6 }, [
@@ -147,6 +169,101 @@ export default class Thread {
 
     this._renderRoute(contact)
     this._renderCount()
+    this._renderDetail(contact)
+  }
+
+  // Tap a message for its details; tap it again, or close, to hide them.
+  _toggle(msg: Message): void {
+    this._open = this._open !== null && this._open.id === msg.id ? null : msg
+    this._renderDetail(this.ui.selected!)
+  }
+
+  _renderDetail(contact: Contact): void {
+    clear(this._detail)
+    const msg = this._open
+    // Gone from this thread (another conversation, or joined away).
+    if (msg === null || !this.ui.messenger.thread(contact).some((m) => m.id === msg.id)) {
+      this._open = null
+      this._detail.style = { display: 'none' }
+      return
+    }
+
+    const mine = msg.state !== 'received'
+    const row = (name: string, value: string, color: string = colors.text) =>
+      view({ flexDirection: 'row', gap: 10 }, [
+        text(name, { color: colors.muted, fontSize: 12, width: 56 }),
+        text(value, { color, fontSize: 12, flex: 1 })
+      ])
+
+    this._detail.style = {
+      padding: 14,
+      gap: 8,
+      backgroundColor: colors.panel,
+      borderWidth: 1,
+      borderColor: colors.line
+    }
+    this._detail.appendChild(
+      view({ flexDirection: 'row', alignItems: 'center' }, [
+        view({ flex: 1 }, [label('message')]),
+        link('close', () => this._toggle(msg))
+      ])
+    )
+    const now = this.ui.messenger.now()
+    this._detail.appendChild(row('when', dayLabel(msg.time, now) + ' ' + clock(msg.time)))
+    this._detail.appendChild(row('from', mine ? 'you' : (msg.from ?? displayName(contact))))
+    this._detail.appendChild(
+      row(
+        'path',
+        this._path(msg) + (msg.address ? ' · ' + msg.address : ''),
+        msg.via === 'irc' ? colors.irc : colors.lora
+      )
+    )
+    this._detail.appendChild(
+      row(
+        'state',
+        msg.state + ' · ' + meaning(msg),
+        msg.state === 'failed' ? colors.failed : colors.text
+      )
+    )
+
+    const actions = []
+    if (msg.state === 'failed') {
+      actions.push(
+        button(
+          'retry on lora',
+          () => this._act(() => this.ui.messenger.retry(msg)),
+          chip(colors.text)
+        )
+      )
+      if (contact.nicks.length > 0) {
+        actions.push(
+          button(
+            'send via irc',
+            () => this._act(() => this.ui.messenger.sendViaIrc(msg)),
+            chip(colors.irc)
+          )
+        )
+      }
+    }
+    if (msg.state === 'received') {
+      actions.push(
+        button('♥', () => this._act(() => this.ui.messenger.react(msg, '♥')), chip(colors.muted))
+      )
+      actions.push(
+        button('+1', () => this._act(() => this.ui.messenger.react(msg, '👍')), chip(colors.muted))
+      )
+    }
+    actions.push(
+      button('copy', () => this._act(() => Clipboard.setString(msg.text)), chip(colors.muted))
+    )
+    this._detail.appendChild(view({ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, actions))
+  }
+
+  // Do something with the open message, then put its details away.
+  _act(fn: () => void): void {
+    this._open = null
+    fn()
+    this.render()
   }
 
   _message(contact: Contact, msg: Message): any {
@@ -183,32 +300,27 @@ export default class Thread {
       ])
     ]
 
-    if (mine && msg.via === 'irc' && msg.state === 'sent') {
-      children.push(text('// no delivery receipt over irc', { color: colors.muted, fontSize: 11 }))
-    }
-
-    if (msg.state === 'received') {
+    // Only something that needs doing gets a line of its own.
+    if (failed) {
       children.push(
-        view({ flexDirection: 'row', gap: 8, paddingLeft: 12 }, [
-          button('♥', () => this.ui.messenger.react(msg, '♥'), chip(colors.muted)),
-          button('+1', () => this.ui.messenger.react(msg, '👍'), chip(colors.muted))
-        ])
+        text('tap for retry or irc', { color: colors.failed, fontSize: 11, paddingLeft: 12 })
       )
     }
 
-    if (failed) {
-      const actions = [
-        button('retry on lora', () => this.ui.messenger.retry(msg), chip(colors.text))
-      ]
-      if (contact.nicks.length > 0) {
-        actions.push(
-          button('send via irc', () => this.ui.messenger.sendViaIrc(msg), chip(colors.irc))
-        )
-      }
-      children.push(view({ flexDirection: 'row', gap: 8, paddingLeft: 12 }, actions))
-    }
-
-    return view({ gap: 6 }, children)
+    const selected = this._open !== null && this._open.id === msg.id
+    return press(
+      view(
+        {
+          gap: 6,
+          padding: 6,
+          borderRadius: 6,
+          backgroundColor: selected ? colors.panel : colors.ground,
+          cursor: 'pointer'
+        },
+        children
+      ),
+      () => this._toggle(msg)
+    )
   }
 
   // What's in the brackets: `lora · 2 hops`, `lora · direct`, `irc`.

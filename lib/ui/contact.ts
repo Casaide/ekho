@@ -1,5 +1,6 @@
 import type Ui from './index.ts'
 import { displayName } from '../contacts.ts'
+import type { Contact } from '../types.ts'
 import {
   colors,
   view,
@@ -159,7 +160,13 @@ export default class ContactScreen {
       }
       content.appendChild(this._link)
 
-      const others = messenger.contacts.all().filter((c) => c !== contact && !c.channel)
+      // The few most recent: a list of everyone would be long and slow.
+      const recent = (c: Contact) => messenger.thread(c).at(-1)?.time ?? 0
+      const others = messenger.contacts
+        .all()
+        .filter((c) => c !== contact && !c.channel)
+        .sort((a, b) => recent(b) - recent(a))
+        .slice(0, 8)
       if (others.length > 0) {
         content.appendChild(label('same person as… · joins them into one'))
         const chips = view({ flexDirection: 'row', flexWrap: 'wrap', gap: 8 })

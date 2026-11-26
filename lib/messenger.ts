@@ -25,7 +25,7 @@ export interface MessengerOptions {
 export interface SavedState {
   contacts: Contact[]
   threads: Record<string, Message[]>
-  // When each conversation was last read; missing in state saved before.
+  // The last message read in each conversation; missing in older state.
   read?: Record<string, number>
 }
 
@@ -228,17 +228,20 @@ export default class Messenger extends EventEmitter {
 
   // Messages received in a conversation since it was last read.
   unread(contact: Contact): number {
-    const since = this._read.get(contact.id) ?? 0
+    const thread = this.thread(contact)
+    const last = this._read.get(contact.id)
     let count = 0
-    for (const msg of this.thread(contact)) {
-      if (msg.state === 'received' && msg.time > since) count++
+    for (let i = thread.length - 1; i >= 0 && thread[i].id !== last; i--) {
+      if (thread[i].state === 'received') count++
     }
     return count
   }
 
   markRead(contact: Contact): void {
     if (this.unread(contact) === 0) return
-    this._read.set(contact.id, this.now())
+    // By message rather than time: one arriving in the same millisecond as
+    // the read would otherwise count as read.
+    this._read.set(contact.id, this.thread(contact).at(-1)!.id)
     this.emit('read', contact)
   }
 
@@ -262,7 +265,7 @@ export default class Messenger extends EventEmitter {
 
   send(contact: Contact, text: string, opts: { via?: Via } = {}): Message {
     const msg: Message = {
-      id: 0,
+      id: randomId(),
       contact: contact.id,
       from: null,
       text,
@@ -373,7 +376,7 @@ export default class Messenger extends EventEmitter {
       : this.channel
 
     this._push(contact, {
-      id: 0,
+      id: randomId(),
       contact: contact.id,
       from: m.direct ? null : m.name,
       text: m.text,
@@ -396,7 +399,7 @@ export default class Messenger extends EventEmitter {
       : (this.contacts.byNick(m.to) ?? this.channel)
 
     this._push(contact, {
-      id: 0,
+      id: randomId(),
       contact: contact.id,
       from: m.direct ? null : m.from,
       text: m.text,
@@ -419,7 +422,10 @@ export default class Messenger extends EventEmitter {
 
   _restore(state: SavedState): void {
     for (const contact of state.contacts) this.contacts.add(contact)
-    for (const [id, time] of Object.entries(state.read ?? {})) this._read.set(id, time)
+    for (const [id, last] of Object.entries(state.read ?? {})) {
+      // v0.5 saved a time here, which matches no message: all count as unread.
+      this._read.set(id, last)
+    }
 
     for (const [id, thread] of Object.entries(state.threads)) {
       for (const msg of thread) {
