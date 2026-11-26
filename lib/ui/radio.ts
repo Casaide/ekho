@@ -75,33 +75,55 @@ export default class RadioScreen {
       return onpress ? press(row, onpress) : row
     }
 
-    const loraDetail =
-      radio.state === 'on'
-        ? 'primary · ' + (info.region ? info.region + ' · ' + info.preset : 'LoRa')
-        : 'radio ' + (radio.state === 'off' ? 'not connected' : radio.state)
-    content.appendChild(
-      path(
-        'lora',
-        loraDetail,
-        radio.state === 'on' ? (route === 'lora' ? 'active' : 'no nodes heard') : 'off',
-        colors.lora
+    // Linked to a phone, the paths are the phone's.
+    const remote = this.ui.linking.role === 'linked' ? messenger.status() : null
+    if (remote !== null) {
+      const online = this.ui.linking.online
+      content.appendChild(
+        path(
+          'lora',
+          'via your phone · radio ' + (remote.radio ? 'connected' : 'not connected'),
+          online && remote.radio ? (route === 'lora' ? 'active' : 'no nodes heard') : 'off',
+          colors.lora
+        )
       )
-    )
+      content.appendChild(
+        path(
+          'irc',
+          'via your phone · irc ' + (remote.irc ? 'connected' : 'not connected'),
+          online && remote.irc ? (route === 'irc' ? 'active' : 'standby') : 'off',
+          colors.irc
+        )
+      )
+    } else {
+      const loraDetail =
+        radio.state === 'on'
+          ? 'primary · ' + (info.region ? info.region + ' · ' + info.preset : 'LoRa')
+          : 'radio ' + (radio.state === 'off' ? 'not connected' : radio.state)
+      content.appendChild(
+        path(
+          'lora',
+          loraDetail,
+          radio.state === 'on' ? (route === 'lora' ? 'active' : 'no nodes heard') : 'off',
+          colors.lora
+        )
+      )
 
-    const nick = messenger.irc?.nick ?? ''
-    const ircDetail =
-      irc.state === 'on'
-        ? 'fallback · logged in as ' + nick
-        : 'fallback · ' + (irc.state === 'off' ? 'not logged in' : irc.state)
-    content.appendChild(
-      path(
-        'irc',
-        ircDetail,
-        irc.state === 'on' ? (route === 'irc' ? 'active' : 'standby ›') : 'set up ›',
-        colors.irc,
-        () => this.ui.open('setup')
+      const nick = messenger.irc?.nick ?? ''
+      const ircDetail =
+        irc.state === 'on'
+          ? 'fallback · logged in as ' + nick
+          : 'fallback · ' + (irc.state === 'off' ? 'not logged in' : irc.state)
+      content.appendChild(
+        path(
+          'irc',
+          ircDetail,
+          irc.state === 'on' ? (route === 'irc' ? 'active' : 'standby ›') : 'set up ›',
+          colors.irc,
+          () => this.ui.open('setup')
+        )
       )
-    )
+    }
 
     this.ui.linkCard.render()
     content.appendChild(this.ui.linkCard.root)
