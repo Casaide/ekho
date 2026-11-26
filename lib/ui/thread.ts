@@ -517,9 +517,15 @@ export default class Thread {
     )
   }
 
-  // A preview came in: show it.
-  invalidate(): void {
+  // A preview came in: show it. Its card is taller than the link it
+  // replaces, so if it's on one of the last messages, the list goes to the
+  // end again rather than leaving the newest under the box.
+  invalidate(url: string): void {
     this._shown = ''
+    const contact = this.ui.selected
+    if (contact === null) return
+    const recent = this.ui.messenger.thread(contact).slice(-3)
+    if (recent.some((m) => links(m.text).includes(url))) this._settling = Date.now() + 400
   }
 
   // Hold a message for what to do with it: reply, react, copy, retry.
