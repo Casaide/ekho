@@ -146,6 +146,37 @@ export default class Presence extends EventEmitter {
   }
 }
 
+// How someone can be reached, to list only those: on the radio, or as a
+// nick of each kind on IRC.
+export type Kind = 'all' | 'lora' | Network
+export type Order = 'seen' | 'name'
+
+export function reachedBy(person: Person, kind: Kind): boolean {
+  if (kind === 'all') return true
+  if (kind === 'lora') return person.nodes.length > 0
+  return person.nicks.some((n) => n.network === kind)
+}
+
+// Most recently seen first, then by name; or by name alone. Listing radio
+// people only, it's when the radio last heard them: being on IRC says
+// nothing about the radio.
+export function sortPeople(people: Person[], order: Order, kind: Kind = 'all'): Person[] {
+  const byName = (a: Person, b: Person) => a.name.localeCompare(b.name)
+  if (order === 'name') return [...people].sort(byName)
+  const when = kind === 'lora' ? heardOnRadio : seen
+  return [...people].sort((a, b) => when(a) - when(b) || byName(a, b))
+}
+
+export function networkOf(nick: string): Network {
+  return split(nick).network
+}
+
+function heardOnRadio(person: Person): number {
+  let best = Infinity
+  for (const node of person.nodes) best = Math.min(best, node.heard)
+  return best
+}
+
 function split(nick: string): { name: string; network: Network } {
   const bar = nick.lastIndexOf('|')
   const network = bar === -1 ? undefined : SUFFIX[nick.slice(bar + 1).toLowerCase()]

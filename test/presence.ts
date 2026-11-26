@@ -1,6 +1,7 @@
 import tap from 'bare-tap'
 import Heard from '../lib/heard.ts'
-import Presence from '../lib/presence.ts'
+import Presence, { reachedBy, sortPeople, networkOf } from '../lib/presence.ts'
+import type { Person } from '../lib/presence.ts'
 import { clock } from './helpers.ts'
 
 const { test } = tap
@@ -77,4 +78,37 @@ test('who is in one channel, matched whatever its case', (t) => {
     presence.inChannel('#bulgaria').map((p) => p.name),
     ['georgi', 'sho']
   )
+})
+
+test('list only those on one transport, and sort by last seen or name', (t) => {
+  const time = clock()
+  const heard = new Heard({ now: time.now })
+  const presence = new Presence(heard)
+  presence.self = { node: null, nick: 'dom' }
+
+  presence.node({ id: '!a7c3e91f', longName: 'Ivan Petrov', shortName: 'IP' })
+  presence.node({ id: '!5b0d2c44', longName: 'Vitosha relay', shortName: 'VR' })
+  presence.node({ id: '!0c0ffee0', longName: 'Asen', shortName: 'AS' })
+  heard.mark('!5b0d2c44')
+  time.tick(60_000)
+  heard.mark('!a7c3e91f')
+  presence.names('#bulgaria', ['Asen|mt', 'georgi', 'sho|mc'])
+
+  const people = presence.people()
+  const names = (list: Person[]) => list.map((p) => p.name)
+
+  const lora = people.filter((p) => reachedBy(p, 'lora'))
+  t.deepStrictEqual(
+    names(sortPeople(lora, 'seen', 'lora')),
+    ['Ivan Petrov', 'Vitosha relay', 'Asen'],
+    'by when the radio heard them; Asen only on IRC so far'
+  )
+  t.deepStrictEqual(names(sortPeople(lora, 'name', 'lora')), [
+    'Asen',
+    'Ivan Petrov',
+    'Vitosha relay'
+  ])
+  t.deepStrictEqual(names(people.filter((p) => reachedBy(p, 'meshcore'))), ['sho'])
+  t.deepStrictEqual(names(people.filter((p) => reachedBy(p, 'irc'))), ['georgi'])
+  t.equal(networkOf('Asen|mt'), 'meshtastic')
 })
