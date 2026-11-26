@@ -394,7 +394,13 @@ test('a channel the radio also has goes over LoRa on that channel; others over I
 
   const toSofia = m.send(sofia, 'hi sofia')
   t.equal(toSofia.via, 'lora')
-  t.deepStrictEqual(radio.sent.at(-1), { text: 'hi sofia', opts: { wantAck: false, channel: 1 } })
+  t.deepStrictEqual(radio.sent.at(-1), {
+    text: 'hi sofia',
+    opts: { id: toSofia.id, channel: 1 }
+  })
+  t.equal(toSofia.state, 'sending')
+  radio.emit('ack', { id: toSofia.id, delivered: true, reason: 'NONE' })
+  t.equal(toSofia.state, 'relayed')
 
   const toVarna = m.send(varna, 'hi varna')
   t.equal(toVarna.via, 'irc')

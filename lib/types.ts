@@ -61,7 +61,7 @@ export interface Contact {
 
 export type Via = 'lora' | 'irc'
 
-export type State = 'sending' | 'sent' | 'delivered' | 'failed' | 'received'
+export type State = 'sending' | 'sent' | 'relayed' | 'delivered' | 'failed' | 'received'
 
 export interface Message {
   // Packet ID on LoRa, used to match the ack. Zero otherwise.

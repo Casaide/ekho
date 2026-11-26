@@ -48,7 +48,7 @@ Don't relitigate these without the user.
 6. **The T1000-E pairs with one device at a time,** so ekho replaces the Meshtastic app on the phone.
 7. **"Heard" means any packet** (message, position, telemetry), not node info, which radios broadcast only every 3 hours by default.
 8. **The motaba bridge doesn't know a nick and a node are the same person.** IRC messages are tagged with our node ID (`text [!e2f4a910]`). That's a hint, not proof: anyone can type it. Real protection needs motaba to verify a nick-to-node link (code sent over LoRa, confirmed on IRC).
-9. **Delivery states:** LoRa direct `sending -> delivered | failed`; LoRa channel and IRC go to `sent` (no receipts); incoming messages are `received`.
+9. **Delivery states:** LoRa direct `sending -> delivered | failed`; LoRa channel `sending -> relayed | failed` (the radio's implicit ack: it heard another radio repeat the message, which says nothing about who read it); IRC goes to `sent` (no receipts); incoming messages are `received`.
 
 ## Layout
 

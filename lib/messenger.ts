@@ -328,9 +328,12 @@ export default class Messenger extends EventEmitter {
     if (contact.channel) {
       const index = this.radioChannel(contact)
       if (index === null) return this._fail(msg, 'NO_RADIO_CHANNEL')
-      this.radio.send(msg.text, { wantAck: false, channel: index })
+      // The radio counts another radio repeating it as the ack, and reports
+      // failure if none does after its retries.
+      msg.id = randomId()
       msg.address = 'channel ' + index
-      msg.state = 'sent'
+      this._pending.set(msg.id, msg)
+      this.radio.send(msg.text, { id: msg.id, channel: index })
       return
     }
 
@@ -362,7 +365,8 @@ export default class Messenger extends EventEmitter {
     if (msg === undefined) return
 
     this._pending.delete(id)
-    msg.state = delivered ? 'delivered' : 'failed'
+    const relayed = this.contacts.get(msg.contact)!.channel
+    msg.state = delivered ? (relayed ? 'relayed' : 'delivered') : 'failed'
     msg.reason = delivered ? null : reason
 
     this.emit('update', msg)
