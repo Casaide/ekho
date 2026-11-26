@@ -48,8 +48,9 @@ function meaning(msg: Message): string {
   if (msg.state === 'delivered') return 'their radio confirmed it arrived'
   if (msg.state === 'sending') return 'waiting for their radio to confirm'
   if (msg.state === 'failed') return 'not delivered: ' + (REASONS[msg.reason ?? ''] ?? msg.reason)
-  if (msg.via === 'irc')
+  if (msg.via === 'irc') {
     return 'the server took it; irc has no delivery receipts, so this is as far as ekho can see'
+  }
   return 'sent on the channel; channels have no receipts'
 }
 

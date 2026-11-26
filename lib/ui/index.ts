@@ -461,9 +461,12 @@ export default class Ui {
         children.every((child, i) => container.children[i] === child)
     )
     if (same) return
-    for (const [container] of layout) for (const child of [...container.children]) detach(child)
-    for (const [container, children] of layout)
+    for (const [container] of layout) {
+      for (const child of [...container.children]) detach(child)
+    }
+    for (const [container, children] of layout) {
       for (const child of children) container.appendChild(child)
+    }
   }
 
   _screens(): { root: any; render(): void }[] {
