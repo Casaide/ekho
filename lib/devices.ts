@@ -39,7 +39,8 @@ export interface Saved {
   // As the hub: the devices linked to this one.
   devices: Device[]
   // As a linked device: the hub's feed, and how far it's applied.
-  hub: (Remote & { applied: number }) | null
+  // `synced` once a whole state from it has been applied, since linking.
+  hub: (Remote & { applied: number; synced?: boolean }) | null
 }
 
 // 2: cores encrypted; 1 had them in the clear.

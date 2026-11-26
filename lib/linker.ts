@@ -48,7 +48,12 @@ export default class Linker extends EventEmitter {
       this.code = null
       this.emit('change')
     })
-    this.devices.on('linked', (device: Device) => this._follow(device))
+    // A device just linked starts from the whole state, whatever the feed
+    // held before.
+    this.devices.on('linked', (device: Device) => {
+      this.hub?.snapshot()
+      this._follow(device)
+    })
   }
 
   get linked(): boolean {
@@ -68,7 +73,7 @@ export default class Linker extends EventEmitter {
 
   async ready(): Promise<void> {
     await this.devices.ready()
-    if (this.linked) await this._mirror()
+    if (this.linked) await this._mirror(true)
     else await this._hub()
   }
 
@@ -146,7 +151,9 @@ export default class Linker extends EventEmitter {
     this.hub?.follow(outbox, device.swarm, device.done)
   }
 
-  async _mirror(): Promise<void> {
+  // `catchUp`: on starting up already linked, rather than just linked, when
+  // the hub has only now written its whole state.
+  async _mirror(catchUp = false): Promise<void> {
     const link = this.devices.saved.hub!
     // Whether the phone is reachable: it's the only peer with its feed.
     const feed: any = this.devices.hubFeed
@@ -164,10 +171,17 @@ export default class Linker extends EventEmitter {
       this.error = 'your phone runs a newer ekho: update this one'
       this.emit('change')
     })
+    mirror.on('synced', () => {
+      link.synced = true
+      this.emit('change')
+    })
     mirror.on('applied', (applied: number) => {
       link.applied = applied
       this.emit('change')
     })
     await mirror.update()
+    // Linked by an older ekho, or before the hub wrote its whole state on
+    // linking: ask for it once.
+    if (catchUp && !link.synced) mirror.sync()
   }
 }

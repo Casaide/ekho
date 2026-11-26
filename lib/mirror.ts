@@ -15,7 +15,8 @@ export interface Log<T> {
 // On a linked device: the Messenger shows what the hub's feed says, and what
 // the user sends goes into this device's outbox for the hub to do.
 //
-// Events: applied (index), once the feed has been applied that far; newer,
+// Events: applied (index), once the feed has been applied that far; synced,
+// once a whole state from the hub has been applied; newer,
 // when the feed comes from a newer ekho, and applying stops there.
 export default class Mirror extends EventEmitter {
   messenger: Messenger
@@ -68,6 +69,11 @@ export default class Mirror extends EventEmitter {
     return this._tail
   }
 
+  // Ask the hub for its whole state: it comes back through the feed.
+  sync(): void {
+    this.messenger.relay!({ type: 'state' })
+  }
+
   // Back to a device of its own: sends go out its own radio and IRC again.
   close(): void {
     this.messenger.relay = null
@@ -79,6 +85,7 @@ export default class Mirror extends EventEmitter {
     if (entry.type === 'state') {
       messenger.adopt(entry.state)
       messenger.setRemote(entry.status)
+      this.emit('synced')
     } else if (entry.type === 'message') {
       messenger.receive(entry.contact, entry.msg)
     } else if (entry.type === 'update') {

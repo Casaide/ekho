@@ -148,3 +148,27 @@ test('a feed from a newer ekho stops being applied, and says so', async (t) => {
   t.ok(newer)
   t.equal(mirror.applied, at)
 })
+
+test('a linked device that missed the whole state asks for it, and gets every conversation', async (t) => {
+  const { stream, messenger, feed, outbox } = await linked()
+  stream.serve(':maria!u@h PRIVMSG dom :from before\r\n')
+  await settle()
+
+  // A device that only follows from here on: the start of the feed is lost to it.
+  const late = new Messenger({ ircChannel: '#bulgaria' })
+  const mirror = new Mirror(late, feed, outbox, { applied: feed.length })
+  let synced = false
+  mirror.on('synced', () => (synced = true))
+  await mirror.update()
+  t.equal(late.contacts.byNick('maria'), null)
+
+  mirror.sync()
+  await settle()
+
+  t.ok(synced)
+  t.deepStrictEqual(
+    late.thread(late.contacts.byNick('maria')!).map((m) => m.text),
+    ['from before']
+  )
+  t.ok(messenger.contacts.byNick('georgi') !== null && late.contacts.byNick('georgi') !== null)
+})

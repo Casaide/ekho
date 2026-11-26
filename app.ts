@@ -77,9 +77,16 @@ let onboarded: boolean = saved?.onboarded ?? false
 // Bridged channels joined beyond IRC_CHANNEL, such as regional ones.
 let channels: string[] = saved?.channels ?? []
 let serverChannels: { name: string; users: number; topic: string }[] | null = null
+// Linked to a phone, the channels are the phone's, as its feed last said:
+// all the ones saved are kept, not only those this device joined itself.
+const linkedAtStart = saved?.link?.version === 2 && saved.link.hub !== null
 const messenger = new Messenger({
   ircChannel: IRC_CHANNEL,
-  ircChannels: channels,
+  ircChannels: linkedAtStart
+    ? (saved?.messenger?.contacts ?? [])
+        .filter((c: { channel: boolean }) => c.channel)
+        .map((c: { id: string }) => c.id)
+    : channels,
   state: saved?.messenger ?? null
 })
 // Who's around on the radio and IRC, for the contacts screen.
