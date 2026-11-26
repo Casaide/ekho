@@ -11,13 +11,13 @@ import {
   button,
   chip,
   primary,
-  link,
   clear,
   detach,
   rule,
   avatar,
   label,
-  ago
+  ago,
+  back
 } from './kit.ts'
 
 // People listed under a channel; the contacts tab has everyone.
@@ -43,7 +43,7 @@ export default class ContactScreen {
     this.ui = ui
     this._editing = false
 
-    this._back = link('‹', () => this.ui.back(), { fontSize: 22, color: colors.text })
+    this._back = back(() => this.ui.back())
     this._where = text('~/contacts/', { color: colors.muted, fontSize: 15, fontWeight: 'bold' })
     this._crumb = text('', { color: colors.text, fontSize: 15, fontWeight: 'bold' }, 1)
 
