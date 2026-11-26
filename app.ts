@@ -1,6 +1,7 @@
 import native from 'bare-native'
 import tls from 'bare-tls'
 import fs from 'bare-fs'
+import b4a from 'b4a'
 import os from 'bare-os'
 import path from 'bare-path'
 import Messenger from './lib/messenger.ts'
@@ -121,11 +122,26 @@ const linker = new Linker(messenger, path.join(DATA, 'p2p'), saved?.link ?? null
 })
 
 // One model per direction, each downloaded when first wanted.
+// `--translations=<file>`: translations from a file instead of a model, for
+// screenshots on any platform (scripts/demo-translations.json).
+const demoArg = Bare.argv.map((a) => /^--translations=(.+)$/.exec(a)).find((m) => m !== null)
+const demo: Record<string, string> | null = demoArg
+  ? JSON.parse(b4a.toString(fs.readFileSync(demoArg[1])))
+  : null
+
 function translatorFor(from: string, to: string, opts = {}) {
   const translator = new Translator(
     (onprogress) =>
-      modelFiles(from, to, path.join(DATA, 'models', from + '-' + to), { fetch, onprogress }),
+      demo !== null
+        ? Promise.resolve({ model: '', srcVocab: '', dstVocab: '' })
+        : modelFiles(from, to, path.join(DATA, 'models', from + '-' + to), { fetch, onprogress }),
     async (files) => {
+      if (demo !== null) {
+        return {
+          runBatch: async (texts: string[]) => texts.map((t) => demo[t] ?? t),
+          unload: async () => {}
+        }
+      }
       const { default: Nmt } = await import('@qvac/translation-nmtcpp')
       const model = new Nmt({
         files,
@@ -156,8 +172,8 @@ const toBulgarian = translatorFor('en', 'bg', {
 })
 // Android only for now: on the Mac, QVAC's runtime picks one architecture
 // for both halves of the universal build, so it's left out of it.
-const translates = Bare.platform === 'android'
-if (translates && translate) translator.start()
+const translates = Bare.platform === 'android' || demo !== null
+if (translates && (translate || demo !== null)) translator.start()
 
 // Save a second after the last change, not on every message.
 let timer: ReturnType<typeof setTimeout> | null = null
