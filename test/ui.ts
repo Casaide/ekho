@@ -426,3 +426,22 @@ test('linking: the phone shows a code, another device types one in', (t) => {
   ui.setLinking({ ...ui.linking, role: 'linked', error: null })
   ui.render()
 })
+
+test('on a desktop, info opens a pane beside the conversation, and × closes it', (t) => {
+  const messenger = new Messenger({ ircChannel: '#bulgaria' })
+  const ui = new Ui(messenger, actions())
+  const window = new Window(900, 700)
+  window.content(ui.root)
+  ui.setWidth(900)
+
+  const ivan = messenger.addContact({ name: 'ivan', nick: 'ivanp' })
+  ui.select(ivan)
+  t.equal(ui._right.style.display, 'none', 'narrow: no pane at first')
+
+  ui.toggleInfo()
+  t.equal(ui.page, 'thread', 'the conversation stays')
+  t.equal(ui._right.style.display, 'flex')
+
+  ui.toggleInfo()
+  t.equal(ui._right.style.display, 'none')
+})
