@@ -90,7 +90,9 @@ function save() {
   timer = setTimeout(() => {
     timer = null
     try {
-      store.save({ messenger, irc: settings, wanted, onboarded, channels })
+      // The open conversation too, to reopen on start.
+      const open = ui.selected?.id ?? null
+      store.save({ messenger, irc: settings, wanted, onboarded, channels, open })
     } catch (err) {
       console.error('save:', (err as Error).message)
     }
@@ -340,6 +342,11 @@ shownWindow = window
 
 ui.setWidth(window.size.width)
 window.on('resize', () => ui.setWidth(window.size.width))
+
+// Reopen the conversation that was open last time.
+ui.on('select', save)
+const reopen = onboarded && saved?.open ? messenger.contacts.get(saved.open) : null
+if (reopen) ui.select(reopen)
 
 // Bring back what was up last time.
 if (wanted.radio) radioLink.start()
