@@ -133,7 +133,7 @@ export default class Thread {
         [
           this._back,
           view({ flex: 1, gap: 2 }, [this._title, this._sub]),
-          button('info', () => this.ui.open('contact'), chip(colors.text))
+          button('info', () => this.ui.toggleInfo(), chip(colors.text))
         ]
       ),
       rule(),

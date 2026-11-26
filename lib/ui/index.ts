@@ -99,6 +99,9 @@ export default class Ui extends EventEmitter {
   // On screen: off while Android has the app paused.
   visible: boolean
   wide: boolean
+  // The info pane beside a conversation, as the user last set it; null
+  // until then, when it follows the window's width.
+  info: boolean | null
   page: Page
   tab: Page
   selected: Contact | null
@@ -159,6 +162,7 @@ export default class Ui extends EventEmitter {
     this.compact = opts.compact ?? false
     this.visible = true
     this.wide = false
+    this.info = null
     this.page = opts.onboarded === false ? 'onboarding' : 'chats'
     this.tab = 'chats'
     this.selected = null
@@ -172,7 +176,7 @@ export default class Ui extends EventEmitter {
     this._chats = new Chats(this)
     this._thread = new Thread(this)
     this._contact = new ContactScreen(this)
-    this._side = new ContactScreen(this)
+    this._side = new ContactScreen(this, { side: true })
     this._people = new People(this)
     this._channels = new Channels(this)
     this._radio = new RadioScreen(this)
@@ -308,7 +312,13 @@ export default class Ui extends EventEmitter {
     this.open('thread')
   }
 
+  // A conversation's info: its own page on a phone; on a desktop, a pane
+  // beside the conversation, shown by default when the window is wide.
   toggleInfo(): void {
+    if (!this.compact) {
+      this.info = !(this.info ?? this.wide)
+      return this.render()
+    }
     if (this.page === 'contact') this.back()
     else this.open('contact')
   }
@@ -476,7 +486,8 @@ export default class Ui extends EventEmitter {
 
     // What goes where. Views move only when this changes: moving a view
     // cancels a touch on it.
-    const side = split && this.wide && this.page === 'thread' && this.selected !== null
+    const side =
+      split && (this.info ?? this.wide) && this.page === 'thread' && this.selected !== null
     const detail = TABS.includes(this.page) ? null : this._screenFor(this.page)
     const tabs = TABS.includes(this.page) || split
     const layout: [any, any[]][] = split

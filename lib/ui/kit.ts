@@ -107,7 +107,7 @@ export function link(label: string, onpress: () => void, style: object = {}): an
 
 // Back, at the top left: a 44 px square, the smallest target a thumb hits
 // every time, though the arrow is small.
-export function back(onpress: () => void): any {
+export function back(onpress: () => void, glyph = '‹'): any {
   return press(
     view(
       {
@@ -118,7 +118,7 @@ export function back(onpress: () => void): any {
         justifyContent: 'center',
         cursor: 'pointer'
       },
-      [text('‹', { color: colors.text, fontSize: 26 })]
+      [text(glyph, { color: colors.text, fontSize: glyph === '‹' ? 26 : 20 })]
     ),
     onpress
   )

@@ -39,11 +39,12 @@ export default class ContactScreen {
   _editButton: any
   _editing: boolean
 
-  constructor(ui: Ui) {
+  // `side`: shown beside a conversation on a desktop, closed with ×.
+  constructor(ui: Ui, opts: { side?: boolean } = {}) {
     this.ui = ui
     this._editing = false
 
-    this._back = back(() => this.ui.back())
+    this._back = opts.side ? back(() => this.ui.toggleInfo(), '×') : back(() => this.ui.back())
     this._where = text('~/contacts/', { color: colors.muted, fontSize: 15, fontWeight: 'bold' })
     this._crumb = text('', { color: colors.text, fontSize: 15, fontWeight: 'bold' }, 1)
 
