@@ -1,0 +1,35 @@
+{
+  "name": "bare-notifications-darwin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "macOS notifications for the Bare runtime",
+  "exports": {
+    "./package": "./package.json",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "binding.m",
+    "binding.js",
+    "CMakeLists.txt",
+    "prebuilds"
+  ],
+  "addon": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Casaide/ekho.git",
+    "directory": "packages/bare-notifications-darwin"
+  },
+  "author": "Dominic Cassidy",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "bare-events": "^2.9.2"
+  },
+  "devDependencies": {
+    "cmake-bare": "^1.19.1"
+  }
+}

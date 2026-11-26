@@ -219,7 +219,11 @@ test('a reaction goes as a short text message on the current route', (t) => {
   const original = messenger.send(ivan, 'take the spare cable')
   messenger.react(original, '♥')
 
-  t.equal(stream.lines[1], 'PRIVMSG ivanp :♥ re: "take the spare cable"')
+  t.equal(stream.lines[1], 'PRIVMSG ivanp :"take the spare cable" ♥')
+
+  const long = messenger.send(ivan, 'leaving at 9, see you at the hut')
+  messenger.react(long, '👍')
+  t.equal(stream.lines[3], 'PRIVMSG ivanp :"leaving at 9, see yo…" 👍', 'the quote cut short')
 })
 
 test('state survives a restart, and unanswered sends come back failed', (t) => {

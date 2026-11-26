@@ -20,5 +20,8 @@ jobs:
         with:
           package-manager-cache: false
           node-version: 22
+      # Our own addons (packages/), compiled here: they aren't on npm.
+      - name: Native addons
+        run: sh scripts/build-addons.sh darwin
       - run: npm install
       - run: scripts/build-macos.sh

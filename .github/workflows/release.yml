@@ -65,7 +65,7 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
       # Our own addons (packages/), compiled here: they aren't on npm.
       - name: Native addons
-        run: sh scripts/build-addons.sh
+        run: sh scripts/build-addons.sh android
       - run: npm install
       # A fixed, public debug key, so each build installs over the last one.
       # Temporary: replace with a private release key (see README) before
@@ -93,6 +93,7 @@ jobs:
           --android-manifest android/AndroidManifest.xml
           --resources android/res
           --minimum-version 33
+          --defer bare-notifications-darwin
           --out build
           $SIGN
       - name: Publish release
@@ -123,6 +124,8 @@ jobs:
         with:
           package-manager-cache: false
           node-version: 22
+      - name: Native addons
+        run: sh scripts/build-addons.sh darwin
       - run: npm install
       - run: npm pkg set version="$VERSION"
       - run: scripts/build-macos.sh

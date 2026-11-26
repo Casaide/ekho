@@ -205,10 +205,12 @@ export default class Messenger extends EventEmitter {
   }
 
   // Reactions travel as a short text message for now. Meshtastic has native
-  // reactions, which need bare-meshtastic support; IRC never will.
+  // reactions, which need bare-meshtastic support; IRC never will. The quote
+  // comes first and short, as mirco asked: it reads as what's being answered,
+  // and leaves the room for the answer.
   react(msg: Message, emoji: string): Message {
-    const snippet = msg.text.length > 40 ? msg.text.slice(0, 40) + '…' : msg.text
-    return this.send(this.contacts.get(msg.contact)!, emoji + ' re: "' + snippet + '"')
+    const snippet = msg.text.length > 20 ? msg.text.slice(0, 20).trimEnd() + '…' : msg.text
+    return this.send(this.contacts.get(msg.contact)!, '"' + snippet + '" ' + emoji)
   }
 
   toJSON(): SavedState {
