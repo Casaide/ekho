@@ -89,7 +89,16 @@ The password stays on your device. ekho logs in for you from then on, and joins 
 - **Channels:** the **channels** tab lists the ones you're in, with how many people are there now and whether they reach the radio, then the rest of the server's channels to join. Open a channel's **info** to see who's in it, or **edit** to give it your own name. To leave one, go to **radio** › **irc**.
 - **Go back** with the back gesture or the arrow at the top left.
 
-### What the labels mean
+#### Use ekho on your Mac too
+
+Your radio can only be connected to one device, so the phone keeps it, along with the internet connection, and the Mac links to the phone:
+
+1. On the phone, go to **radio** › **link a device**. A code like `k7m2x-9qp4t` appears.
+2. On the Mac, go to **radio**, type the code under **or link this device to your phone**, and tap **link**.
+
+The Mac then shows all your conversations and sends through the phone. Keep ekho running on the phone. **Unlink** on the Mac makes it a device of its own again.
+
+## What the labels mean
 
 | Label       | Meaning                                                                                                   |
 | ----------- | --------------------------------------------------------------------------------------------------------- |

@@ -31,6 +31,14 @@ Upstream, in bare-meshtastic (see `docs/design.md` for detail):
 
 ## Phase 2a: your devices share one history (design in docs/design.md)
 
+First step, built (not yet tried on devices):
+
+- [x] Link a Mac to the phone by a code; the phone's feed mirrors to it; it sends through the phone
+- [ ] Renames, joins and read markers from a linked device back to the phone
+- [ ] A blind peer for the feed, so a linked device catches up while the phone is away
+
+Then, once more than one device writes:
+
 - [ ] A Hyperbee 2 per device, encrypted; messages, contacts and read markers written as they change
 - [ ] Pair a device by QR: a shared secret, and a discovery topic derived from it
 - [ ] A new device opens a paired bee and `move`s it onto its own core

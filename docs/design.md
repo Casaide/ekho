@@ -108,7 +108,19 @@ Principles:
 
 Out: MQTT (including the client proxy), a hub, a second radio, MeshCore, Nostr, and groups beyond existing Meshtastic and IRC channels.
 
-## First P2P step: your devices share one history (decided, not started)
+## First P2P step, built: a linked Mac mirrors the phone
+
+The smallest step toward shared history, chosen with the user: the phone stays the only device on the radio and IRC, and other devices link to it. Nothing merges, because only the phone writes.
+
+- **The phone's feed** (`lib/hub.ts`): a Hypercore of JSON entries. The whole state comes first, then every message, state change, contact list and status as the Messenger emits them. Each message gets a `ref`, a number both sides use for it. A restart keeps numbering where it was. A new snapshot is written only when the feed is new or messages arrived from before it.
+- **A linked device** (`lib/mirror.ts`) replicates the feed and applies it to its own Messenger, so it has the full history and catches up after being away. What it sends, retries or sends via IRC goes into an outbox core of its own. The phone reads the outbox and acts on it through the usual routing rule, and the result comes back through the feed. A sent message carries the linked device's own number (`local`), so it replaces the copy shown while it was waiting.
+- **Linking** (`lib/devices.ts`, `lib/code.ts`): blind-pairing with a ten-character code from an alphabet without look-alikes, about 49 bits. It works for 10 minutes and for one device. The code yields both the invite's seed and the key the invite is for, so the other device rebuilds the invite from the code alone. blind-pairing requires the invite's discovery key to be its key's, so the code can't be for the feed itself: the feed's key goes back in the answer's `encryptionKey` field, which only the linked device can open. Its own outbox key and swarm key travel the other way, in the request's user data.
+- **Replication:** one Corestore and one Hyperswarm per device, on the feed's discovery key. The phone replicates only with swarm keys it has linked. A linked device replicates with whoever is on the topic, who can read only cores whose keys they hold.
+- **One login per nick:** while linked, a device doesn't open its own radio or IRC, which would fight the phone for the nick. Unlinking brings them back.
+
+Not yet: renames, joins and read markers made on a linked device stay there; the phone must be online for the other device to catch up (a blind peer later); the feed isn't encrypted at rest. The per-device bee2 design below is where this goes when more than one device writes.
+
+## Later P2P step: your devices share one history
 
 Phone and laptop can't both hold the T1000-E, and motaba has no IRC history, so whatever one device sees the other misses. The first P2P piece syncs one person's own devices: the laptop records IRC while the phone sleeps, and the phone's LoRa traffic shows on the laptop.
 
