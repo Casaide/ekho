@@ -1,4 +1,5 @@
 import EventEmitter from 'bare-events'
+import b4a from 'b4a'
 import { preview, host, rawImage, oembed } from './links.ts'
 import type { Preview } from './links.ts'
 
@@ -17,6 +18,29 @@ export type Fetch = (
 // image view reads images from files.
 export type Save = (name: string, bytes: Uint8Array) => Promise<string>
 
+// Where previews are kept between sessions, by link (lib/kept.ts, a
+// Hyperbee): small, so a picture is kept only up to SMALL.
+export interface Kept {
+  get(url: string): Promise<KeptPreview | null>
+  put(url: string, value: KeptPreview): Promise<unknown>
+}
+
+export interface KeptPreview {
+  // When it was fetched.
+  at: number
+  // Null: the link had nothing to show.
+  preview: Preview | null
+  // The picture, base64, with its file extension, if small enough to keep.
+  picture: string | null
+  ext: string | null
+}
+
+// The biggest picture kept, and how long a preview, or a link with none,
+// is kept before it's fetched again.
+const SMALL = 64 * 1024
+const FRESH = 7 * 24 * 60 * 60 * 1000
+const FRESH_NONE = 24 * 60 * 60 * 1000
+
 // The most read of a page, for its tags, and of an image; and how long to
 // wait for each.
 const PAGE = 512 * 1024
@@ -31,9 +55,11 @@ const TYPES: Record<string, string> = {
   'image/webp': 'webp'
 }
 
-// Link previews, fetched once each and kept for the session: a page's title,
-// description and image, or a linked image itself. A page that can't be had,
-// or has nothing to show, is remembered as null, and the link shows plain.
+// Link previews: a page's title, description and image, or a linked image
+// itself. Fetched once each, and kept for the session; kept beyond it too,
+// with a small picture, when given `kept`. A page that has nothing to show is
+// remembered as null, and the link shows plain; one that can't be reached is
+// tried again next session.
 // Fetching tells the site this device's address, as any messenger's previews
 // do.
 //
@@ -41,16 +67,24 @@ const TYPES: Record<string, string> = {
 export default class Previews extends EventEmitter {
   fetch: Fetch
   save: Save | null
+  kept: Kept | null
+  now: () => number
   _known: Map<string, Preview | null>
   _pending: Set<string>
+  // The picture of each preview fetched this session, to keep with it.
+  _pictures: Map<string, { bytes: Uint8Array; ext: string }>
 
-  // Without `save`, previews have no images.
-  constructor(fetch: Fetch, opts: { save?: Save } = {}) {
+  // Without `save`, previews have no images; without `kept`, they last the
+  // session.
+  constructor(fetch: Fetch, opts: { save?: Save; kept?: Kept; now?: () => number } = {}) {
     super()
     this.fetch = fetch
     this.save = opts.save ?? null
+    this.kept = opts.kept ?? null
+    this.now = opts.now ?? Date.now
     this._known = new Map()
     this._pending = new Set()
+    this._pictures = new Map()
   }
 
   // The preview if it's ready; null otherwise, starting to fetch it.
@@ -65,9 +99,16 @@ export default class Previews extends EventEmitter {
     this._pending.add(url)
     let result: Preview | null = null
     try {
-      result = await this._preview(url)
+      const kept = await this._fromKept(url)
+      if (kept !== undefined) {
+        result = kept
+      } else {
+        result = await this._preview(url)
+        await this._keepFor(url, result)
+      }
     } catch {
-      // Unreachable, slow or refused: the link shows plain.
+      // Unreachable, slow or refused: the link shows plain, and is tried
+      // again next session.
     }
     this._pending.delete(url)
     this._known.set(url, result)
@@ -131,6 +172,39 @@ export default class Previews extends EventEmitter {
     return found
   }
 
+  // A preview kept from before, if fresh: its picture written back to a
+  // file to show. Undefined if there's none to use.
+  async _fromKept(url: string): Promise<Preview | null | undefined> {
+    if (this.kept === null) return undefined
+    const kept = await this.kept.get(url)
+    if (kept === null) return undefined
+    const age = this.now() - kept.at
+    if (age > (kept.preview === null ? FRESH_NONE : FRESH)) return undefined
+    if (kept.preview === null) return null
+    const found = { ...kept.preview, image: null as string | null }
+    if (kept.picture !== null && this.save !== null) {
+      found.image = await this.save(name(url) + '.' + kept.ext, b4a.from(kept.picture, 'base64'))
+    } else if (found.imageUrl !== null) {
+      // Too big to keep: fetched again.
+      try {
+        found.image = await this._image(found.imageUrl)
+      } catch {}
+    }
+    return found
+  }
+
+  async _keepFor(url: string, found: Preview | null): Promise<void> {
+    if (this.kept === null) return
+    const picture = this._pictures.get(found?.imageUrl ?? url) ?? null
+    const small = picture !== null && picture.bytes.byteLength <= SMALL
+    await this.kept.put(url, {
+      at: this.now(),
+      preview: found === null ? null : { ...found, image: null },
+      picture: small ? b4a.toString(picture.bytes, 'base64') : null,
+      ext: small ? picture.ext : null
+    })
+  }
+
   async _image(url: string): Promise<string | null> {
     const res = await timed(this.fetch(url, { headers: { accept: 'image/*' } }))
     const type = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
@@ -147,6 +221,7 @@ export default class Previews extends EventEmitter {
     if (this.save === null) return null
     const bytes = new Uint8Array(await timed(res.arrayBuffer()))
     if (bytes.byteLength > IMAGE) return null
+    this._pictures.set(url, { bytes, ext: TYPES[type] })
     return this.save(name(url) + '.' + TYPES[type], bytes)
   }
 }
