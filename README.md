@@ -91,12 +91,13 @@ The password stays on your device. ekho logs in for you from then on, and joins 
 
 ### What the labels mean
 
-| Label       | Meaning                                                                                          |
-| ----------- | ------------------------------------------------------------------------------------------------ |
-| `sending`   | On its way over the radio, waiting for a receipt.                                                |
-| `delivered` | The other person's radio confirmed it.                                                           |
-| `failed`    | No receipt after 3 tries. Tap it to retry or send over the internet.                             |
-| `sent`      | Sent over the internet, or to a channel. These don't give receipts, so nothing more will appear. |
+| Label       | Meaning                                                                                                   |
+| ----------- | --------------------------------------------------------------------------------------------------------- |
+| `sending`   | On its way over the radio, waiting for a receipt.                                                         |
+| `delivered` | The other person's radio confirmed it.                                                                    |
+| `failed`    | No receipt after 3 tries. Tap it to retry or send over the internet.                                      |
+| `relayed`   | Another radio repeated your channel message, so it reached the mesh. Channels can't tell you who read it. |
+| `sent`      | Sent over the internet. IRC gives no receipts, so nothing more will appear.                               |
 
 ## Questions
 

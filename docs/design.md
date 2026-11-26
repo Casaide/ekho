@@ -81,7 +81,7 @@ That's the whole rule. A failed LoRa message is never moved to IRC automatically
 | Delivered | The recipient's node acknowledged it                                        |
 | Failed    | No acknowledgement after the radio's retries; offers retry and send via IRC |
 
-Channel messages stop at sent, as channels have no per-person acknowledgement. IRC messages are sent with no receipt.
+Channel messages have no per-person acknowledgement, but the radio still reports an implicit ack: it listens for another radio repeating the message, and retries if it hears none. ekho shows that as relayed (it reached the mesh), or failed if no radio repeated it. IRC messages are sent with no receipt.
 
 **Duplicates:** no dedupe. Meshtastic devices dedupe by packet ID, and duplicates haven't been a problem in practice. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are skipped, because the radio hears those itself. Plain IRC users, MeshCore and Bitchat users, and IRC-only channels are always kept: none of those reach the radio.
 
