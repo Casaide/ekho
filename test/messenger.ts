@@ -213,17 +213,16 @@ test('linking a nick merges that IRC contact into the person', (t) => {
   )
 })
 
-test('a reaction goes as a short text message on the current route', (t) => {
+test('a reply or reaction goes as a short text message: ↩️, two words quoted, the answer', (t) => {
   const { stream, messenger, ivan } = setup()
 
   const original = messenger.send(ivan, 'take the spare cable')
   messenger.react(original, '♥')
+  t.equal(stream.lines[1], 'PRIVMSG ivanp :↩️ "take the…" ♥')
 
-  t.equal(stream.lines[1], 'PRIVMSG ivanp :"take the spare cable" ♥')
-
-  const long = messenger.send(ivan, 'leaving at 9, see you at the hut')
-  messenger.react(long, '👍')
-  t.equal(stream.lines[3], 'PRIVMSG ivanp :"leaving at 9, see yo…" 👍', 'the quote cut short')
+  const short = messenger.send(ivan, 'ok')
+  messenger.reply(short, 'see you at 9')
+  t.equal(stream.lines[3], 'PRIVMSG ivanp :↩️ "ok" see you at 9', 'nothing cut, no …')
 })
 
 test('state survives a restart, and unanswered sends come back failed', (t) => {

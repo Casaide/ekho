@@ -2,6 +2,7 @@ import native from 'bare-native'
 import type Ui from './index.ts'
 import type { Contact, Message } from '../types.ts'
 import { displayName } from '../contacts.ts'
+import { replyTo } from '../messenger.ts'
 import {
   colors,
   view,
@@ -80,6 +81,9 @@ export default class Thread {
   _count: any
   _detail: any
   _open: Message | null
+  // The message being answered, and the line saying so above the box.
+  _replyTo: Message | null
+  _replying: any
   // What the list shows, to rebuild it only when that changes.
   _shown: string
   // The conversation and its length when last scrolled to the end, and until
@@ -101,6 +105,8 @@ export default class Thread {
     // A message's details, when one is tapped.
     this._detail = view({ display: 'none' })
     this._open = null
+    this._replyTo = null
+    this._replying = view({ display: 'none' })
     this._shown = ''
     this._end = ''
     this._settling = 0
@@ -116,6 +122,10 @@ export default class Thread {
     })
 
     this._input = input('message')
+    // A message, unlike a nick or a code: the keyboard's suggestions and
+    // capitals help.
+    this._input.autoCorrect = true
+    this._input.autoCapitalize = 'sentences'
     this._input.returnKeyType = 'send'
     this._input.style = { color: colors.text, fontSize: 13, flex: 1, padding: 8 }
     this._input.on('submit', () => this._send())
@@ -146,6 +156,7 @@ export default class Thread {
           view({ flex: 1 }),
           this._count
         ]),
+        this._replying,
         view(
           {
             flexDirection: 'row',
@@ -183,7 +194,10 @@ export default class Thread {
 
     const thread = this.ui.messenger.thread(contact)
     const now = this.ui.messenger.now()
+    // A reply belongs to its conversation.
+    if (this._replyTo !== null && this._replyTo.contact !== contact.id) this._replyTo = null
     this._renderRoute(contact)
+    this._renderReplying()
     this._renderCount()
     this._renderDetail(contact)
 
@@ -321,6 +335,7 @@ export default class Thread {
         )
       }
     }
+    actions.push(button('↩️ reply', () => this._reply(msg), chip(colors.accent)))
     if (msg.state === 'received') {
       // Any emoji: the common ones a tap away, anything else typed. Sent as
       // a short text until bare-meshtastic carries Meshtastic's reactions.
@@ -428,8 +443,49 @@ export default class Thread {
         },
         children
       ),
-      () => this._toggle(msg)
+      () => this._toggle(msg),
+      () => this._hold(msg)
     )
+  }
+
+  // Hold a message for what to do with it: reply, react, copy, retry.
+  _hold(msg: Message): void {
+    this._open = msg
+    this._emoji.value = ''
+    this._renderDetail(this.ui.selected!)
+    this._shown = ''
+    this.render()
+  }
+
+  // Answer a message: the box says which, and the reply quotes it.
+  _reply(msg: Message | null): void {
+    this._replyTo = msg
+    this._open = null
+    this._shown = ''
+    this.render()
+    if (msg !== null) this._input.focus()
+  }
+
+  _renderReplying(): void {
+    clear(this._replying)
+    const msg = this._replyTo
+    if (msg === null) {
+      this._replying.style = { display: 'none' }
+      return
+    }
+    this._replying.style = { flexDirection: 'row', alignItems: 'center', gap: 8 }
+    this._replying.appendChild(
+      text(
+        '↩️ replying to ' + replyTo(msg).slice(3).trim(),
+        {
+          color: colors.soft,
+          fontSize: 12,
+          flex: 1
+        },
+        1
+      )
+    )
+    this._replying.appendChild(link('cancel', () => this._reply(null)))
   }
 
   // What's in the brackets: `lora · 2 hops`, `lora · direct`, `irc`.
@@ -474,7 +530,7 @@ export default class Thread {
   }
 
   _renderCount(): void {
-    const used = bytes(this._input.value)
+    const used = bytes((this._replyTo === null ? '' : replyTo(this._replyTo)) + this._input.value)
     const limit = this._limit()
     this._count.text = used + '/' + limit
     this._count.style = { color: used > limit ? colors.failed : colors.muted, fontSize: 11 }
@@ -484,11 +540,14 @@ export default class Thread {
     const value = this._input.value.trim()
     const contact = this.ui.selected
     if (value === '' || contact === null) return
+    const prefix = this._replyTo === null ? '' : replyTo(this._replyTo)
     // Too long to go out in one piece: the counter is already red.
-    if (bytes(value) > this._limit()) return
+    if (bytes(prefix + value) > this._limit()) return
 
-    this.ui.messenger.send(contact, value)
+    if (this._replyTo === null) this.ui.messenger.send(contact, value)
+    else this.ui.messenger.reply(this._replyTo, value)
     this._input.value = ''
+    this._reply(null)
     this._renderCount()
   }
 }

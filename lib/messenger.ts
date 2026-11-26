@@ -204,13 +204,16 @@ export default class Messenger extends EventEmitter {
     this.emit('contacts')
   }
 
-  // Reactions travel as a short text message for now. Meshtastic has native
-  // reactions, which need bare-meshtastic support; IRC never will. The quote
-  // comes first and short, as mirco asked: it reads as what's being answered,
-  // and leaves the room for the answer.
+  // Replies and reactions travel as a short text message for now. Meshtastic
+  // has native ones, which need bare-meshtastic support; IRC never will. As
+  // mirco (motaba) suggested, they read the way motaba's own app writes them:
+  // ↩️, then the first two words of what's answered, then the answer.
+  reply(msg: Message, text: string): Message {
+    return this.send(this.contacts.get(msg.contact)!, replyTo(msg) + text)
+  }
+
   react(msg: Message, emoji: string): Message {
-    const snippet = msg.text.length > 20 ? msg.text.slice(0, 20).trimEnd() + '…' : msg.text
-    return this.send(this.contacts.get(msg.contact)!, '"' + snippet + '" ' + emoji)
+    return this.reply(msg, emoji)
   }
 
   toJSON(): SavedState {
@@ -551,6 +554,18 @@ function listen(emitter: EventEmitter, handlers: Record<string, (...args: any[])
   return () => {
     for (const [name, fn] of Object.entries(handlers)) emitter.off(name, fn)
   }
+}
+
+// What goes before a reply's text: `↩️ "take the…" `.
+export function replyTo(msg: Message): string {
+  return '↩️ "' + quote(msg.text) + '" '
+}
+
+// What a reply quotes: two words, marked as cut if there were more.
+function quote(text: string): string {
+  const words = text.trim().split(/\s+/)
+  const two = words.slice(0, 2).join(' ').slice(0, 20)
+  return words.length > 2 || two.length < words.slice(0, 2).join(' ').length ? two + '…' : two
 }
 
 // Same as bare-meshtastic: 32 bits, never zero. Used to match acks, not a

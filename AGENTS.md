@@ -44,7 +44,7 @@ Don't relitigate these without the user.
 2. **Never send both ways at once.** The bridge already mirrors one path onto the other, so both would arrive twice on stock clients.
 3. **No automatic fallback on failure.** A failed LoRa message shows "retry on lora" and "send via irc"; the user decides.
 4. **No dedupe.** The user has not seen duplicates in practice; Meshtastic devices dedupe by packet ID themselves. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are dropped, since the radio hears those itself. Everything else on IRC is kept: plain IRC users, MeshCore and Bitchat users, and IRC-only channels never reach the radio (an earlier, broader rule hid them all).
-5. **Reactions over IRC go as a new text message.** No other option exists on IRC.
+5. **Reactions and replies over IRC go as a new text message,** written as motaba's own app writes them: `↩️ "take the…" 👍`, the first two words of what's answered, then the answer (mirco's suggestion). No other option exists on IRC.
 6. **The T1000-E pairs with one device at a time,** so ekho replaces the Meshtastic app on the phone.
 7. **"Heard" means any packet** (message, position, telemetry), not node info, which radios broadcast only every 3 hours by default.
 8. **The motaba bridge doesn't know a nick and a node are the same person.** ekho no longer tags IRC messages with our node ID: it confused people and proved nothing, as anyone can type it. Real protection needs motaba to verify a nick-to-node link (code sent over LoRa, confirmed on IRC).
@@ -74,6 +74,7 @@ Don't relitigate these without the user.
 
 ## Conventions
 
+- **One open pull request at a time.** Add each change to it rather than opening another: every merge to `main` makes a release, and a release per commit is noise. If it's merged while work goes on, the next changes start the next one.
 - **Conventional Commits** for commit messages (`feat(irc): ...`, `fix(ci): ...`, `docs: ...`) and branch names (`feat/contacts-ui`, `fix/ble-reconnect`).
 - **Dependencies match npm.** Take versions from `npm view <name> version`, never from a clone or memory, and declare peer dependencies of what we use (bare-meshtastic needs `bare-logger`). The APK workflow prints each declared range next to the latest published version.
 - **Android back** comes from `bare-navigation-android` (Holepunch's): it needs minSdk 33 and `enableOnBackInvokedCallback` in the manifest, and it's Android only, so `app.ts` imports it only there and the macOS build defers it. `Ui.goBack()` decides; false lets Android leave the app.

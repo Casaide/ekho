@@ -128,6 +128,8 @@ export function back(onpress: () => void, glyph = '‹'): any {
 // mostly sideways, to go back.
 const SLOP = 12
 const SWIPE = 70
+// How long a finger rests on something to hold it rather than tap it.
+const HOLD = 450
 
 // What a swipe right does: set by the app shell, which knows where back is.
 let swipeBack: () => void = () => {}
@@ -142,7 +144,9 @@ export function setSwipeBack(fn: () => void): void {
 // The action runs after the event, not during it: it often rebuilds the
 // screen, and destroying the view being touched while it handles the touch
 // can crash the app.
-export function press(node: any, onpress: () => void): any {
+//
+// `onhold`, if given, runs when a finger rests on it, instead of the tap.
+export function press(node: any, onpress: () => void, onhold?: () => void): any {
   const dim = (opacity: number) => (node.style = { ...node.style, opacity })
   gesture(node, {
     down: () => dim(0.5),
@@ -150,7 +154,13 @@ export function press(node: any, onpress: () => void): any {
     tap: () => {
       dim(1)
       setTimeout(onpress, 0)
-    }
+    },
+    hold:
+      onhold &&
+      (() => {
+        dim(1)
+        setTimeout(onhold, 0)
+      })
   })
   return node
 }
@@ -164,28 +174,43 @@ export function swipeable(node: any): any {
 
 function gesture(
   node: any,
-  on: { down?: () => void; cancel?: () => void; tap?: () => void }
+  on: { down?: () => void; cancel?: () => void; tap?: () => void; hold?: () => void }
 ): void {
   let start: { x: number; y: number } | null = null
   let moved = false
+  let held: ReturnType<typeof setTimeout> | null = null
+  const unhold = () => {
+    if (held !== null) clearTimeout(held)
+    held = null
+  }
 
   node.on('pointerdown', (e: { x: number; y: number }) => {
     start = { x: e.x, y: e.y }
     moved = false
     on.down?.()
+    if (on.hold) {
+      held = setTimeout(() => {
+        held = null
+        start = null
+        on.hold!()
+      }, HOLD)
+    }
   })
   node.on('pointermove', (e: { x: number; y: number }) => {
     if (start === null) return
     if (Math.abs(e.x - start.x) > SLOP || Math.abs(e.y - start.y) > SLOP) {
       if (!moved) on.cancel?.()
       moved = true
+      unhold()
     }
   })
   node.on('pointercancel', () => {
     start = null
+    unhold()
     on.cancel?.()
   })
   node.on('pointerup', (e: { x: number; y: number }) => {
+    unhold()
     if (start === null) return
     const dx = e.x - start.x
     const dy = e.y - start.y
