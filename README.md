@@ -19,7 +19,7 @@
 <p align="center">
   <img src="docs/screenshots/phone-chats.png" width="250" alt="Your conversations">
   &nbsp;
-  <img src="docs/screenshots/phone-thread.png" width="250" alt="A conversation with Ivan">
+  <img src="docs/screenshots/phone-thread.png" width="250" alt="A conversation with Ivan: a link preview and a voice note">
 </p>
 
 ## What it does
@@ -31,6 +31,7 @@ ekho is a messenger for people with a Meshtastic radio, such as the Seeed T1000-
 - **Nobody else needs ekho.** The people you write to keep using the Meshtastic app, or any IRC app.
 - **Channels too.** `#bulgaria` and the regional channels (`#sofia`, `#varna`, `#burgas` and more) are a tap away. Channels your radio also has are marked as reaching the mesh; the rest are internet only.
 - **See who's around.** The contacts tab shows everyone heard on the radio and everyone online in your channels, one entry per person.
+- **Links come alive.** Pages show a preview with their picture, and a link to a sound or video plays right in the conversation: send a voice note as a link to the recording.
 - **You decide on failures.** If a radio message isn't delivered, ekho never resends it behind your back. Tap it to try the radio again or send it over the internet instead.
 
 <p align="center">
