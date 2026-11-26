@@ -38,6 +38,7 @@ threads = {
     ],
     georgi['id']: [
         msg(georgi['id'], 'saw your node on the map, nice coverage', 'irc', 'received', 300, address='georgi'),
+        msg(georgi['id'], 'the app: https://github.com/Casaide/ekho', 'irc', 'sent', 290, address='georgi'),
         msg(georgi['id'], 'thanks! it is a T1000-E in my jacket pocket', 'irc', 'sent', 298, address='georgi'),
     ],
     mesh['id']: [
