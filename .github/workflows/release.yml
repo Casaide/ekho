@@ -63,6 +63,9 @@ jobs:
           echo "version=$next" >> "$GITHUB_OUTPUT"
       - name: Android SDK platform and build tools
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+      # Our own addons (packages/), compiled here: they aren't on npm.
+      - name: Native addons
+        run: sh scripts/build-addons.sh
       - run: npm install
       # A fixed, public debug key, so each build installs over the last one.
       # Temporary: replace with a private release key (see README) before

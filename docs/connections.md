@@ -49,9 +49,13 @@ What's wanted is saved (`wanted.radio`, `wanted.irc` in `state.json`). Connectin
 - Bluetooth off, unsupported or not permitted is fatal, with a message saying what to do.
 - See AGENTS.md for what the bare-meshtastic BLE example leaves out (service by UUID, MTU 512, hang up on failure).
 
-## Not done: staying alive in the background
+## Staying alive in the background
 
-ekho stops while it's off screen: buffered IRC lines and the radio's queue are read when you come back, but a long absence still loses IRC messages. Staying alive needs an Android foreground service (a running notification), which bare-ndk doesn't offer: its `Activity` suspends Bare on every pause, and an app can't add a service of its own through bare-build. That's an upstream change to bare-ndk; until then, pausing cleanly and resuming quickly is the best ekho can do.
+Bare doesn't stop when suspended: `suspend` is an event, and the loop carries on while it has work, such as an open socket or a Bluetooth connection. It blocks only once it's idle. What stops ekho on Android is the system freezing or killing a backgrounded app. A foreground service prevents that, so `packages/bare-foreground-service-android` runs one while the radio or IRC is wanted. Its ongoing notification reads "ekho is listening for messages" and shows each link's state. Android lets only an app on screen start or change the service, so the notification catches up when ekho comes back. Swiping ekho away from recents stops the service, and ekho with it.
+
+Messages to you, and channel lines that name you, then show as notifications (`lib/notifier.ts`, through `packages/bare-notifications-android`). Tapping one opens its conversation. Reading a conversation removes its notification.
+
+Both are native addons in C++ with a little Java, built like bare-navigation-android. They live in this repo until they have their own; `scripts/build-addons.sh` compiles them in CI before `npm install` copies them in (`install-links` in `.npmrc`). Neither has run on a phone yet.
 
 ## Testing
 

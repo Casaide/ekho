@@ -10,6 +10,7 @@ import connectRadio from './lib/radio.ts'
 import type { RadioConnection } from './lib/radio.ts'
 import Link, { FatalError } from './lib/link.ts'
 import Presence from './lib/presence.ts'
+import Notifier from './lib/notifier.ts'
 import type { RadioState } from './lib/types.ts'
 import showCrash from './lib/crash.ts'
 import Log from './lib/log.ts'
@@ -82,6 +83,12 @@ const messenger = new Messenger({
 })
 // Who's around on the radio and IRC, for the contacts screen.
 const presence = new Presence(messenger.heard)
+// Our radio's names, to notice channel lines meant for us.
+let radioNames: string[] = []
+// Asked once for permission to notify; Android won't show the dialog often.
+let askedNotifications: boolean = saved?.askedNotifications ?? false
+// Ask for it: set where notifications exist, on Android.
+let askToNotify = () => {}
 
 // Save a second after the last change, not on every message.
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -92,7 +99,15 @@ function save() {
     try {
       // The open conversation too, to reopen on start.
       const open = ui.selected?.id ?? null
-      store.save({ messenger, irc: settings, wanted, onboarded, channels, open })
+      store.save({
+        messenger,
+        irc: settings,
+        wanted,
+        onboarded,
+        channels,
+        open,
+        askedNotifications
+      })
     } catch (err) {
       console.error('save:', (err as Error).message)
     }
@@ -220,6 +235,7 @@ function openRadio(detail: (text: string) => void): Promise<RadioConnection> {
     client.on('node', (node: { num: number; user: any }) => presence.node(nodeOf(node)))
 
     const self = state.nodes.get(state.nodeNum)?.user ?? null
+    radioNames = [self?.longName, self?.shortName].filter((n): n is string => !!n)
     ui.setRadioInfo({
       longName: self?.longName ?? null,
       shortName: self?.shortName ?? null,
@@ -267,9 +283,13 @@ function want(link: 'radio' | 'irc', on: boolean) {
 // it back from. On return a PING checks the server is still there; if it gave
 // up on us meanwhile, IRC reconnects at once, reclaiming the nick. The radio's
 // Bluetooth link outlives a pause too, and the radio queues what arrives.
-Bare.on('suspend', () => log.info('app: paused'))
+Bare.on('suspend', () => {
+  log.info('app: paused')
+  ui.setVisible(false)
+})
 Bare.on('resume', () => {
   log.info('app: back')
+  ui.setVisible(true)
   if (irc === null) return
   irc
     .probe()
@@ -311,6 +331,7 @@ const ui = new Ui(
     finishOnboarding() {
       onboarded = true
       save()
+      askToNotify()
     },
 
     connectIrc({ nick, password, register }) {
@@ -369,4 +390,72 @@ if (Bare.platform === 'android') {
   back.on('back', () => {
     if (!ui.goBack()) back.close()
   })
+}
+
+// While ekho is off screen on Android: a foreground service keeps it running,
+// so the radio and IRC stay connected and messages still arrive, and a
+// notification says when one is for you. Both are our own addons
+// (packages/), built for Android only; the macOS build defers them.
+if (Bare.platform === 'android') {
+  const { default: notifications } = await import('bare-notifications-android')
+  const service = await import('bare-foreground-service-android')
+
+  const notifier = new Notifier(messenger, notifications, {
+    names: () => [settings.nick, ...radioNames]
+  })
+  notifications.on('open', (id: number) => {
+    const contact = notifier.contact(id)
+    if (contact !== null) ui.select(contact)
+  })
+
+  askToNotify = () => {
+    if (askedNotifications || notifications.granted) return
+    askedNotifications = true
+    save()
+    notifications
+      .request()
+      .then((granted: boolean) => log.info('app: notifications ' + (granted ? 'on' : 'off')))
+  }
+  if (onboarded) askToNotify()
+
+  // What the service's notification says, or null to stop it: running only
+  // while a link is wanted.
+  const running = () => {
+    if (!wanted.radio && !wanted.irc) return null
+    const parts = []
+    const state = (link: Link) => (link.state === 'on' ? 'connected' : link.state)
+    if (wanted.radio) parts.push('radio ' + state(radioLink))
+    if (wanted.irc) parts.push('irc ' + state(ircLink))
+    return parts.join(' · ')
+  }
+  let shown: string | null = null
+  let onScreen = true
+  // Android lets only an app on screen start or change the service, so it
+  // catches up on coming back.
+  const keepRunning = () => {
+    if (!onScreen) return
+    const text = running()
+    if (text === shown) return
+    try {
+      if (text === null) service.stop()
+      else service.start({ title: 'ekho is listening for messages', body: text })
+      shown = text
+    } catch (err) {
+      log.warn('app: background service: ' + (err as Error).message)
+    }
+  }
+  radioLink.on('change', keepRunning)
+  ircLink.on('change', keepRunning)
+  keepRunning()
+
+  Bare.on('suspend', () => {
+    onScreen = false
+    notifier.foreground = false
+  })
+  Bare.on('resume', () => {
+    onScreen = true
+    notifier.foreground = true
+    keepRunning()
+  })
+  Bare.on('exit', () => service.stop())
 }

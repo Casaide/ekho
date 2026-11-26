@@ -88,6 +88,8 @@ export default class Ui extends EventEmitter {
   presence: Presence
   radioInfo: RadioInfo
   compact: boolean
+  // On screen: off while Android has the app paused.
+  visible: boolean
   wide: boolean
   page: Page
   tab: Page
@@ -145,6 +147,7 @@ export default class Ui extends EventEmitter {
     this.presence = opts.presence ?? new Presence(messenger.heard)
     this.radioInfo = { longName: null, shortName: null, region: null, preset: null, channels: [] }
     this.compact = opts.compact ?? false
+    this.visible = true
     this.wide = false
     this.page = opts.onboarded === false ? 'onboarding' : 'chats'
     this.tab = 'chats'
@@ -224,9 +227,7 @@ export default class Ui extends EventEmitter {
     messenger.on('contacts', () => this.schedule())
     messenger.on('message', (_msg: Message, contact: Contact) => {
       // A message arriving in the open conversation is read already.
-      if (this.page === 'thread' && this.selected !== null && contact.id === this.selected.id) {
-        this.messenger.markRead(contact)
-      }
+      if (this._reading(contact)) this.messenger.markRead(contact)
       this.schedule()
     })
     messenger.on('update', () => this.schedule())
@@ -311,6 +312,23 @@ export default class Ui extends EventEmitter {
   setCompact(compact: boolean): void {
     this.compact = compact
     this.render()
+  }
+
+  // Back on screen, the open conversation's new messages are read.
+  setVisible(visible: boolean): void {
+    this.visible = visible
+    if (this.selected !== null && this._reading(this.selected)) {
+      this.messenger.markRead(this.selected)
+    }
+  }
+
+  _reading(contact: Contact): boolean {
+    return (
+      this.visible &&
+      this.page === 'thread' &&
+      this.selected !== null &&
+      contact.id === this.selected.id
+    )
   }
 
   setWidth(width: number): void {

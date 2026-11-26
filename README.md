@@ -108,7 +108,7 @@ No. With a radio and other radios nearby, everything works without it. The inter
 Not to try it. Without one, ekho sends everything over the internet, and still reaches the mesh through the bridge.
 
 **Will I get messages while ekho is closed?**
-Not yet. On Android, keep ekho open (or recently opened) to receive. Your radio holds messages that arrive while ekho is in the background and hands them over when you come back. Running fully in the background is next on the list.
+Yes, while it's running in the background: you'll see an ongoing "ekho is listening for messages" notification. Messages to you, and channel messages that mention you, show as notifications; tap one to open the conversation. Swiping ekho away from your recent apps closes it, and then nothing arrives until you open it again (your radio still holds radio messages for you).
 
 **Will I see messages sent while I was offline?**
 Radio messages, yes, from your radio's queue. IRC has no history, so internet messages sent while you were offline are missed.

@@ -52,21 +52,23 @@ Don't relitigate these without the user.
 
 ## Layout
 
-| Path                             | What it is                                                                                                                                          |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib/messenger.ts`               | The core: threads, routing, sending, ack matching, retry and send via IRC. Radio and IRC are attached with `setRadio` and `setIrc` as they connect. |
-| `lib/irc.ts`                     | Minimal IRC client over any duplex stream: SASL or NickServ login, reclaiming a ghosted nick, PING and a silence check, LIST, join, part, privmsg.  |
-| `lib/link.ts`                    | One connection kept up while wanted: a single state (off, connecting, on, waiting, failed), retries, pause and resume. See `docs/connections.md`.   |
-| `lib/heard.ts`                   | Last-heard time per node, and the window.                                                                                                           |
-| `lib/contacts.ts`                | People linking a node ID and an IRC nick; a channel contact for the mesh channel.                                                                   |
-| `lib/types.ts`                   | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses.                                                            |
-| `lib/radio.ts`                   | Bluetooth connect: bare-bluetooth plus bare-meshtastic `Mailbox` and `Client`. Device code, untested here.                                          |
-| `lib/ui/`, `lib/theme.ts`        | bare-native UI after the mockups (`docs/mockups/`): `index.ts` (navigation, tabs or panes), `kit.ts` (shared pieces), one module per screen.        |
-| `lib/presence.ts`                | Who's around: radio nodes heard and IRC nicks in our channels, one entry per person (bridged `name\|mt` nicks matched to radio nodes).              |
-| `app.ts`                         | Entry: wires Messenger, UI, radio and TLS IRC.                                                                                                      |
-| `test/*.ts`, `test.ts`           | bare-tap tests with fake radio and fake IRC stream.                                                                                                 |
-| `docs/design.md`, `docs/plan.md` | The design and the phased plan. Update them when a decision changes.                                                                                |
-| `.claude/skills/`                | `ekho` (the working loop) and `js-house-style` (the Holepunch style guide).                                                                         |
+| Path                             | What it is                                                                                                                                               |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/messenger.ts`               | The core: threads, routing, sending, ack matching, retry and send via IRC. Radio and IRC are attached with `setRadio` and `setIrc` as they connect.      |
+| `lib/irc.ts`                     | Minimal IRC client over any duplex stream: SASL or NickServ login, reclaiming a ghosted nick, PING and a silence check, LIST, join, part, privmsg.       |
+| `lib/link.ts`                    | One connection kept up while wanted: a single state (off, connecting, on, waiting, failed), retries, pause and resume. See `docs/connections.md`.        |
+| `lib/heard.ts`                   | Last-heard time per node, and the window.                                                                                                                |
+| `lib/contacts.ts`                | People linking a node ID and an IRC nick; a channel contact for the mesh channel.                                                                        |
+| `lib/types.ts`                   | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses.                                                                 |
+| `lib/radio.ts`                   | Bluetooth connect: bare-bluetooth plus bare-meshtastic `Mailbox` and `Client`. Device code, untested here.                                               |
+| `lib/ui/`, `lib/theme.ts`        | bare-native UI after the mockups (`docs/mockups/`): `index.ts` (navigation, tabs or panes), `kit.ts` (shared pieces), one module per screen.             |
+| `lib/notifier.ts`                | What to notify while off screen: messages to you, and channel lines naming you.                                                                          |
+| `lib/presence.ts`                | Who's around: radio nodes heard and IRC nicks in our channels, one entry per person (bridged `name\|mt` nicks matched to radio nodes).                   |
+| `packages/`                      | Our own native addons (C++ and Java, built like bare-navigation-android): notifications and a foreground service. Compiled by `scripts/build-addons.sh`. |
+| `app.ts`                         | Entry: wires Messenger, UI, radio and TLS IRC.                                                                                                           |
+| `test/*.ts`, `test.ts`           | bare-tap tests with fake radio and fake IRC stream.                                                                                                      |
+| `docs/design.md`, `docs/plan.md` | The design and the phased plan. Update them when a decision changes.                                                                                     |
+| `.claude/skills/`                | `ekho` (the working loop) and `js-house-style` (the Holepunch style guide).                                                                              |
 
 ## Conventions
 
@@ -116,7 +118,7 @@ Roughly in order:
    - whether a received packet was encrypted per contact (so a shared mailbox address can't be spoofed);
    - the channel a packet arrived on (MeshPacket field 3): without it, every LoRa channel message lands in the mesh channel;
    - `last_heard` and `device_metrics` in the node list (NodeInfo fields 5 and 6): battery, channel use, and who was heard before ekho connected.
-6. **Running in the background** (upstream, in bare-ndk): its Activity suspends Bare on every pause, so nothing arrives while ekho is off screen (the T1000-E queues LoRa packets until it's back; IRC is closed). Needs a foreground service that keeps Bare running.
+6. **Running in the background:** done, not yet tried on a phone. `packages/bare-foreground-service-android` keeps the process alive (Bare keeps running while suspended as long as sockets are open), and `packages/bare-notifications-android` shows messages; see `docs/connections.md`. Move both to their own repos once they work.
 7. **Reactions:** over LoRa once bare-meshtastic supports them; over IRC as a short text message.
 
 ## Phase 2: big files over P2P (decided, not started)

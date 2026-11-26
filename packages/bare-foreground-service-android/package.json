@@ -1,0 +1,36 @@
+{
+  "name": "bare-foreground-service-android",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Keep a Bare app running in the background on Android, with a foreground service",
+  "exports": {
+    "./package": "./package.json",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "binding.cc",
+    "binding.js",
+    "CMakeLists.txt",
+    "android/",
+    "prebuilds"
+  ],
+  "addon": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Casaide/ekho.git",
+    "directory": "packages/bare-foreground-service-android"
+  },
+  "author": "Dominic Cassidy",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "cmake-android": "^0.1.4",
+    "cmake-bare": "^1.8.0",
+    "cmake-fetch": "^1.5.1",
+    "cmake-java": "^0.1.2"
+  }
+}

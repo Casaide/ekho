@@ -1,0 +1,39 @@
+{
+  "name": "bare-notifications-android",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Android notifications for the Bare runtime",
+  "exports": {
+    "./package": "./package.json",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "binding.cc",
+    "binding.js",
+    "CMakeLists.txt",
+    "android/",
+    "prebuilds"
+  ],
+  "addon": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Casaide/ekho.git",
+    "directory": "packages/bare-notifications-android"
+  },
+  "author": "Dominic Cassidy",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "bare-events": "^2.5.4"
+  },
+  "devDependencies": {
+    "cmake-android": "^0.1.4",
+    "cmake-bare": "^1.8.0",
+    "cmake-fetch": "^1.5.1",
+    "cmake-java": "^0.1.2"
+  }
+}
