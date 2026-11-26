@@ -222,8 +222,10 @@ export default class Messenger extends EventEmitter {
   // mirco suggested, they read the way motaba's own app writes them:
   // ↩️, then who said it and the first two words, then the answer:
   // `↩️ "mirco: and the…": 👍`.
-  reply(msg: Message, text: string): Message {
-    return this.send(this.contacts.get(msg.contact)!, this.replyTo(msg) + text)
+  reply(msg: Message, text: string, opts: { wrote?: string } = {}): Message {
+    const prefix = this.replyTo(msg)
+    const wrote = opts.wrote === undefined ? {} : { wrote: prefix + opts.wrote }
+    return this.send(this.contacts.get(msg.contact)!, prefix + text, wrote)
   }
 
   // What goes before a reply's text. The name is the one others see: the
@@ -290,6 +292,19 @@ export default class Messenger extends EventEmitter {
     this.emit('read', contact)
   }
 
+  // The way to a contact: the routing rule, except that LoRa needs a way in.
+  // A channel with no radio channel paired exists on IRC only, and a person
+  // whose node the radio doesn't know goes by IRC if they have a nick.
+  routeFor(contact: Contact): Via {
+    if (contact.channel) return this.radioChannel(contact) === null ? 'irc' : this.route()
+    const route = this.route()
+    if (route === 'lora' && this.relay === null && contact.nicks.length > 0) {
+      const node = this._bestNode(contact)
+      if (node === null || !this._knows(node)) return 'irc'
+    }
+    return route
+  }
+
   // The whole routing rule: any node heard recently, LoRa; otherwise IRC.
   route(): Via {
     if (this.remote !== null) return this.remote.route
@@ -310,20 +325,20 @@ export default class Messenger extends EventEmitter {
     return this._threads.get(contact.id) ?? []
   }
 
-  send(contact: Contact, text: string, opts: { via?: Via } = {}): Message {
+  // `wrote`: what you typed, when `text` is its translation.
+  send(contact: Contact, text: string, opts: { via?: Via; wrote?: string } = {}): Message {
     const msg: Message = {
       id: randomId(),
       contact: contact.id,
       from: null,
       text,
-      // A channel with no radio channel paired exists on IRC only.
-      via:
-        opts.via ?? (contact.channel && this.radioChannel(contact) === null ? 'irc' : this.route()),
+      via: opts.via ?? this.routeFor(contact),
       state: 'sending',
       reason: null,
       address: null,
       time: this.now()
     }
+    if (opts.wrote !== undefined) msg.wrote = opts.wrote
 
     this._push(contact, msg)
 

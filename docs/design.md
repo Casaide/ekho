@@ -53,6 +53,7 @@ LoRa first, every time it can reach; IRC only when it can't. The path is shown o
 
 1. Any node heard in the last few minutes: send over LoRa.
 2. No nodes heard: send over IRC, which the bridge carries into the mesh.
+3. For one person, LoRa only if the radio knows their node (heard this session, or in its node list); otherwise IRC if they have a nick. The radio can't reach a node it has never heard of, so trying would only fail after its retries. With no nick either, the message fails at once.
 
 That's the whole rule. A failed LoRa message is never moved to IRC automatically; it offers **retry on LoRa** and **send via IRC**, and you decide. Never send both ways at once: the bridge mirrors one path onto the other, so both would arrive twice on stock clients.
 
@@ -127,7 +128,7 @@ Bulgarian messages can show in English, on the device. It's off until turned on 
 
 A received message with some Bulgarian in it (a Cyrillic word of two letters or more, or two of any length) is translated by itself (`lib/translator.ts`), once per session, and shows in English in place of the Bulgarian, marked "translated". People mix English and Bulgarian, in either alphabet, so any received message can be translated from its details, on hold, where the original is too, and a translated one can be shown as written again. Bulgarian typed in Latin letters ("kvo gotvite") is spelled in Cyrillic first, since the model reads Cyrillic: the official transliteration backwards plus chat habits (4 for ч, 6 for ш, w for в, q for я). It's rough, so only messages you ask for go through it.
 
-What you write can go out in Bulgarian: the `→ bg` switch above the box (Mozilla's English→Bulgarian model, a second download when first switched on) shows the Bulgarian above the box as you type, turns the send button amber as "bg ➤", and sends the Bulgarian once it's shown. The byte counter counts the Bulgarian, which takes two bytes a letter.
+Sent this way, your message shows what you typed, marked "sent in bg", with the Bulgarian that went out in its details (`Message.wrote` keeps what was typed). What you write can go out in Bulgarian: the `→ bg` switch above the box (Mozilla's English→Bulgarian model, a second download when first switched on) shows the Bulgarian above the box as you type, turns the send button amber as "bg ➤", and sends the Bulgarian once it's shown. The byte counter counts the Bulgarian, which takes two bytes a letter.
 
 ## Mentions
 

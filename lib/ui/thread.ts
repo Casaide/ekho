@@ -104,6 +104,9 @@ export default class Thread {
   // app opening on the conversation, previews and translations coming in.
   // Lost when they scroll up, back when they scroll down to it.
   _stick: boolean
+  // Each message's view, by what it shows: reused when the list is rebuilt,
+  // so sending one builds one, not the whole conversation.
+  _built: Map<string, any>
   _contentHeight: number
   _viewHeight: number
   // Until when scroll events are ours, from placing it, not the reader's.
@@ -152,6 +155,7 @@ export default class Thread {
     this._end = ''
     this._settling = 0
     this._stick = true
+    this._built = new Map()
     this._contentHeight = 0
     this._viewHeight = 0
     this._quiet = 0
@@ -321,10 +325,23 @@ export default class Thread {
 
     // Where the reader was, to stay there after the rebuild.
     const was = this._list.contentOffset.y
-    clear(this._list.content)
+    // The latest SHOWN: older ones are in the history, but a phone builds
+    // hundreds of messages slowly.
+    const recent = thread.slice(-SHOWN)
+    const built = new Map<string, any>()
+    for (const msg of recent) {
+      const key = this._key(contact, msg)
+      built.set(key, this._built.get(key) ?? this._message(contact, msg))
+    }
+    const kept = new Set(built.values())
+    for (const child of [...this._list.content.children]) {
+      if (kept.has(child)) detach(child)
+      else child.destroy()
+    }
+    this._built = built
     let day = -1
     let side: boolean | null = null
-    for (const msg of thread) {
+    for (const msg of recent) {
       if (dayIndex(msg.time) !== day) {
         day = dayIndex(msg.time)
         this._list.content.appendChild(
@@ -339,7 +356,7 @@ export default class Thread {
       const mine = msg.state !== 'received'
       if (side !== null && side !== mine) this._list.content.appendChild(view({ height: 10 }))
       side = mine
-      this._list.content.appendChild(this._message(contact, msg))
+      this._list.content.appendChild(built.get(this._key(contact, msg)))
     }
     // Room under the last message: scrolled to the end, Android stops at the
     // last child, leaving the content's bottom padding out of view.
@@ -423,9 +440,9 @@ export default class Thread {
     const now = this.ui.messenger.now()
     this._detail.appendChild(row('when', dayLabel(msg.time, now) + ' ' + clock(msg.time)))
     this._detail.appendChild(row('from', mine ? 'you' : (msg.from ?? displayName(contact))))
-    const english = mine ? null : (this.ui.translator?.translation(msg.text) ?? null)
+    const english = mine ? (msg.wrote ?? null) : (this.ui.translator?.translation(msg.text) ?? null)
     if (english !== null && english !== msg.text) {
-      this._detail.appendChild(row('original', msg.text))
+      this._detail.appendChild(row(mine ? 'sent' : 'original', msg.text))
     }
     this._detail.appendChild(
       row(
@@ -563,9 +580,13 @@ export default class Thread {
     })
     // Theirs in Bulgarian shows in English once translated; the original is
     // in its details, on hold.
-    const english = mine ? null : (this.ui.translator?.translation(msg.text) ?? null)
+    // Ours sent in Bulgarian shows what we typed, marked so; what went out is
+    // in its details, on hold, like the original of theirs.
+    const english = mine ? (msg.wrote ?? null) : (this.ui.translator?.translation(msg.text) ?? null)
     const translated = english !== null && english !== msg.text && !this._original.has(msg.id)
-    if (translated) head.push(text('translated', { color: colors.muted, fontSize: 11 }))
+    if (translated) {
+      head.push(text(mine ? 'sent in bg' : 'translated', { color: colors.muted, fontSize: 11 }))
+    }
     const body = this._body(translated ? english : msg.text)
     // A message with a link is as wide as a message gets, rather than as
     // wide as its widest line: Android rounds a box fitted to a line down to
@@ -845,6 +866,27 @@ export default class Thread {
     if (recent.some((m) => links(m.text).includes(url))) this._settling = Date.now() + 400
   }
 
+  // Everything a message's view shows, so an unchanged one is reused.
+  _key(contact: Contact, msg: Message): string {
+    const cards = links(msg.text)
+      .slice(0, 2)
+      .map((url) => (this.ui.previews?.get(url) ? 'p' : '-') + (this._playing.has(url) ? 'v' : ''))
+    const english = msg.state === 'received' ? this.ui.translator?.translation(msg.text) : null
+    return [
+      contact.id,
+      msg.id,
+      msg.state,
+      msg.reason,
+      msg.also,
+      msg.wrote,
+      this._open !== null && this._open.id === msg.id ? 'open' : '',
+      this._original.has(msg.id) ? 'original' : '',
+      english ?? '',
+      cards.join(','),
+      Math.round(this._width)
+    ].join('\u0000')
+  }
+
   // Hold a message for what to do with it: reply, react, copy, retry.
   _hold(msg: Message): void {
     this._open = msg
@@ -901,6 +943,8 @@ export default class Thread {
     let why: string
     if (contact.channel && messenger.radioChannel(contact) === null) {
       why = 'irc only'
+    } else if (via === 'irc' && messenger.route() === 'lora') {
+      why = 'their node is unknown to the radio'
     } else if (via === 'irc') {
       why = messenger.radio === null ? 'radio not connected' : 'no nodes heard'
     } else {
@@ -915,9 +959,7 @@ export default class Thread {
   }
 
   _via(contact: Contact): 'lora' | 'irc' {
-    const { messenger } = this.ui
-    if (contact.channel && messenger.radioChannel(contact) === null) return 'irc'
-    return messenger.route()
+    return this.ui.messenger.routeFor(contact)
   }
 
   // Room left: LoRa packets and motaba's bridge both have a byte limit.
@@ -1042,10 +1084,12 @@ export default class Thread {
     // Too long to go out in one piece: the counter is already red.
     if (bytes(prefix + value) > this._limit()) return
 
+    const typed = this._input.value.trim()
+    const wrote = value === typed ? {} : { wrote: typed }
     const sent =
       this._replyTo === null
-        ? this.ui.messenger.send(contact, value)
-        : this.ui.messenger.reply(this._replyTo, value)
+        ? this.ui.messenger.send(contact, value, wrote)
+        : this.ui.messenger.reply(this._replyTo, value, wrote)
     this._input.value = ''
     this._reply(null)
     // Their node unknown to the radio: it fails at once, and its choices
@@ -1058,6 +1102,9 @@ export default class Thread {
 
 // The message input: its font size, the height of one of its lines, its
 // padding, and the most lines it grows to before scrolling.
+// The most messages a conversation shows.
+const SHOWN = 200
+
 const INPUT_SIZE = 14
 const INPUT_LINE = 19
 const INPUT_PAD = 7
