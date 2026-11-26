@@ -4,6 +4,8 @@ import type { Contact, Message } from '../types.ts'
 import { displayName } from '../contacts.ts'
 import { parts, links, host, media } from '../links.ts'
 import type { Media } from '../links.ts'
+import { mentions } from '../mentions.ts'
+import type { Mention } from '../mentions.ts'
 import {
   colors,
   view,
@@ -508,19 +510,38 @@ export default class Thread {
   }
 
   // A message's text, its links marked.
+  // A message's text, its links and mentions marked.
   _body(value: string): any {
     const style = { color: colors.text, fontSize: 14, lineHeight: 20, flexShrink: 1 }
     const split = parts(value)
-    if (split.length === 1 && split[0].url === null) return text(value, style)
+    const named = split.flatMap((part) => (part.url === null ? mentions(part.text) : []))
+    const plain = (m: Mention) => m.name === null && m.node === null
+    if (split.every((part) => part.url === null) && named.every(plain)) return text(value, style)
     const body = text('', style)
     for (const part of split) {
-      const fragment = new TextFragment(part.url === null ? part.text : breakable(part.text))
       if (part.url !== null) {
+        const fragment = new TextFragment(breakable(part.text))
         fragment.style = { color: colors.accent, textDecorationLine: 'underline' }
+        body.appendChild(fragment)
+        continue
       }
-      body.appendChild(fragment)
+      for (const m of mentions(part.text)) body.appendChild(this._mention(m))
     }
     return body
+  }
+
+  // `@Root 👾`, or a node's name for its ID; in another colour if it's us.
+  _mention(m: Mention): any {
+    if (m.name === null && m.node === null) return new TextFragment(m.text)
+    const { presence } = this.ui
+    const name = m.node === null ? m.name! : (presence.nodeName(m.node) ?? m.node)
+    const ours = [presence.self.nick, this.ui.radioInfo.longName, this.ui.radioInfo.shortName]
+    const us =
+      (m.node !== null && m.node === presence.self.node) ||
+      ours.some((n) => n !== null && n.toLowerCase() === name.toLowerCase())
+    const fragment = new TextFragment('@' + name)
+    fragment.style = { color: us ? colors.irc : colors.lora, fontWeight: 'bold' }
+    return fragment
   }
 
   // A link to open: its preview once fetched, else just where it goes. A
