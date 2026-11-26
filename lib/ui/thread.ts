@@ -366,8 +366,9 @@ export default class Thread {
     this._detail.appendChild(row('when', dayLabel(msg.time, now) + ' ' + clock(msg.time)))
     this._detail.appendChild(row('from', mine ? 'you' : (msg.from ?? displayName(contact))))
     const english = mine ? null : (this.ui.translator?.english(msg.text) ?? null)
-    if (english !== null && english !== msg.text)
+    if (english !== null && english !== msg.text) {
       this._detail.appendChild(row('original', msg.text))
+    }
     this._detail.appendChild(
       row(
         'path',
