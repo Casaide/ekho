@@ -339,7 +339,10 @@ const ui = new Ui(
   }
 )
 
-const window = new Window(1100, 720)
+// `--size=390x844` opens the window at that size, for screenshots at phone
+// size on a desktop.
+const sized = Bare.argv.map((a) => /^--size=(\d+)x(\d+)$/.exec(a)).find((m) => m !== null)
+const window = sized ? new Window(Number(sized[1]), Number(sized[2])) : new Window(1100, 720)
 
 window.content(ui.root)
 window.show()
