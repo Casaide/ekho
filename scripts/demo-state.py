@@ -8,20 +8,26 @@ now = int(time.time() * 1000)
 minute = 60_000
 seq = [100]
 
-def msg(contact, text, via, state, ago, sender=None, hops=None, reason=None, address=None):
+def msg(contact, text, via, state, ago, sender=None, hops=None, reason=None, address=None, wrote=None):
     seq[0] += 1
-    return {
+    m = {
         'id': seq[0], 'contact': contact, 'from': sender, 'text': text, 'via': via,
         'state': state, 'reason': reason, 'hops': hops,
         'address': address if address is not None else contact,
         'time': now - ago * minute
     }
+    if wrote is not None:
+        m['wrote'] = wrote
+    return m
 
 ivan = {'id': '!a7c3e91f', 'name': 'Ivan Petrov', 'alias': 'Ivan', 'nodes': ['!a7c3e91f'], 'nicks': ['Ivan_Petrov|mt'], 'channel': False}
 maria = {'id': '!5b0d2c44', 'name': 'Maria', 'alias': None, 'nodes': ['!5b0d2c44'], 'nicks': [], 'channel': False}
 georgi = {'id': 'irc:georgi', 'name': 'georgi', 'alias': None, 'nodes': [], 'nicks': ['georgi'], 'channel': False}
 mesh = {'id': '#bulgaria', 'name': '#bulgaria', 'alias': None, 'nodes': [], 'nicks': ['#bulgaria'], 'channel': True}
 sofia = {'id': '#sofia', 'name': '#sofia', 'alias': None, 'nodes': [], 'nicks': ['#sofia'], 'channel': True}
+# In Bulgarian, for the translation screenshot: shown in English with
+# --translations=scripts/demo-translations.json.
+rila = {'id': '#blagoevgrad', 'name': '#blagoevgrad', 'alias': None, 'nodes': [], 'nicks': ['#blagoevgrad'], 'channel': True}
 
 threads = {
     ivan['id']: [
@@ -49,20 +55,27 @@ threads = {
     sofia['id']: [
         msg(sofia['id'], 'meetup moved to the hut, 10:00', 'irc', 'received', 60, sender='ana', address='#sofia'),
     ],
+    rila['id']: [
+        msg(rila['id'], 'Някой чува ли ретранслатора на Рила?', 'irc', 'received', 70, sender='Petar|mt', address='#blagoevgrad'),
+        msg(rila['id'], 'Да, сигналът е силен от центъра', 'irc', 'received', 66, sender='nikola', address='#blagoevgrad'),
+        msg(rila['id'], 'В Банско колко е hop to gw?', 'irc', 'received', 50, sender='Petar|mt', address='#blagoevgrad'),
+        msg(rila['id'], 'Ще донеса резервната антена в събота', 'irc', 'sent', 20, address='#blagoevgrad', wrote="I'll bring the spare antenna on Saturday"),
+        msg(rila['id'], 'Супер, благодаря! Ще се видим там', 'irc', 'received', 18, sender='nikola', address='#blagoevgrad'),
+    ],
 }
 
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
 state = {
     'messenger': {
-        'contacts': [mesh, sofia, ivan, maria, georgi],
+        'contacts': [mesh, sofia, rila, ivan, maria, georgi],
         'threads': threads,
         # Ivan's last message and Maria's are unread.
-        'read': {georgi['id']: threads[georgi['id']][-1]['id'], mesh['id']: threads[mesh['id']][0]['id'], sofia['id']: threads[sofia['id']][-1]['id']},
+        'read': {georgi['id']: threads[georgi['id']][-1]['id'], mesh['id']: threads[mesh['id']][0]['id'], sofia['id']: threads[sofia['id']][-1]['id'], rila['id']: threads[rila['id']][-1]['id']},
     },
     'irc': {'nick': 'dom', 'password': ''},
     'wanted': {'radio': False, 'irc': False},
     'onboarded': '--first-run' not in sys.argv,
-    'channels': ['#sofia'],
+    'channels': ['#sofia', '#blagoevgrad'],
     'open': args[0] if args else None,
 }
 json.dump(state, sys.stdout, ensure_ascii=False, indent=1)

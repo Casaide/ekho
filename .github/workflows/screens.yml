@@ -34,7 +34,7 @@ jobs:
           shot() {
             name=$1; size=$2; shift 2
             python3 scripts/demo-state.py "$@" > ~/.ekho/state.json
-            "$app/Contents/MacOS/ekho" --size=$size > "shots/$name.log" 2>&1 &
+            "$app/Contents/MacOS/ekho" --size=$size $APP_ARGS > "shots/$name.log" 2>&1 &
             pid=$!
             sleep 10
             screencapture -x "shots/$name.png"
@@ -45,6 +45,8 @@ jobs:
           shot phone-chats 390x844
           shot phone-thread 390x844 '!a7c3e91f'
           shot phone-onboarding 390x844 --first-run
+          # Translation, from a file of translations: the model runs on Android only.
+          APP_ARGS="--translations=$PWD/scripts/demo-translations.json" shot phone-translate 390x844 '#blagoevgrad'
           shot desktop 1240x780 '!a7c3e91f'
           ls -la shots
           # Link preview images, as fetched: what the cards should show.
