@@ -5,10 +5,12 @@ import path from 'bare-path'
 import Messenger from './lib/messenger.ts'
 import Irc from './lib/irc.ts'
 import Store from './lib/store.ts'
-import Ui from './lib/ui.ts'
+import Ui from './lib/ui/index.ts'
 import connectRadio from './lib/radio.ts'
 import type { RadioConnection } from './lib/radio.ts'
 import Link, { FatalError } from './lib/link.ts'
+import Presence from './lib/presence.ts'
+import type { RadioState } from './lib/types.ts'
 import showCrash from './lib/crash.ts'
 import Log from './lib/log.ts'
 
@@ -41,11 +43,8 @@ Bare.on('unhandledRejection', crash)
 const IRC_HOST = 'irc.motaba.net'
 const IRC_PORT = 6697
 // The country-wide channel motaba bridges to the mesh, and joins everyone to.
-// Regional ones (#sofia, #varna, …) can come later as a setting.
+// Regional ones are listed on the IRC setup screen to join.
 const IRC_CHANNEL = '#bulgaria'
-
-// Below this width, show the chats or the conversation, one at a time.
-const COMPACT = 700
 
 // Where state is kept: the app's private storage on Android, ~/.ekho elsewhere.
 const DATA =
@@ -81,6 +80,8 @@ const messenger = new Messenger({
   ircChannels: channels,
   state: saved?.messenger ?? null
 })
+// Who's around on the radio and IRC, for the contacts screen.
+const presence = new Presence(messenger.heard)
 
 // Save a second after the last change, not on every message.
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -135,6 +136,15 @@ function openIrc(detail: (text: string) => void): Promise<Irc> {
   current.on('notice', (n: { from: string; text: string }) => {
     if (n.from === 'NickServ') ui.setIrcNotice(n.text)
   })
+  // Who's in our channels, for the contacts screen.
+  current.on('ready', () => (presence.self.nick = current.nick))
+  current.on('nick', (nick: string) => (presence.self.nick = nick))
+  current.on('names', (channel: string, nicks: string[]) => presence.names(channel, nicks))
+  current.on('join', (e: { nick: string; channel: string }) => presence.joined(e.channel, e.nick))
+  current.on('part', (e: { nick: string; channel: string }) => presence.parted(e.channel, e.nick))
+  current.on('quit', (e: { nick: string }) => presence.quit(e.nick))
+  current.on('rename', (e: { from: string; to: string }) => presence.renamed(e.from, e.to))
+  current.on('close', () => presence.clearIrc())
   current.on('channels', (list: { name: string; users: number; topic: string }[]) => {
     serverChannels = list.sort((a, b) => b.users - a.users)
     log.info('irc: ' + list.length + ' channels on the server')
@@ -191,11 +201,49 @@ function openRadio(detail: (text: string) => void): Promise<RadioConnection> {
     },
     onlog: (line) => log.info('radio:', line)
   }).then((connection) => {
-    messenger.node = connection.client.id
-    messenger.setRadio(connection.client)
-    log.info('radio: connected as', connection.client.id)
+    const client = connection.client
+    const state = client as unknown as RadioState
+    messenger.node = client.id
+    messenger.setRadio(client)
+    log.info('radio: connected as', client.id)
+
+    // What the radio knows: its channels, paired with IRC ones by name;
+    // the nodes it has heard of, by name, for contacts; and itself.
+    const channels = [...state.channels.values()]
+    messenger.setRadioChannels(channels)
+    presence.self.node = client.id
+    for (const node of state.nodes.values()) presence.node(nodeOf(node))
+    client.on('node', (node: { num: number; user: any }) => presence.node(nodeOf(node)))
+
+    const self = state.nodes.get(state.nodeNum)?.user ?? null
+    ui.setRadioInfo({
+      longName: self?.longName ?? null,
+      shortName: self?.shortName ?? null,
+      region: state.config?.region ?? null,
+      preset: state.config?.preset ?? null,
+      channels
+    })
+    log.info(
+      'radio: channels ' +
+        channels
+          .filter((c) => c.role !== 0)
+          .map((c) => c.index + ':' + (c.name || 'primary'))
+          .join(', ')
+    )
     return connection
   })
+}
+
+// A node from the radio's list, with its names, as presence keeps it.
+function nodeOf(node: {
+  num: number
+  user: { longName: string | null; shortName: string | null } | null
+}) {
+  return {
+    id: '!' + node.num.toString(16).padStart(8, '0'),
+    longName: node.user?.longName ?? null,
+    shortName: node.user?.shortName ?? null
+  }
 }
 
 const radioLink = new Link('radio', openRadio)
@@ -278,7 +326,8 @@ const ui = new Ui(
     log,
     onboarded,
     radio: radioLink,
-    irc: ircLink
+    irc: ircLink,
+    presence
   }
 )
 
@@ -289,8 +338,8 @@ window.show()
 shownUi = ui
 shownWindow = window
 
-ui.setCompact(window.size.width < COMPACT)
-window.on('resize', () => ui.setCompact(window.size.width < COMPACT))
+ui.setWidth(window.size.width)
+window.on('resize', () => ui.setWidth(window.size.width))
 
 // Bring back what was up last time.
 if (wanted.radio) radioLink.start()

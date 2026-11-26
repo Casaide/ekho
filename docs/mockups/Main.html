@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Chats</title>
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+          rel="stylesheet"
+        />
+        <style>
+          body {
+            margin: 0;
+            background: #0a0d0c;
+          }
+          a {
+            color: #d8e2dd;
+          }
+          a:hover {
+            color: #ffffff;
+          }
+        </style>
+      </helmet>
+      <div
+        style="
+          width: 390px;
+          height: 844px;
+          box-sizing: border-box;
+          background: #0a0d0c;
+          color: #d8e2dd;
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          display: flex;
+          flex-direction: column;
+        "
+      >
+        <div style="padding: 20px 18px 0 18px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; align-items: center; justify-content: space-between">
+            <h1 style="margin: 0; font-size: 18px; font-weight: 700">
+              <span style="color: #7c8a84">~/</span>chats
+            </h1>
+            <button
+              style="
+                height: 36px;
+                padding: 0 12px;
+                border: 1px solid #2a332f;
+                border-radius: 6px;
+                background: #111614;
+                color: #d8e2dd;
+                font: inherit;
+                font-size: 13px;
+              "
+            >
+              + new
+            </button>
+          </div>
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              padding: 10px 12px;
+              background: #111614;
+              border: 1px solid #1e2522;
+              border-radius: 6px;
+              font-size: 12px;
+            "
+          >
+            <span
+              style="width: 7px; height: 7px; border-radius: 4px; background: {{accent}}; box-shadow: 0 0 8px {{accent}}"
+            ></span>
+            <span>t1000-e · ble</span>
+            <span style="margin-left: auto; color: #7c8a84"
+              >nodes heard <span style="color: {{accent}}">[N]</span></span
+            >
+          </div>
+          <label
+            style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              height: 40px;
+              padding: 0 12px;
+              border: 1px solid #1e2522;
+              border-radius: 6px;
+            "
+          >
+            <span style="color: {{accent}}; font-size: 14px">/</span>
+            <input
+              placeholder="search people"
+              aria-label="Search people"
+              style="
+                border: 0;
+                background: transparent;
+                font: inherit;
+                font-size: 13px;
+                color: #d8e2dd;
+                outline: none;
+                flex: 1;
+              "
+            />
+          </label>
+        </div>
+        <div style="flex: 1; overflow: hidden; padding: 10px 0 0 0">
+          <sc-for list="{{chats}}" as="c" hint-placeholder-count="5">
+            <a
+              href="Thread.dc.html"
+              style="
+                display: flex;
+                gap: 12px;
+                padding: 12px 18px;
+                text-decoration: none;
+                color: #d8e2dd;
+              "
+            >
+              <div
+                style="
+                  width: 38px;
+                  height: 38px;
+                  border-radius: 6px;
+                  border: 1px solid #2a332f;
+                  background: #111614;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  font-size: 12px;
+                  font-weight: 700;
+                  flex: none;
+                "
+              >
+                {{c.initials}}
+              </div>
+              <div
+                style="
+                  flex: 1;
+                  min-width: 0;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 4px;
+                  border-bottom: 1px solid #161c1a;
+                  padding-bottom: 12px;
+                "
+              >
+                <div style="display: flex; align-items: baseline; gap: 8px">
+                  <span style="font-size: 14px; font-weight: 700">{{c.name}}</span>
+                  <sc-if value="{{c.unread}}" hint-placeholder-val="{{ false }}"
+                    ><span style="font-size: 11px; color: {{accent}}">●</span></sc-if
+                  >
+                  <span style="margin-left: auto; font-size: 11px; color: #7c8a84">{{c.time}}</span>
+                </div>
+                <span
+                  style="
+                    font-size: 13px;
+                    color: #a9b5b0;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                  "
+                  >{{c.preview}}</span
+                >
+                <span style="font-size: 11px; color: {{c.tag}}">[{{c.path}}]</span>
+              </div>
+            </a>
+          </sc-for>
+        </div>
+        <nav
+          style="
+            height: 60px;
+            border-top: 1px solid #1e2522;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            font-size: 12px;
+          "
+        >
+          <a
+            href="Main.dc.html"
+            style="display: flex; align-items: center; justify-content: center; text-decoration: none; color: {{accent}}; font-weight: 700; border-top: 2px solid {{accent}}; margin-top: -1px"
+            >chats</a
+          >
+          <a
+            href="Contact.dc.html"
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              text-decoration: none;
+              color: #7c8a84;
+            "
+            >contacts</a
+          >
+          <a
+            href="Hub.dc.html"
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              text-decoration: none;
+              color: #7c8a84;
+            "
+            >radio</a
+          >
+        </nav>
+      </div>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"accent":{"editor":"color","default":"#5CF29B","options":["#5CF29B","#7AA2F7","#E8B04B"]},"$preview":{"width":390,"height":844}}'
+    >
+      class Component extends DCLogic {
+        renderVals() {
+          const accent = this.props.accent ?? '#5CF29B';
+          const lora = '#8FD9AE', irc = '#E8B04B';
+          return {
+            accent,
+            chats: [
+              { initials: 'IP', name: 'ivan.petrov', time: '14:22', preview: 'On the ridge now, signal is good', path: 'lora · dm', tag: lora, unread: true },
+              { initials: 'MA', name: 'maria', time: '13:40', preview: 'See you at the repeater site on Saturday', path: 'lora · dm', tag: lora, unread: true },
+              { initials: '#', name: 'LongFast', time: '12:15', preview: 'georgi: new node up in Lozenets', path: 'lora · channel', tag: lora, unread: false },
+              { initials: 'GE', name: 'georgi', time: '09:58', preview: 'Writing from IRC, my node is flat', path: 'irc · fallback', tag: irc, unread: false },
+              { initials: 'EL', name: 'elena', time: 'yday', preview: 'Thanks, got it', path: 'lora · dm', tag: lora, unread: false }
+            ]
+          };
+        }
+      }
+    </script>
+  </body>
+</html>

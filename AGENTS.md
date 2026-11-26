@@ -61,7 +61,8 @@ Don't relitigate these without the user.
 | `lib/contacts.ts`                | People linking a node ID and an IRC nick; a channel contact for the mesh channel.                                                                   |
 | `lib/types.ts`                   | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses.                                                            |
 | `lib/radio.ts`                   | Bluetooth connect: bare-bluetooth plus bare-meshtastic `Mailbox` and `Client`. Device code, untested here.                                          |
-| `lib/ui.ts`, `lib/theme.ts`      | bare-native UI: dark terminal look, chats, conversation, composer, radio and IRC controls. Compact mode below 700 points wide.                      |
+| `lib/ui/`, `lib/theme.ts`        | bare-native UI after the mockups (`docs/mockups/`): `index.ts` (navigation, tabs or panes), `kit.ts` (shared pieces), one module per screen.        |
+| `lib/presence.ts`                | Who's around: radio nodes heard and IRC nicks in our channels, one entry per person (bridged `name\|mt` nicks matched to radio nodes).              |
 | `app.ts`                         | Entry: wires Messenger, UI, radio and TLS IRC.                                                                                                      |
 | `test/*.ts`, `test.ts`           | bare-tap tests with fake radio and fake IRC stream.                                                                                                 |
 | `docs/design.md`, `docs/plan.md` | The design and the phased plan. Update them when a decision changes.                                                                                |
@@ -111,8 +112,11 @@ Roughly in order:
    - an event for every packet received, on any port, so `Heard` sees all traffic and ekho can receive private-port packets (dropped today);
    - `from` on `ack`, to tell "relayed" from "delivered";
    - an event when a packet has gone out over the air, for a "sent" state;
-   - whether a received packet was encrypted per contact (so a shared mailbox address can't be spoofed).
-6. **Reactions:** over LoRa once bare-meshtastic supports them; over IRC as a short text message.
+   - whether a received packet was encrypted per contact (so a shared mailbox address can't be spoofed);
+   - the channel a packet arrived on (MeshPacket field 3): without it, every LoRa channel message lands in the mesh channel;
+   - `last_heard` and `device_metrics` in the node list (NodeInfo fields 5 and 6): battery, channel use, and who was heard before ekho connected.
+6. **Android back gesture** (upstream, in bare-ndk): the back gesture closes the activity, which ends the app (`System.exit`). It should reach the app as an event, so back goes from a conversation to the list.
+7. **Reactions:** over LoRa once bare-meshtastic supports them; over IRC as a short text message.
 
 ## Phase 2: big files over P2P (decided, not started)
 

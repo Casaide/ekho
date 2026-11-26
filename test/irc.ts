@@ -204,3 +204,28 @@ test('pings a quiet server, and gives up on a silent one', async (t) => {
   t.equal(destroyed, null)
   irc.quit()
 })
+
+test('reports who is in each channel, and who comes and goes', (t) => {
+  const { stream, irc } = client()
+  const seen: unknown[] = []
+  irc.on('names', (channel: string, nicks: string[]) => seen.push(['names', channel, nicks]))
+  for (const event of ['join', 'part', 'quit', 'rename']) {
+    irc.on(event, (e: unknown) => seen.push([event, e]))
+  }
+
+  stream.serve(':irc.motaba.net 353 dom = #bulgaria :@motaba Dom|mt +ivanp\r\n')
+  stream.serve(':irc.motaba.net 353 dom = #bulgaria :sho|mc dom\r\n')
+  stream.serve(':irc.motaba.net 366 dom #bulgaria :End of /NAMES list\r\n')
+  stream.serve(':georgi!~g@host JOIN #bulgaria\r\n')
+  stream.serve(':ivanp!~i@host PART #bulgaria :bye\r\n')
+  stream.serve(':sho|mc!~s@host QUIT :gone\r\n')
+  stream.serve(':georgi!~g@host NICK :georgi_\r\n')
+
+  t.deepStrictEqual(seen, [
+    ['names', '#bulgaria', ['motaba', 'Dom|mt', 'ivanp', 'sho|mc', 'dom']],
+    ['join', { nick: 'georgi', channel: '#bulgaria' }],
+    ['part', { nick: 'ivanp', channel: '#bulgaria' }],
+    ['quit', { nick: 'sho|mc' }],
+    ['rename', { from: 'georgi', to: 'georgi_' }]
+  ])
+})

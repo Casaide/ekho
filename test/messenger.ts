@@ -321,3 +321,65 @@ test('regional channels are kept across restarts and go over IRC', (t) => {
   m.removeChannel('#sofia')
   t.equal(m.contacts.get('#sofia'), null)
 })
+
+test('counts unread messages until a conversation is read, across restarts', (t) => {
+  const radio = new FakeRadio()
+  const time = clock()
+  const m = new Messenger({ now: time.now, heard: new Heard({ now: time.now }) })
+  m.setRadio(radio as never)
+
+  const hello = { from: '!a1b2c3d4', name: 'ivan', snr: 1, rssi: -90, hops: 1, direct: true }
+  radio.emit('message', { ...hello, text: 'one' })
+  time.tick(1000)
+  radio.emit('message', { ...hello, text: 'two' })
+  const ivan = m.contacts.byNode('!a1b2c3d4')!
+  t.equal(m.unread(ivan), 2)
+
+  time.tick(1000)
+  m.markRead(ivan)
+  t.equal(m.unread(ivan), 0)
+
+  time.tick(1000)
+  radio.emit('message', { ...hello, text: 'three' })
+  t.equal(m.unread(ivan), 1)
+
+  const restored = new Messenger({ state: JSON.parse(JSON.stringify(m)), now: time.now })
+  t.equal(restored.unread(restored.contacts.byNode('!a1b2c3d4')!), 1)
+})
+
+test('a channel the radio also has goes over LoRa on that channel; others over IRC', (t) => {
+  const radio = new FakeRadio()
+  const stream = new FakeStream()
+  const time = clock()
+  const heard = new Heard({ now: time.now })
+  const m = new Messenger({
+    ircChannel: '#bulgaria',
+    ircChannels: ['#sofia', '#varna'],
+    heard,
+    now: time.now
+  })
+  m.setRadio(radio as never)
+  radio.emit('position', { from: '!a1b2c3d4' })
+  m.setIrc(new Irc(stream as never, { nick: 'dom' }))
+  stream.serve(':irc.motaba.net 001 dom :Welcome\r\n')
+
+  m.setRadioChannels([
+    { index: 0, name: '', role: 1 },
+    { index: 1, name: 'Sofia', role: 2 },
+    { index: 2, name: null, role: 0 }
+  ])
+
+  const sofia = m.contacts.get('#sofia')!
+  const varna = m.contacts.get('#varna')!
+  t.equal(m.radioChannel(m.channel), 0)
+  t.equal(m.radioChannel(sofia), 1)
+  t.equal(m.radioChannel(varna), null)
+
+  const toSofia = m.send(sofia, 'hi sofia')
+  t.equal(toSofia.via, 'lora')
+  t.deepStrictEqual(radio.sent.at(-1), { text: 'hi sofia', opts: { wantAck: false, channel: 1 } })
+
+  const toVarna = m.send(varna, 'hi varna')
+  t.equal(toVarna.via, 'irc')
+  t.equal(stream.lines.at(-1), 'PRIVMSG #varna :hi varna')
+})

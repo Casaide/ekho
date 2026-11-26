@@ -2,7 +2,7 @@ import tap from 'bare-tap'
 import native from 'bare-native'
 import Messenger from '../lib/messenger.ts'
 import Irc from '../lib/irc.ts'
-import Ui from '../lib/ui.ts'
+import Ui from '../lib/ui/index.ts'
 import showCrash from '../lib/crash.ts'
 import Link, { FatalError } from '../lib/link.ts'
 import EventEmitter from 'bare-events'
@@ -64,7 +64,15 @@ test('every screen renders: chats, thread, contact info, join, compact', (t) => 
   messenger.join(ivan, georgi)
   ui.toggleInfo()
 
-  ui.setCompact(false)
+  // Every tab, then side by side, then with the contact beside.
+  ui.open('contacts')
+  ui.open('radio')
+  ui.open('setup')
+  ui.back()
+  ui.open('chats')
+  ui.setWidth(900)
+  ui.select(ivan)
+  ui.setWidth(1200)
   ui.select(null)
 
   t.equal(messenger.contacts.get(ivan.id)!.alias, 'Ivan P')
@@ -95,7 +103,7 @@ test('errors show as a banner, NickServ notices show, and the log copies', (t) =
   ui.showError('Error: again')
 
   ui.log.warn('something odd')
-  ui.show('settings')
+  ui.show('radio')
   ui.show('log')
   ui.log.error('while the log is open')
   ui.copyLog()
@@ -110,7 +118,7 @@ test('the crash screen renders an error', (t) => {
   t.ok(window.contentView)
 })
 
-test('first run opens on onboarding, then chats; settings holds the same controls', (t) => {
+test('first run opens on onboarding, then chats; the radio tab and setup follow', (t) => {
   let finished = false
   const ui = new Ui(
     new Messenger(),
@@ -134,8 +142,11 @@ test('first run opens on onboarding, then chats; settings holds the same control
   ui.finishOnboarding()
   t.ok(finished)
   t.equal(ui.page, 'chats')
-  ui.show('settings')
-  t.equal(ui.page, 'settings')
+  ui.show('radio')
+  t.equal(ui.page, 'radio')
+  ui.open('setup')
+  ui.back()
+  t.equal(ui.page, 'radio', 'setup goes back to the radio tab')
   ui.show('chats')
 })
 
@@ -161,7 +172,7 @@ test('the radio and IRC sections follow their links through every state', async 
     irc.stop()
     window.hide()
   })
-  ui.show('settings')
+  ui.show('radio')
 
   radio.start()
   pending[0].detail('syncing: 37 nodes so far')
@@ -182,4 +193,56 @@ test('the radio and IRC sections follow their links through every state', async 
   irc.pause()
   t.equal(irc.detail, 'paused')
   ui.show('chats')
+})
+
+test('a conversation is read once open, and the chats tab counts what is not', (t) => {
+  const messenger = new Messenger()
+  const ui = new Ui(messenger, actions(), { compact: true })
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
+  t.teardown(() => window.hide())
+
+  const radio = new FakeRadio()
+  messenger.setRadio(radio as never)
+  const hello = { from: '!a1b2c3d4', name: 'ivan', snr: 1, rssi: -90, hops: 0, direct: true }
+  radio.emit('message', { ...hello, text: 'one' })
+  radio.emit('message', { ...hello, text: 'two' })
+  const ivan = messenger.contacts.byNode('!a1b2c3d4')!
+  t.equal(messenger.unread(ivan), 2)
+
+  ui.select(ivan)
+  t.equal(messenger.unread(ivan), 0)
+
+  // Arriving while open: read straight away.
+  radio.emit('message', { ...hello, text: 'three' })
+  t.equal(messenger.unread(ivan), 0)
+
+  ui.back()
+  radio.emit('message', { ...hello, text: 'four' })
+  t.equal(messenger.unread(ivan), 1)
+})
+
+test('contacts shows who is around on every transport, and tapping makes a contact', (t) => {
+  const messenger = new Messenger()
+  const ui = new Ui(messenger, actions(), { compact: true })
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
+  t.teardown(() => window.hide())
+
+  ui.presence.node({ id: '!a7c3e91f', longName: 'Ivan Petrov', shortName: 'IP' })
+  messenger.heard.mark('!a7c3e91f')
+  ui.presence.names('#bulgaria', ['Ivan_Petrov|mt', 'georgi'])
+  ui.open('contacts')
+
+  const people = ui.presence.people()
+  t.deepStrictEqual(
+    people.map((p) => p.name),
+    ['georgi', 'Ivan Petrov']
+  )
+  ui.select(ui._people._add(people[1]))
+  const ivan = messenger.contacts.byNode('!a7c3e91f')!
+  t.deepStrictEqual(ivan.nicks, ['Ivan_Petrov|mt'])
+  t.equal(ui.page, 'thread')
 })
