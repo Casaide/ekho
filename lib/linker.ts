@@ -21,6 +21,7 @@ export default class Linker extends EventEmitter {
   code: string | null
   joining: boolean
   error: string | null
+  _sleep: Promise<void>
 
   constructor(
     messenger: Messenger,
@@ -37,6 +38,7 @@ export default class Linker extends EventEmitter {
     this.code = null
     this.joining = false
     this.error = null
+    this._sleep = Promise.resolve()
 
     this.devices.on('change', () => this.emit('change'))
     this.devices.on('closed', () => {
@@ -106,6 +108,17 @@ export default class Linker extends EventEmitter {
     if (device !== undefined) this.devices.forget(device)
   }
 
+  // Suspends and resumes run one after the other, never two at once.
+  suspend(): Promise<void> {
+    this._sleep = this._sleep.then(() => this.devices.suspend())
+    return this._sleep
+  }
+
+  resume(): Promise<void> {
+    this._sleep = this._sleep.then(() => this.devices.resume())
+    return this._sleep
+  }
+
   destroy(): Promise<void> {
     return this.devices.destroy()
   }
@@ -134,6 +147,10 @@ export default class Linker extends EventEmitter {
       applied: link.applied
     })
     this.mirror = mirror
+    mirror.on('newer', () => {
+      this.error = 'your phone runs a newer ekho: update this one'
+      this.emit('change')
+    })
     mirror.on('applied', (applied: number) => {
       link.applied = applied
       this.emit('change')

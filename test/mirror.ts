@@ -97,3 +97,54 @@ test('the phone restarting keeps numbering where it was, without a new snapshot'
 
   t.equal(feed.length, before)
 })
+
+test('numbering carries on from the feed when the saved state is older', async (t) => {
+  const { stream, messenger, feed } = await linked()
+  const stale = messenger.toJSON()
+  stream.serve(':georgi!u@h PRIVMSG dom :one more\r\n')
+  await settle()
+  const last = messenger.thread(messenger.contacts.byNick('georgi')!).at(-1)!
+
+  // Restarted before saving: the state on disk doesn't have the last message.
+  const again = new Messenger({ ircChannel: '#bulgaria', state: JSON.parse(JSON.stringify(stale)) })
+  const hub = new Hub(again, feed)
+  await hub.ready()
+  const georgi = again.contacts.byNick('georgi')!
+  again.receive(georgi, { ...last, ref: undefined, id: 1 })
+  t.ok(again.thread(georgi).at(-1)!.ref! > last.ref!, 'a new number, not one already used')
+})
+
+test('applying the feed again from the start changes nothing', async (t) => {
+  const { feed, outbox, mac } = await linked()
+  const before = JSON.stringify(mac.toJSON().threads)
+
+  const again = new Mirror(mac, feed, outbox)
+  await again.update()
+
+  t.equal(JSON.stringify(mac.toJSON().threads), before)
+})
+
+test('the phone skips what isn’t a request from a linked device', async (t) => {
+  const { stream, outbox } = await linked()
+  stream.lines.length = 0
+
+  await outbox.append({ type: 'send', contact: 'irc:georgi', text: 7 } as never)
+  await outbox.append({ type: 'wipe' } as never)
+  await outbox.append({ type: 'send', local: 1, contact: 'irc:georgi', text: 'ok', via: null })
+  await settle()
+
+  t.deepStrictEqual(stream.lines, ['PRIVMSG georgi :ok'])
+})
+
+test('a feed from a newer ekho stops being applied, and says so', async (t) => {
+  const { feed, mac, mirror } = await linked()
+  let newer = false
+  mirror.on('newer', () => (newer = true))
+  const at = mirror.applied
+
+  await feed.append({ format: 99, type: 'status', status: mac.status() } as never)
+  await settle()
+
+  t.ok(newer)
+  t.equal(mirror.applied, at)
+})

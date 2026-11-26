@@ -9,25 +9,45 @@ import type { Entry } from './hub.ts'
 import type { Log } from './mirror.ts'
 import type { Command } from './types.ts'
 
+// A core someone else writes, as this device reads it: its key and its
+// block encryption key, hex.
+export interface Remote {
+  key: string
+  encryption: string
+}
+
 // A device linked to this one, as the hub keeps it.
 export interface Device {
   name: string
-  // Its outbox core, and its swarm key, hex.
-  outbox: string
+  outbox: Remote
+  // Its swarm key, hex: only it is replicated with.
   swarm: string
   // How far its outbox has been done.
   done: number
 }
 
-// What's kept between runs.
+// What's kept between runs. Keys are hex.
 export interface Saved {
-  // This device's swarm key pair comes from this, hex.
+  // Bumped when what's saved, or the cores it names, change shape: an older
+  // one is dropped and devices link again.
+  version: number
+  // This device's swarm key pair comes from this.
   seed: string
+  // Block encryption keys for this device's own feed and outbox.
+  feed: string
+  outbox: string
   // As the hub: the devices linked to this one.
   devices: Device[]
-  // As a linked device: the hub's feed, hex, and how far it's applied.
-  hub: { feed: string; applied: number } | null
+  // As a linked device: the hub's feed, and how far it's applied.
+  hub: (Remote & { applied: number }) | null
 }
+
+// 2: cores encrypted; 1 had them in the clear.
+const VERSION = 2
+
+// What a linking request may carry: names, keys, nothing big. Checked before
+// it's parsed, as anyone holding the code can send one.
+const REQUEST_MAX = 1024
 
 // How long a linking code works for.
 const OPEN = 10 * 60 * 1000
@@ -38,7 +58,12 @@ const OPEN = 10 * 60 * 1000
 // rebuilds the invite from the code alone: the invite's seed comes from it,
 // and so does the key it's for, which isn't the feed's (blind-pairing wants
 // the discovery key to be the key's). The feed's key goes back to the linked
-// device in the answer's encryptionKey field, which only it can open.
+// device in the answer's signed additional data, with its block encryption
+// key: the answer is sealed to the requester, so only it can read them.
+//
+// Every core is block encrypted: blocks are stored and sent encrypted, and a
+// peer, mirror or blind peer without the key sees only ciphertext. The keys
+// sit in the app's own storage, with the cores.
 //
 // Events: linked (device), as the hub; closed, when a code stops working;
 // change, when what's saved changed.
@@ -59,11 +84,7 @@ export default class Devices extends EventEmitter {
   // `bootstrap`: DHT nodes to use instead of the public ones, for tests.
   constructor(dir: string, saved: Saved | null = null, opts: { bootstrap?: unknown[] } = {}) {
     super()
-    this.saved = saved ?? {
-      seed: b4a.toString(crypto.randomBytes(32), 'hex'),
-      devices: [],
-      hub: null
-    }
+    this.saved = saved !== null && saved.version === VERSION ? saved : fresh()
     this.store = new Corestore(dir)
     this.swarm = new Hyperswarm({
       keyPair: crypto.keyPair(b4a.from(this.saved.seed, 'hex')),
@@ -71,8 +92,17 @@ export default class Devices extends EventEmitter {
     })
     // Poll often: someone is waiting, code in hand.
     this.pairing = new BlindPairing(this.swarm, { poll: 5000 })
-    this.feed = this.store.get({ name: 'feed', valueEncoding: 'json' })
-    this.outbox = this.store.get({ name: 'outbox', valueEncoding: 'json' })
+    // Named for the version: version 1's cores were in the clear.
+    this.feed = this.store.get({
+      name: 'feed-' + VERSION,
+      valueEncoding: 'json',
+      encryption: { key: b4a.from(this.saved.feed, 'hex') }
+    })
+    this.outbox = this.store.get({
+      name: 'outbox-' + VERSION,
+      valueEncoding: 'json',
+      encryption: { key: b4a.from(this.saved.outbox, 'hex') }
+    })
 
     this.hubFeed = null
     this._member = null
@@ -81,7 +111,12 @@ export default class Devices extends EventEmitter {
 
     // Replicate with devices we know, and the hub; pairing has its own
     // channel on the same connections.
-    this.swarm.on('connection', (conn: any) => this._replicate(conn))
+    this.swarm.on('connection', (conn: any) => {
+      // A peer dropping is ordinary: without a listener, its error would be
+      // thrown, and every connection gets one, replicated or not.
+      conn.on('error', noop)
+      this._replicate(conn)
+    })
   }
 
   async ready(): Promise<void> {
@@ -97,21 +132,21 @@ export default class Devices extends EventEmitter {
 
     const code = format(crypto.randomBytes(10))
     const { seed, key } = keys(parse(code)!)
-    const { publicKey, discoveryKey } = BlindPairing.createInvite(key, { seed })
+    const feed = { key: b4a.toString(this.feed.key, 'hex'), encryption: this.saved.feed }
+    const { publicKey, discoveryKey, additional } = BlindPairing.createInvite(key, {
+      seed,
+      data: b4a.from(JSON.stringify(feed))
+    })
 
     this._member = this.pairing.addMember({
       discoveryKey,
       onadd: (candidate: any) => {
         candidate.open(publicKey)
-        const asked = JSON.parse(b4a.toString(candidate.userData))
-        candidate.confirm({ key, encryptionKey: this.feed.key })
+        const asked = request(candidate.userData)
+        if (asked === null) return candidate.deny()
+        candidate.confirm({ key, additional })
 
-        const device: Device = {
-          name: asked.name,
-          outbox: asked.outbox,
-          swarm: asked.swarm,
-          done: 0
-        }
+        const device: Device = { ...asked, done: 0 }
         this.saved.devices = [...this.saved.devices.filter((d) => d.swarm !== device.swarm), device]
         this.swarm.join(this.feed.discoveryKey)
         this._replicateAll()
@@ -147,8 +182,8 @@ export default class Devices extends EventEmitter {
     const { invite } = BlindPairing.createInvite(key, { seed })
     const userData = b4a.from(
       JSON.stringify({
-        name,
-        outbox: b4a.toString(this.outbox.key, 'hex'),
+        name: name.slice(0, 40),
+        outbox: { key: b4a.toString(this.outbox.key, 'hex'), encryption: this.saved.outbox },
         swarm: b4a.toString(this.swarm.keyPair.publicKey, 'hex')
       })
     )
@@ -156,8 +191,11 @@ export default class Devices extends EventEmitter {
     const result = await new Promise<any>((resolve) => {
       this.pairing.addCandidate({ invite, userData, onadd: resolve })
     })
+    // Signed with the invite's key, which only the code gives: blind-pairing
+    // checks that before this.
+    const feed = JSON.parse(b4a.toString(result.data))
 
-    this.saved.hub = { feed: b4a.toString(result.encryptionKey, 'hex'), applied: 0 }
+    this.saved.hub = { key: feed.key, encryption: feed.encryption, applied: 0 }
     this.emit('change')
     this._replicateAll()
     await this._follow()
@@ -165,7 +203,7 @@ export default class Devices extends EventEmitter {
 
   // A linked device's outbox, as the hub reads it.
   async outboxOf(device: Device): Promise<Log<Command>> {
-    const core = this.store.get({ key: b4a.from(device.outbox, 'hex'), valueEncoding: 'json' })
+    const core = this.store.get(open(device.outbox))
     await core.ready()
     core.download({ start: 0, end: -1 })
     return core
@@ -178,11 +216,24 @@ export default class Devices extends EventEmitter {
 
   unlink(): void {
     if (this.saved.hub !== null) {
-      this.swarm.leave(crypto.discoveryKey(b4a.from(this.saved.hub.feed, 'hex')))
+      this.swarm.leave(crypto.discoveryKey(b4a.from(this.saved.hub.key, 'hex')))
     }
     this.saved.hub = null
     this.hubFeed = null
     this.emit('change')
+  }
+
+  // Asleep with the app, when nothing keeps it running in the background: an
+  // app the OS has paused mustn't hold sockets and storage open. Storage is
+  // let go first, as the OS may stop the app at any moment, then the network.
+  async suspend(): Promise<void> {
+    await this.store.suspend()
+    await this.swarm.suspend()
+  }
+
+  async resume(): Promise<void> {
+    await this.store.resume()
+    await this.swarm.resume()
   }
 
   async destroy(): Promise<void> {
@@ -193,10 +244,7 @@ export default class Devices extends EventEmitter {
   }
 
   async _follow(): Promise<void> {
-    const feed = this.store.get({
-      key: b4a.from(this.saved.hub!.feed, 'hex'),
-      valueEncoding: 'json'
-    })
+    const feed = this.store.get(open(this.saved.hub!))
     await feed.ready()
     feed.download({ start: 0, end: -1 })
     this.swarm.join(feed.discoveryKey)
@@ -231,3 +279,46 @@ function keys(code: string): { seed: Uint8Array; key: Uint8Array } {
     key: crypto.hash(b4a.from('ekho link key ' + code))
   }
 }
+
+function fresh(): Saved {
+  const random = () => b4a.toString(crypto.randomBytes(32), 'hex')
+  return {
+    version: VERSION,
+    seed: random(),
+    feed: random(),
+    outbox: random(),
+    devices: [],
+    hub: null
+  }
+}
+
+// Options to open a core someone else writes.
+function open(remote: Remote): object {
+  return {
+    key: b4a.from(remote.key, 'hex'),
+    valueEncoding: 'json',
+    encryption: { key: b4a.from(remote.encryption, 'hex') }
+  }
+}
+
+// A linking request's user data, or null if it isn't one: too big, not
+// JSON, or not the fields a request has. From the network, so checked.
+function request(data: Uint8Array): Omit<Device, 'done'> | null {
+  if (data.byteLength > REQUEST_MAX) return null
+  let asked: any
+  try {
+    asked = JSON.parse(b4a.toString(data))
+  } catch {
+    return null
+  }
+  const hex = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
+  if (typeof asked?.name !== 'string' || asked.name.length > 40) return null
+  if (!hex(asked.swarm) || !hex(asked.outbox?.key) || !hex(asked.outbox?.encryption)) return null
+  return {
+    name: asked.name,
+    swarm: asked.swarm,
+    outbox: { key: asked.outbox.key, encryption: asked.outbox.encryption }
+  }
+}
+
+function noop() {}

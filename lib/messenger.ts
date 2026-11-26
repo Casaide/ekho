@@ -357,13 +357,17 @@ export default class Messenger extends EventEmitter {
     this.emit('contacts')
   }
 
-  // A message, taking the place of our own copy of it if we sent it.
+  // A message, taking the place of our own copy of it if we sent it, or of
+  // itself if the feed is applied again from before it (after a restart that
+  // came before saving how far it got).
   receive(contact: Contact, msg: Message): void {
     const known = this.contacts.get(contact.id) ?? this.contacts.add(contact)
+    const thread = this.thread(known)
     const ours =
-      msg.local === undefined
+      (msg.ref === undefined ? undefined : thread.find((m) => m.ref === msg.ref)) ??
+      (msg.local === undefined
         ? undefined
-        : this.thread(known).find((m) => m.id === msg.local && m.ref === undefined)
+        : thread.find((m) => m.id === msg.local && m.ref === undefined))
     if (ours === undefined) return this._push(known, msg)
     Object.assign(ours, msg)
     this.emit('update', ours)

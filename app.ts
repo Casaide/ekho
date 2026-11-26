@@ -440,6 +440,23 @@ linker.ready().then(
 )
 Bare.on('exit', () => linker.destroy())
 
+// Paused by the OS: linking sleeps too, unless something keeps ekho running
+// in the background (on Android, the foreground service below). Then it
+// stays up, so a linked Mac still gets the phone's messages while it's in
+// a pocket.
+let keptRunning = () => false
+let asleep = false
+Bare.on('suspend', () => {
+  if (keptRunning()) return
+  asleep = true
+  linker.suspend().then(() => log.info('link: asleep'))
+})
+Bare.on('resume', () => {
+  if (!asleep) return
+  asleep = false
+  linker.resume().then(() => log.info('link: awake'))
+})
+
 // Android's back button and edge swipe: back within ekho, and out of the app
 // only from chats. Android only, so loaded only there; the macOS build defers
 // it (scripts/build-macos.sh).
@@ -502,6 +519,7 @@ if (Bare.platform === 'android') {
       log.warn('app: background service: ' + (err as Error).message)
     }
   }
+  keptRunning = () => shown !== null
   radioLink.on('change', keepRunning)
   ircLink.on('change', keepRunning)
   keepRunning()
