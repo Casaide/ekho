@@ -46,7 +46,13 @@ export default class ContactScreen {
 
     this._back = opts.side ? back(() => this.ui.toggleInfo(), '×') : back(() => this.ui.back())
     this._where = text('~/contacts/', { color: colors.muted, fontSize: 15, fontWeight: 'bold' })
-    this._crumb = text('', { color: colors.text, fontSize: 15, fontWeight: 'bold' }, 1)
+    // Narrow beside a conversation: the name alone, cut short to fit.
+    if (opts.side) this._where.style = { display: 'none' }
+    this._crumb = text(
+      '',
+      { color: colors.text, fontSize: 15, fontWeight: 'bold', flexShrink: 1 },
+      1
+    )
 
     this._alias = input('alias, optional')
     this._alias.returnKeyType = 'done'
@@ -154,7 +160,8 @@ export default class ContactScreen {
       content.appendChild(row('irc', contact.id, '', colors.irc))
 
       const here = this.ui.presence.inChannel(contact.id)
-      content.appendChild(label('here now · ' + here.length + ' · tap to message'))
+      const count = here.length === 0 ? 'nobody' : here.length + ' · tap to message'
+      content.appendChild(label('here now · ' + count))
       for (const person of here.slice(0, HERE)) {
         content.appendChild(personRow(this.ui, person, contactOf(this.ui, person)))
       }

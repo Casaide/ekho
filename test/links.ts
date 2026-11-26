@@ -1,5 +1,5 @@
 import tap from 'bare-tap'
-import { parts, links, preview, host } from '../lib/links.ts'
+import { parts, links, preview, host, media } from '../lib/links.ts'
 
 const { test } = tap
 
@@ -54,4 +54,13 @@ test('a preview comes from Open Graph tags, else the title', (t) => {
   )
   t.equal(preview('https://a.bg', '<html></html>'), null, 'nothing to show')
   t.equal(host('https://www.a.bg/b?c'), 'a.bg')
+})
+
+test('a link to a sound or a video plays, by its file’s extension', (t) => {
+  t.equal(media('https://a.bg/notes/hut.mp3'), 'audio')
+  t.equal(media('https://a.bg/voice.OGG?dl=1'), 'audio')
+  t.equal(media('https://a.bg/clip.mp4#t=10'), 'video')
+  t.equal(media('https://a.bg/page.html'), null)
+  t.equal(media('https://mp3.bg/'), null, 'not the host')
+  t.equal(media('https://a.bg/mp3/list'), null, 'not a folder')
 })

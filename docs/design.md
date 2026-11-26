@@ -113,6 +113,8 @@ Links in a message are marked, and each gets a card beside the message (up to tw
 
 Previews are fetched once per session and kept in memory (`lib/previews.ts`): at most 512 KB of a page, given up after 8 s. A page's image (`og:image`) shows on its card, and a link to an image shows the image itself: PNG, JPEG, GIF or WebP, up to 5 MB, kept in a cache folder because the native image view reads files. Fetching tells the site this device's address, as any messenger's previews do; a page that can't be had shows the link plain.
 
+A link to a sound or a video (by its extension: mp3, wav, ogg, opus, m4a, aac, flac; mp4, m4v, webm, mov) gets a card to play it in place instead, with no fetch until tapped. The player is a web view holding an `<audio>` or `<video>` element, so each platform plays what its browser does, with no audio code of ours. It keeps playing while messages arrive, stops on ■ or on leaving the conversation, and ↗ opens it in the browser. This is the first step toward voice notes: a link to a recording, wherever it's hosted.
+
 ## First P2P step, built: a linked Mac mirrors the phone
 
 The smallest step toward shared history, chosen with the user: the phone stays the only device on the radio and IRC, and other devices link to it. Nothing merges, because only the phone writes.

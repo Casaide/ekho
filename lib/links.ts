@@ -39,6 +39,31 @@ function trim(link: string): string {
   return link.slice(0, end)
 }
 
+// A link to a sound or a video, by its file's extension, to play in place.
+export type Media = 'audio' | 'video'
+
+const MEDIA: Record<string, Media> = {
+  mp3: 'audio',
+  wav: 'audio',
+  ogg: 'audio',
+  oga: 'audio',
+  opus: 'audio',
+  m4a: 'audio',
+  aac: 'audio',
+  flac: 'audio',
+  mp4: 'video',
+  m4v: 'video',
+  webm: 'video',
+  mov: 'video'
+}
+
+export function media(url: string): Media | null {
+  const path = url.replace(/[?#].*$/, '')
+  const dot = path.lastIndexOf('.')
+  if (dot <= path.indexOf('//') + 2 || path.lastIndexOf('/') > dot) return null
+  return MEDIA[path.slice(dot + 1).toLowerCase()] ?? null
+}
+
 // What a page says about itself, from its Open Graph tags or its title.
 export interface Preview {
   url: string
