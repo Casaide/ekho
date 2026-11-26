@@ -566,7 +566,13 @@ const notifications =
 const notifier =
   notifications === null
     ? null
-    : new Notifier(messenger, notifications, { names: () => [settings.nick, ...radioNames] })
+    : new Notifier(messenger, notifications, {
+        names: () => [
+          settings.nick,
+          ...radioNames,
+          ...(messenger.node === null ? [] : [messenger.node])
+        ]
+      })
 
 if (notifications !== null && notifier !== null) {
   notifications.on('open', (id: number) => {

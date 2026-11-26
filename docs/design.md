@@ -115,6 +115,10 @@ Previews are fetched once per session and kept in memory (`lib/previews.ts`): at
 
 A link to a sound or a video (by its extension: mp3, wav, ogg, opus, m4a, aac, flac; mp4, m4v, webm, mov) gets a card to play it in place instead, with no fetch until tapped. The player is a web view holding an `<audio>` or `<video>` element, so each platform plays what its browser does, with no audio code of ours. It keeps playing while messages arrive, stops on ■ or on leaving the conversation, and ↗ opens it in the browser. This is the first step toward voice notes: a link to a recording, wherever it's hosted.
 
+## Mentions
+
+Each network writes a mention its own way, and the bridge passes them on as text. MeshCore writes `@[Root 👾]`. Meshtastic's Android app writes `@!0e8666a6`, the node's ID, so it survives a rename. IRC has none: a nick in the line is the convention. ekho shows both written forms as `@name` in bold (a node's ID by the node's name, when the radio knows it), and in another colour when the mention is us: our nick, our radio's names, or our node's ID (`lib/mentions.ts`). A channel line mentioning us by any of these notifies. Sending mentions, each in the form its path expects, is not built yet.
+
 ## First P2P step, built: a linked Mac mirrors the phone
 
 The smallest step toward shared history, chosen with the user: the phone stays the only device on the radio and IRC, and other devices link to it. Nothing merges, because only the phone writes.
