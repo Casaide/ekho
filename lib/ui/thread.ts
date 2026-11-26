@@ -80,8 +80,13 @@ export default class Thread {
   _count: any
   _detail: any
   _open: Message | null
-  // The conversation and its length when last scrolled to the end.
+  // What the list shows, to rebuild it only when that changes.
+  _shown: string
+  // The conversation and its length when last scrolled to the end, and until
+  // when a scroll to the end is still settling.
   _end: string
+  _settling: number
+  _timers: ReturnType<typeof setTimeout>[]
   _emoji: any
 
   constructor(ui: Ui) {
@@ -96,7 +101,10 @@ export default class Thread {
     // A message's details, when one is tapped.
     this._detail = view({ display: 'none' })
     this._open = null
+    this._shown = ''
     this._end = ''
+    this._settling = 0
+    this._timers = []
     // Lives across redraws, so a message arriving doesn't wipe what's typed.
     this._emoji = input('or type any emoji')
     this._emoji.returnKeyType = 'send'
@@ -173,12 +181,28 @@ export default class Thread {
     this._title.text = displayName(contact)
     this._sub.text = this.ui.reachLine(contact)
 
+    const thread = this.ui.messenger.thread(contact)
+    const now = this.ui.messenger.now()
+    this._renderRoute(contact)
+    this._renderCount()
+    this._renderDetail(contact)
+
+    // Redraws come often (presence, status): the list is rebuilt only when
+    // what it shows changed, and so it keeps its place otherwise.
+    const shown = [
+      contact.id,
+      dayIndex(now),
+      this._open?.id ?? '',
+      ...thread.map((m) => m.id + m.state + (m.reason ?? ''))
+    ].join('|')
+    if (shown === this._shown) return
+    this._shown = shown
+
     // Where the reader was, to stay there after the rebuild.
     const was = this._list.contentOffset.y
     clear(this._list.content)
-    const now = this.ui.messenger.now()
     let day = -1
-    for (const msg of this.ui.messenger.thread(contact)) {
+    for (const msg of thread) {
       if (dayIndex(msg.time) !== day) {
         day = dayIndex(msg.time)
         this._list.content.appendChild(
@@ -194,30 +218,32 @@ export default class Thread {
     // Room under the last message: scrolled to the end, Android stops at the
     // last child, leaving the content's bottom padding out of view.
     this._list.content.appendChild(view({ height: 20 }))
-    // To the end on opening a conversation and when a message is added, but
-    // not on every redraw, so reading back up stays put. The offset is
-    // clamped to the content as last laid out, which doesn't have the new
-    // message yet: scroll again once the layout has caught up.
-    const at = contact.id + ':' + this.ui.messenger.thread(contact).length
-    const y = at === this._end ? was : Number.MAX_SAFE_INTEGER
+    // To the end on opening a conversation and when a message is added;
+    // otherwise where the reader was. A rebuild while a scroll to the end is
+    // still settling goes to the end too: restoring the offset it caught
+    // halfway would scroll back up.
+    const at = contact.id + ':' + thread.length
+    if (at !== this._end || Date.now() < this._settling) this.toEnd()
+    else this._place(was)
     this._end = at
-    const place = () => (this._list.contentOffset = { y })
-    place()
-    setTimeout(place, 50)
-    setTimeout(place, 250)
-
-    this._renderRoute(contact)
-    this._renderCount()
-    this._renderDetail(contact)
   }
 
-  // To the latest message, as when the keyboard opens and the list shrinks:
-  // the offset stays put, which would leave older messages in view.
+  // To the latest message, as on opening, or when the keyboard opens and the
+  // list shrinks: the offset stays put, which would leave older messages in
+  // view.
   toEnd(): void {
-    const end = () => (this._list.contentOffset = { y: Number.MAX_SAFE_INTEGER })
-    end()
-    setTimeout(end, 50)
-    setTimeout(end, 250)
+    this._settling = Date.now() + 400
+    this._place(Number.MAX_SAFE_INTEGER)
+  }
+
+  // The offset is clamped to the content as last laid out, which may not
+  // have the latest yet: placed again once the layout has caught up, and any
+  // placing still pending is dropped.
+  _place(y: number): void {
+    for (const timer of this._timers) clearTimeout(timer)
+    const place = () => (this._list.contentOffset = { y })
+    place()
+    this._timers = [setTimeout(place, 50), setTimeout(place, 250)]
   }
 
   // Tap a message for its details; tap it again, or close, to hide them.
