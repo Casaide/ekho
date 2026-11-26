@@ -125,7 +125,10 @@ translator.on('change', () => {
   if (translator.state === 'failed') log.error('translate:', translator.error)
   else log.info('translate: ' + translator.state)
 })
-if (translate) translator.start()
+// Android only for now: on the Mac, QVAC's runtime picks one architecture
+// for both halves of the universal build, so it's left out of it.
+const translates = Bare.platform === 'android'
+if (translates && translate) translator.start()
 // Ask for it: set where notifications exist, on Android.
 let askToNotify = () => {}
 // Open a link in the browser: set where an addon for it exists.
@@ -457,7 +460,7 @@ const ui = new Ui(
     // Preview images go in a cache folder: the image view reads files.
     // Previews are kept between sessions in a Hyperbee of their own, beside
     // the linking cores, with their pictures when small.
-    translator,
+    translator: translates ? translator : undefined,
     previews: new Previews(fetch, {
       kept: new KeptPreviews(linker.devices.store.get({ name: 'previews' })),
       async save(name: string, bytes: Uint8Array) {

@@ -121,7 +121,7 @@ A link to a sound or a video (by its extension: mp3, wav, ogg, opus, m4a, aac, f
 
 ## Translation
 
-Bulgarian messages can show in English, on the device. It's off until turned on in the radio tab; then Mozilla's Bulgarian→English model (Firefox Translations, Bergamot, MPL-2.0) is fetched once the way Firefox gets it, from Remote Settings and its CDN (`lib/bergamot.ts`), into the app's data folder, and run by QVAC's translation addon (`@qvac/translation-nmtcpp`), loaded only then. Nothing is built into the app, and no message leaves the device. QVAC's own TranslatePsy models are smaller and better but don't cover Bulgarian yet; one would load the same way.
+Bulgarian messages can show in English, on the device. It's off until turned on in the radio tab; then Mozilla's Bulgarian→English model (Firefox Translations, Bergamot, MPL-2.0) is fetched once the way Firefox gets it, from Remote Settings and its CDN (`lib/bergamot.ts`), into the app's data folder, and run by QVAC's translation addon (`@qvac/translation-nmtcpp`), loaded only then. Nothing is built into the app, and no message leaves the device. Android only for now: QVAC's runtime package picks its native library by the build machine's architecture, not each host's, so the universal macOS build defers the addon. Its GPU backends (Vulkan, OpenCL, RPC, about 88 MB) are removed before building (`scripts/qvac-hosts.sh`), since Bergamot runs on the CPU. QVAC's own TranslatePsy models are smaller and better but don't cover Bulgarian yet; one would load the same way.
 
 A received message that's mostly Cyrillic letters is translated (`lib/translator.ts`), once per session, and shows in English in place of the Bulgarian, marked "translated". The original is in its details, on hold.
 

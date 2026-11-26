@@ -20,6 +20,7 @@ npx bare-build app.ts \
   --host darwin-x64 \
   --runtime bare-native/runtime \
   --defer bare-navigation-android \
+  --defer @qvac/translation-nmtcpp \
   --defer bare-notifications-android \
   --defer bare-foreground-service-android \
   --defer bare-open-url-android \

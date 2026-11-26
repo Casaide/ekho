@@ -24,6 +24,4 @@ jobs:
       - name: Native addons
         run: sh scripts/build-addons.sh darwin
       - run: npm install
-      - name: QVAC for both Macs
-        run: sh scripts/qvac-hosts.sh darwin-arm64 darwin-x64
       - run: scripts/build-macos.sh
