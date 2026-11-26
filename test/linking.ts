@@ -53,13 +53,13 @@ test(
     phone.open()
     t.ok(phone.code, 'a code to type')
     await phone.devices.announced()
-    t.comment('code announced')
+    t.pass('code announced')
     await mac.join(phone.code!.replace('-', ''))
     t.equal(mac.error, null)
     t.ok(mac.linked, 'linked')
     t.deepStrictEqual(phone.state().devices, ['mac'])
 
-    t.comment('linked')
+    t.pass('linked')
     const mirrored = await until(() => macMessenger.contacts.byNick('georgi') !== null)
     t.ok(mirrored, 'the phone’s conversation reached the Mac')
 
