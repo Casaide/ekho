@@ -30,6 +30,7 @@ threads = {
         msg(ivan['id'], 'great, the hut has power now', 'lora', 'received', 42, hops=2),
         msg(ivan['id'], 'nice, solar finally in?', 'lora', 'delivered', 40),
         msg(ivan['id'], '200W panel and a 100Ah battery, relay runs all night', 'lora', 'received', 12, hops=1),
+        msg(ivan['id'], 'the app I use: https://github.com/Casaide/ekho', 'lora', 'delivered', 8),
         msg(ivan['id'], 'leaving at 9, see you at the hut', 'lora', 'failed', 3, reason='MAX_RETRANSMIT'),
     ],
     maria['id']: [
