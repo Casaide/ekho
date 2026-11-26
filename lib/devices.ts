@@ -223,6 +223,19 @@ export default class Devices extends EventEmitter {
     this.emit('change')
   }
 
+  // Asleep with the app, when nothing keeps it running in the background: an
+  // app the OS has paused mustn't hold sockets and storage open. Storage is
+  // let go first, as the OS may stop the app at any moment, then the network.
+  async suspend(): Promise<void> {
+    await this.store.suspend()
+    await this.swarm.suspend()
+  }
+
+  async resume(): Promise<void> {
+    await this.store.resume()
+    await this.swarm.resume()
+  }
+
   async destroy(): Promise<void> {
     this.close()
     await this.pairing.close()
