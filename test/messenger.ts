@@ -122,13 +122,30 @@ test('one thread per person, whichever path a message took', (t) => {
   )
 })
 
-test('IRC copies of channel traffic are skipped while LoRa is up', (t) => {
+test("while LoRa is up, only the bridge's copies of Meshtastic channel lines are skipped", (t) => {
   const { radio, stream, messenger } = setup()
 
   hearIvan(radio)
-  stream.serve(':georgi!u@host PRIVMSG #sofiamesh :new node up\r\n')
+  // Heard by our radio already: the IRC copy is skipped.
+  stream.serve(':Ivan|mt!u@host PRIVMSG #sofiamesh :new node up\r\n')
+  // Never on our radio: kept.
+  stream.serve(':georgi!u@host PRIVMSG #sofiamesh :from irc\r\n')
+  stream.serve(':sho|mc!u@host PRIVMSG #sofiamesh :from meshcore\r\n')
 
-  t.equal(messenger.thread(messenger.channel).length, 0)
+  t.deepStrictEqual(
+    messenger.thread(messenger.channel).map((m) => m.from + ': ' + m.text),
+    ['georgi: from irc', 'sho|mc: from meshcore']
+  )
+})
+
+test('an IRC-only channel keeps every line, even while LoRa is up', (t) => {
+  const { radio, stream, messenger } = setup()
+  messenger.addChannel('#varna')
+
+  hearIvan(radio)
+  stream.serve(':Ivan|mt!u@host PRIVMSG #varna :hello varna\r\n')
+
+  t.equal(messenger.thread(messenger.contacts.get('#varna')!).length, 1)
 })
 
 test('channel messages arrive over IRC when no nodes are heard', (t) => {

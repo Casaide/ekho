@@ -1,4 +1,5 @@
 import native from 'bare-native'
+import EventEmitter from 'bare-events'
 import type Messenger from '../messenger.ts'
 import type { Contact, Message } from '../types.ts'
 import Log from '../log.ts'
@@ -70,11 +71,13 @@ const COMPACT = 700
 // Wide enough for the contact beside the conversation.
 const THREE_PANES = 1100
 
+// Events: select (contact | null), when the open conversation changes.
+//
 // The whole app view, after the mockups. On a phone: one screen at a time,
 // with chats, contacts and radio as tabs, and conversation, contact, IRC setup
 // and the log on top of them. On a desktop: the tab's list on the left, the
 // open screen in the middle, and the contact on the right when there's room.
-export default class Ui {
+export default class Ui extends EventEmitter {
   messenger: Messenger
   actions: UiActions
   log: Log
@@ -128,6 +131,8 @@ export default class Ui {
       presence?: Presence
     } = {}
   ) {
+    super()
+
     this.messenger = messenger
     this.actions = actions
     this.log = opts.log ?? new Log()
@@ -273,6 +278,7 @@ export default class Ui {
 
   select(contact: Contact | null): void {
     this.selected = contact
+    this.emit('select', contact)
     if (contact === null) {
       this.page = this.tab
       this._history = []

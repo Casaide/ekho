@@ -90,7 +90,9 @@ function save() {
   timer = setTimeout(() => {
     timer = null
     try {
-      store.save({ messenger, irc: settings, wanted, onboarded, channels })
+      // The open conversation too, to reopen on start.
+      const open = ui.selected?.id ?? null
+      store.save({ messenger, irc: settings, wanted, onboarded, channels, open })
     } catch (err) {
       console.error('save:', (err as Error).message)
     }
@@ -184,7 +186,9 @@ function openIrc(detail: (text: string) => void): Promise<Irc> {
   })
 }
 
-const ircLink = new Link('irc', openIrc)
+// The first retry is immediate: a drop is most often found on coming back to
+// the app, when the server has given up on us meanwhile.
+const ircLink = new Link('irc', openIrc, { retry: [0, 5_000, 15_000, 60_000] })
 ircLink.on('change', () => {
   log.info('irc: ' + ircLink.state + (ircLink.detail ? ' · ' + ircLink.detail : ''))
   if (ircLink.state !== 'on') irc = null
@@ -257,17 +261,21 @@ function want(link: 'radio' | 'irc', on: boolean) {
   save()
 }
 
-// Android pauses the app when it leaves the screen, and its sockets with it.
-// Say goodbye to IRC properly rather than leave a session that holds the nick,
-// and log back in on return. The radio's Bluetooth link outlives a pause, and
-// the radio keeps what arrives meanwhile.
-Bare.on('suspend', () => {
-  log.info('app: paused')
-  ircLink.pause()
-})
+// Android pauses the app when it leaves the screen. IRC stays connected
+// through it: the system keeps the connection and buffers what the server
+// sends, so a short pause loses nothing, and motaba has no history to fetch
+// it back from. On return a PING checks the server is still there; if it gave
+// up on us meanwhile, IRC reconnects at once, reclaiming the nick. The radio's
+// Bluetooth link outlives a pause too, and the radio queues what arrives.
+Bare.on('suspend', () => log.info('app: paused'))
 Bare.on('resume', () => {
   log.info('app: back')
-  ircLink.resume()
+  if (irc === null) return
+  irc
+    .probe()
+    .then((alive) =>
+      log.info('irc: ' + (alive ? 'still connected' : 'gone while paused, reconnecting'))
+    )
 })
 Bare.on('exit', () => irc?.quit('closed'))
 
@@ -331,7 +339,10 @@ const ui = new Ui(
   }
 )
 
-const window = new Window(1100, 720)
+// `--size=390x844` opens the window at that size, for screenshots at phone
+// size on a desktop.
+const sized = Bare.argv.map((a) => /^--size=(\d+)x(\d+)$/.exec(a)).find((m) => m !== null)
+const window = sized ? new Window(Number(sized[1]), Number(sized[2])) : new Window(1100, 720)
 
 window.content(ui.root)
 window.show()
@@ -340,6 +351,11 @@ shownWindow = window
 
 ui.setWidth(window.size.width)
 window.on('resize', () => ui.setWidth(window.size.width))
+
+// Reopen the conversation that was open last time.
+ui.on('select', save)
+const reopen = onboarded && saved?.open ? messenger.contacts.get(saved.open) : null
+if (reopen) ui.select(reopen)
 
 // Bring back what was up last time.
 if (wanted.radio) radioLink.start()

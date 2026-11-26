@@ -356,3 +356,35 @@ test('back goes to the screen below, or to chats, and says when there is nowhere
   t.equal(ui.page, 'chats')
   t.notOk(ui.goBack(), 'from chats, Android may leave the app')
 })
+
+test('any emoji reacts to a received message, and the conversation can say which is open', (t) => {
+  const messenger = new Messenger()
+  const ui = new Ui(messenger, actions(), { compact: true })
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
+  t.teardown(() => window.hide())
+
+  const selected: unknown[] = []
+  ui.on('select', (contact: unknown) => selected.push(contact))
+
+  const radio = new FakeRadio()
+  messenger.setRadio(radio as never)
+  radio.emit('message', {
+    from: '!a1b2c3d4',
+    name: 'ivan',
+    text: 'hi',
+    snr: 1,
+    rssi: -90,
+    hops: 0,
+    direct: true
+  })
+  const ivan = messenger.contacts.byNode('!a1b2c3d4')!
+  ui.select(ivan)
+  t.deepStrictEqual(selected, [ivan])
+
+  const [received] = messenger.thread(ivan)
+  ui._thread._toggle(received)
+  ui._thread._act(() => messenger.react(received, '🔥'))
+  t.equal(radio.sent.at(-1)!.text, '🔥 re: "hi"')
+})

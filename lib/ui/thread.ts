@@ -14,6 +14,7 @@ import {
   link,
   press,
   clear,
+  detach,
   label,
   rule,
   ago,
@@ -41,6 +42,9 @@ const REASONS: Record<string, string> = {
 }
 
 const { Clipboard } = native
+
+// The reactions offered first; any other can be typed.
+const EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅', '👎', '📡']
 
 // What a state means, for the details of a message.
 function meaning(msg: Message): string {
@@ -70,6 +74,7 @@ export default class Thread {
   _count: any
   _detail: any
   _open: Message | null
+  _emoji: any
 
   constructor(ui: Ui) {
     this.ui = ui
@@ -83,6 +88,15 @@ export default class Thread {
     // A message's details, when one is tapped.
     this._detail = view({ display: 'none' })
     this._open = null
+    // Lives across redraws, so a message arriving doesn't wipe what's typed.
+    this._emoji = input('or type any emoji')
+    this._emoji.returnKeyType = 'send'
+    this._emoji.on('submit', () => {
+      const emoji = this._emoji.value.trim()
+      const msg = this._open
+      if (emoji === '' || msg === null) return
+      this._act(() => this.ui.messenger.react(msg, emoji))
+    })
 
     this._input = input('message')
     this._input.returnKeyType = 'send'
@@ -176,10 +190,12 @@ export default class Thread {
   // Tap a message for its details; tap it again, or close, to hide them.
   _toggle(msg: Message): void {
     this._open = this._open !== null && this._open.id === msg.id ? null : msg
+    this._emoji.value = ''
     this._renderDetail(this.ui.selected!)
   }
 
   _renderDetail(contact: Contact): void {
+    detach(this._emoji)
     clear(this._detail)
     const msg = this._open
     // Gone from this thread (another conversation, or joined away).
@@ -247,12 +263,20 @@ export default class Thread {
       }
     }
     if (msg.state === 'received') {
-      actions.push(
-        button('♥', () => this._act(() => this.ui.messenger.react(msg, '♥')), chip(colors.muted))
-      )
-      actions.push(
-        button('+1', () => this._act(() => this.ui.messenger.react(msg, '👍')), chip(colors.muted))
-      )
+      // Any emoji: the common ones a tap away, anything else typed. Sent as
+      // a short text until bare-meshtastic carries Meshtastic's reactions.
+      const picks = view({ flexDirection: 'row', flexWrap: 'wrap', gap: 6 })
+      for (const emoji of EMOJI) {
+        picks.appendChild(
+          button(emoji, () => this._act(() => this.ui.messenger.react(msg, emoji)), {
+            ...chip(colors.muted),
+            fontSize: 16
+          })
+        )
+      }
+      this._detail.appendChild(label('react'))
+      this._detail.appendChild(picks)
+      this._detail.appendChild(this._emoji)
     }
     actions.push(
       button('copy', () => this._act(() => Clipboard.setString(msg.text)), chip(colors.muted))

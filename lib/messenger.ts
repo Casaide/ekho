@@ -390,9 +390,12 @@ export default class Messenger extends EventEmitter {
   }
 
   _onirc(m: IrcMessage): void {
-    // The bridge mirrors mesh channel traffic onto IRC. While LoRa is up we
-    // already hear it there, so the IRC copy is skipped.
-    if (!m.direct && this.route() === 'lora') return
+    // The bridge mirrors Meshtastic channel traffic onto IRC as `Name|mt`.
+    // While LoRa is up our radio hears that itself, so the IRC copy is
+    // skipped, but only that: plain IRC users, MeshCore and Bitchat users never
+    // reach our radio, and a channel the radio doesn't have has no other way in.
+    const mirror = /\|mt$/i.test(m.from) && this.radioChannelOf(m.to) !== null
+    if (!m.direct && mirror && this.route() === 'lora') return
 
     const contact = m.direct
       ? (this.contacts.byNick(m.from) ?? this.contacts.add({ nick: m.from }))

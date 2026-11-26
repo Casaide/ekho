@@ -107,6 +107,26 @@ export default class Irc extends EventEmitter {
     this._listen()
   }
 
+  // Is the server still there? A PING, answered by any line within
+  // `timeout`. Lines buffered while the app was paused count. No answer:
+  // the stream is destroyed, so the connection closes and can be replaced.
+  probe(timeout = 5000): Promise<boolean> {
+    return new Promise((resolve) => {
+      const done = (alive: boolean) => {
+        clearTimeout(timer)
+        this.off('line', answered)
+        resolve(alive)
+      }
+      const answered = () => done(true)
+      const timer = setTimeout(() => {
+        done(false)
+        this.stream.destroy(new Error('the server stopped answering'))
+      }, timeout)
+      this.on('line', answered)
+      this._send('PING :ekho')
+    })
+  }
+
   // Say goodbye and close, as the Link connection interface asks.
   close(): void {
     this.quit()

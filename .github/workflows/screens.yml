@@ -1,0 +1,71 @@
+name: Screens
+# README screenshots, from the real macOS app with demo data
+# (scripts/demo-state.py), at phone and desktop sizes. Each is cropped to the
+# app and printed to the log as base64 between markers, so it can be read
+# back without artifact storage.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  screens:
+    runs-on: macos-latest
+    name: Screenshots
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          package-manager-cache: false
+          node-version: 22
+      - run: npm install
+      - run: scripts/build-macos.sh
+      - run: python3 -m pip install --quiet --break-system-packages pillow
+      - name: Capture
+        run: |
+          mkdir -p shots ~/.ekho
+          app=$(find build/macos -maxdepth 2 -name '*.app' | head -1)
+          shot() {
+            name=$1; size=$2; shift 2
+            python3 scripts/demo-state.py "$@" > ~/.ekho/state.json
+            "$app/Contents/MacOS/ekho" --size=$size > "shots/$name.log" 2>&1 &
+            pid=$!
+            sleep 10
+            screencapture -x "shots/$name.png"
+            kill $pid || true
+            wait $pid 2>/dev/null || true
+            echo "== $name"; tail -5 "shots/$name.log"
+          }
+          shot phone-chats 390x844
+          shot phone-thread 390x844 '!a7c3e91f'
+          shot phone-onboarding 390x844 --first-run
+          shot desktop 1240x780 '!a7c3e91f'
+          ls -la shots
+      - name: Crop and print
+        run: |
+          python3 - <<'PY'
+          import base64, glob, io, os
+          from PIL import Image
+          ground = (10, 13, 12)
+          for path in sorted(glob.glob('shots/*.png')):
+              img = Image.open(path).convert('RGB')
+              w, h = img.size
+              px = img.load()
+              near = lambda p: all(abs(a - b) <= 6 for a, b in zip(p, ground))
+              # The app is the region filled with its ground colour.
+              rows = [y for y in range(0, h, 2) if sum(near(px[x, y]) for x in range(0, w, 8)) > 20]
+              cols = [x for x in range(0, w, 2) if sum(near(px[x, y]) for y in range(0, h, 8)) > 20]
+              box = (min(cols), min(rows), max(cols) + 2, max(rows) + 2) if rows and cols else (0, 0, w, h)
+              out = img.crop(box)
+              buf = io.BytesIO()
+              out.save(buf, 'PNG', optimize=True)
+              name = os.path.basename(path)
+              print('::group::' + name, out.size, box)
+              print('BEGIN ' + name)
+              data = base64.b64encode(buf.getvalue()).decode()
+              for i in range(0, len(data), 4000):
+                  print(data[i:i + 4000])
+              print('END ' + name)
+              print('::endgroup::')
+          PY

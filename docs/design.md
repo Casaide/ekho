@@ -83,7 +83,7 @@ That's the whole rule. A failed LoRa message is never moved to IRC automatically
 
 Channel messages stop at sent, as channels have no per-person acknowledgement. IRC messages are sent with no receipt.
 
-**Duplicates:** no dedupe. Meshtastic devices dedupe by packet ID, and duplicates haven't been a problem in practice. The one exception: while LoRa is the route, IRC copies of mesh channel traffic are skipped, because the bridge mirrors what the radio already heard.
+**Duplicates:** no dedupe. Meshtastic devices dedupe by packet ID, and duplicates haven't been a problem in practice. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are skipped, because the radio hears those itself. Plain IRC users, MeshCore and Bitchat users, and IRC-only channels are always kept: none of those reach the radio.
 
 **Offline:** with no nodes heard and no internet, messages wait on the phone and go out on whichever path returns first.
 
@@ -107,6 +107,22 @@ Principles:
 4. **Show the path.** Every message says how it travelled.
 
 Out: MQTT (including the client proxy), a hub, a second radio, MeshCore, Nostr, and groups beyond existing Meshtastic and IRC channels.
+
+## First P2P step: your devices share one history (decided, not started)
+
+Phone and laptop can't both hold the T1000-E, and motaba has no IRC history, so whatever one device sees the other misses. The first P2P piece syncs one person's own devices: the laptop records IRC while the phone sleeps, and the phone's LoRa traffic shows on the laptop.
+
+**One Hyperbee 2 per device, never a shared key.** Each device writes only to its own bee. Two devices writing to one core would fork it, and Hypercore peers reject a forked core, so handing a key between devices only works if exactly one writes at a time, which nothing guarantees.
+
+- **A new device catches up with `move`.** Open another device's bee by key, then `db.move({ key: ownCore })`: the tree continues on the new device's own core, the earlier entries stay where they are and are read from there, lazily.
+- **Devices converge by diffing.** bee2 doesn't merge, so each device runs `createDiffStream(other)` against the other devices' bees and writes in what it's missing. Keys are laid out so that merging is mechanical:
+  - `msg/<contact>/<time>/<id>`: messages never change, so merging is a union;
+  - `contact/<id>`, `read/<contact>`, `channels`: small values with `updatedAt`, newest wins;
+  - joins and removals as tombstones, so a merge doesn't bring back what was merged away.
+- **Private:** each core is encrypted (bee2 takes an encryption provider per core), and devices find each other on a topic derived from a pairing secret, shared by QR. Nothing usable in the clear.
+- **Only while both are online.** A blind peer holding the encrypted cores fills the gaps later; the same piece mirrors for others (option B).
+
+Autobee per identity was considered: one agreed view of shared state is the proper tool if that state grows. It costs pairing writers, indexers and handling lost devices, which ekho's few mutable values (aliases, joins, read markers) don't need yet. Per-device bees move to it naturally: they become its inputs.
 
 ## First P2P feature: big files between ekho users
 

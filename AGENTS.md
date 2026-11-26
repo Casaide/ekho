@@ -43,7 +43,7 @@ Don't relitigate these without the user.
 1. **Routing rule:** any node heard in the window (default 15 min), send over LoRa; none heard, send over IRC. That is the whole rule (`Messenger.route()`).
 2. **Never send both ways at once.** The bridge already mirrors one path onto the other, so both would arrive twice on stock clients.
 3. **No automatic fallback on failure.** A failed LoRa message shows "retry on lora" and "send via irc"; the user decides.
-4. **No dedupe.** The user has not seen duplicates in practice; Meshtastic devices dedupe by packet ID themselves. The one exception: IRC copies of mesh channel traffic are dropped while LoRa is the route, since they are mirrors of what the radio already heard.
+4. **No dedupe.** The user has not seen duplicates in practice; Meshtastic devices dedupe by packet ID themselves. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are dropped, since the radio hears those itself. Everything else on IRC is kept: plain IRC users, MeshCore and Bitchat users, and IRC-only channels never reach the radio (an earlier, broader rule hid them all).
 5. **Reactions over IRC go as a new text message.** No other option exists on IRC.
 6. **The T1000-E pairs with one device at a time,** so ekho replaces the Meshtastic app on the phone.
 7. **"Heard" means any packet** (message, position, telemetry), not node info, which radios broadcast only every 3 hours by default.
@@ -72,6 +72,7 @@ Don't relitigate these without the user.
 
 - **Conventional Commits** for commit messages (`feat(irc): ...`, `fix(ci): ...`, `docs: ...`) and branch names (`feat/contacts-ui`, `fix/ble-reconnect`).
 - **Dependencies match npm.** Take versions from `npm view <name> version`, never from a clone or memory, and declare peer dependencies of what we use (bare-meshtastic needs `bare-logger`). The APK workflow prints each declared range next to the latest published version.
+- **Android back** comes from `bare-navigation-android` (Holepunch's): it needs minSdk 33 and `enableOnBackInvokedCallback` in the manifest, and it's Android only, so `app.ts` imports it only there and the macOS build defers it. `Ui.goBack()` decides; false lets Android leave the app.
 - **Releases are automatic:** every merge to `main` runs `.github/workflows/release.yml`, which works out the next version from the commits, builds the APK and publishes a GitHub release. Don't tag by hand.
 - **Watch every workflow** after a push (Integrate and APK), not just the one you changed.
 - **TypeScript, erasable syntax only.** Bare strips types natively and rejects anything that isn't erasable (enums, namespaces, parameter properties). No `private` keyword either; use the `_name` convention. `tsconfig.json` sets `erasableSyntaxOnly`.
@@ -115,7 +116,7 @@ Roughly in order:
    - whether a received packet was encrypted per contact (so a shared mailbox address can't be spoofed);
    - the channel a packet arrived on (MeshPacket field 3): without it, every LoRa channel message lands in the mesh channel;
    - `last_heard` and `device_metrics` in the node list (NodeInfo fields 5 and 6): battery, channel use, and who was heard before ekho connected.
-6. **Android back gesture** (upstream, in bare-ndk): the back gesture closes the activity, which ends the app (`System.exit`). It should reach the app as an event, so back goes from a conversation to the list.
+6. **Running in the background** (upstream, in bare-ndk): its Activity suspends Bare on every pause, so nothing arrives while ekho is off screen (the T1000-E queues LoRa packets until it's back; IRC is closed). Needs a foreground service that keeps Bare running.
 7. **Reactions:** over LoRa once bare-meshtastic supports them; over IRC as a short text message.
 
 ## Phase 2: big files over P2P (decided, not started)
