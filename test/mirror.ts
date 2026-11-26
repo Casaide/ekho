@@ -172,3 +172,56 @@ test('a linked device that missed the whole state asks for it, and gets every co
   )
   t.ok(messenger.contacts.byNick('georgi') !== null && late.contacts.byNick('georgi') !== null)
 })
+
+function around(irc: Record<string, string[]>) {
+  return {
+    radioChannels: [{ index: 3, name: 'Bulgaria', role: 2 }],
+    server: [{ name: '#sofia', users: 41, topic: '' }],
+    self: { node: '!0e8666a6', nick: 'dom' },
+    nodes: [{ id: '!a7c3e91f', longName: 'Ivan', shortName: 'IV' }],
+    heard: { '!a7c3e91f': 1_700_000_000_000 },
+    irc
+  }
+}
+
+test('a linked device sees the phone’s channels, people and nodes', async (t) => {
+  const { hub, mac, mirror } = await linked()
+  const seen: unknown[] = []
+  mirror.on('around', (value: unknown) => seen.push(value))
+
+  hub.around(around({ '#bulgaria': ['dom', 'Ivan|mt', 'mirco'] }))
+  await settle()
+
+  t.deepStrictEqual(seen, [around({ '#bulgaria': ['dom', 'Ivan|mt', 'mirco'] })])
+  t.equal(mac.radioChannelOf('#bulgaria'), 3, 'the phone’s radio channel')
+  hub.close()
+})
+
+test('what the phone sees is written once while unchanged, and at most once a while', async (t) => {
+  const { hub, feed } = await linked()
+  const at = feed.length
+
+  hub.around(around({ '#bulgaria': ['dom'] }))
+  hub.around(around({ '#bulgaria': ['dom'] }))
+  hub.around(around({ '#bulgaria': ['dom', 'maria'] }))
+  await settle()
+  t.equal(feed.length, at + 1, 'the change waits its turn')
+
+  hub.close()
+})
+
+test('a linked device joins and leaves channels through the phone', async (t) => {
+  const { hub, outbox } = await linked()
+  const asked: [string, boolean][] = []
+  hub.on('channel', (name: string, join: boolean) => asked.push([name, join]))
+
+  await outbox.append({ type: 'channel', name: '#sofia', join: true })
+  await outbox.append({ type: 'channel', name: 'sofia', join: true } as never)
+  await outbox.append({ type: 'channel', name: '#varna', join: false })
+  await settle()
+
+  t.deepStrictEqual(asked, [
+    ['#sofia', true],
+    ['#varna', false]
+  ])
+})

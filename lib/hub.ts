@@ -3,10 +3,21 @@ import type Messenger from './messenger.ts'
 import type { Status } from './messenger.ts'
 import type { Command, Contact, Message } from './types.ts'
 import type { Log } from './mirror.ts'
+import type { Seen } from './presence.ts'
 
 // The feed's format: entries carry it, so a device reading a feed from a
 // newer ekho stops instead of guessing at what it doesn't know.
-export const FORMAT = 1
+// 2 added `around`, which a device reading format 1 would take for a status.
+export const FORMAT = 2
+
+// What the phone sees around it, beyond the conversations: its radio's
+// channels, the server's channel list, who it is, the nodes it knows with
+// when each was last heard, and who's in each IRC channel.
+export interface Around extends Seen {
+  radioChannels: { index: number; name: string | null; role: number }[]
+  server: { name: string; users: number; topic: string }[] | null
+  heard: Record<string, number>
+}
 
 // What goes in the feed, in order: the whole state first, then each change.
 // Each carries the next message number, so numbering carries on from the
@@ -17,6 +28,7 @@ export type Entry = { format?: number; next?: number } & (
   | { type: 'update'; msg: Message }
   | { type: 'contacts'; contacts: Contact[] }
   | { type: 'status'; status: Status }
+  | { type: 'around'; around: Around }
 )
 
 // On the device holding the radio and IRC: everything the Messenger does goes
@@ -24,10 +36,14 @@ export type Entry = { format?: number; next?: number } & (
 // outbox of their own each, is done here. Each message gets a number, its
 // `ref`, by which both sides name it.
 //
-// Events: done (key, index), once a device's outbox has been read that far.
+// Events: done (key, index), once a device's outbox has been read that far;
+// channel (name, join), when a linked device joins or leaves an IRC channel.
 export default class Hub extends EventEmitter {
   messenger: Messenger
   feed: Log<Entry>
+  // At most one `around` per this many milliseconds: IRC joins and parts in
+  // a busy channel would otherwise fill the feed.
+  every: number
 
   _next: number
   // The linked device's own number for the message being sent for it.
@@ -35,16 +51,25 @@ export default class Hub extends EventEmitter {
   _status: string
   _tail: Promise<unknown>
   _listeners: [string, (...args: any[]) => void][]
+  _around: Around | null
+  _aroundJson: string
+  _aroundAt: number
+  _aroundTimer: ReturnType<typeof setTimeout> | null
 
-  constructor(messenger: Messenger, feed: Log<Entry>) {
+  constructor(messenger: Messenger, feed: Log<Entry>, opts: { every?: number } = {}) {
     super()
     this.messenger = messenger
     this.feed = feed
+    this.every = opts.every ?? 15_000
 
     this._next = 1
     this._local = null
     this._status = ''
     this._tail = Promise.resolve()
+    this._around = null
+    this._aroundJson = ''
+    this._aroundAt = 0
+    this._aroundTimer = null
 
     this._listeners = [
       [
@@ -75,6 +100,20 @@ export default class Hub extends EventEmitter {
   // Stop writing the feed: this device is linking to another instead.
   close(): void {
     for (const [name, fn] of this._listeners) this.messenger.off(name, fn)
+    if (this._aroundTimer !== null) clearTimeout(this._aroundTimer)
+  }
+
+  // What's around changed: written now, or once `every` has passed since the
+  // last, and only if it differs from what was written.
+  around(value: Around): void {
+    this._around = value
+    if (this._aroundTimer !== null) return
+    const wait = this._aroundAt + this.every - Date.now()
+    if (wait <= 0) return this._appendAround()
+    this._aroundTimer = setTimeout(() => {
+      this._aroundTimer = null
+      this._appendAround()
+    }, wait)
   }
 
   // Number what isn't yet, and start the feed with the whole state if it's
@@ -105,6 +144,7 @@ export default class Hub extends EventEmitter {
     const status = this.messenger.status()
     this._status = JSON.stringify(status)
     this._append({ type: 'state', state: this.messenger.toJSON(), status })
+    if (this._around !== null) this._append({ type: 'around', around: this._around })
   }
 
   flushed(): Promise<unknown> {
@@ -134,6 +174,10 @@ export default class Hub extends EventEmitter {
   run(command: Command): void {
     if (!valid(command)) return
     if (command.type === 'state') return this.snapshot()
+    if (command.type === 'channel') {
+      this.emit('channel', command.name, command.join)
+      return
+    }
     const { messenger } = this
     if (command.type === 'send') {
       const contact = messenger.contacts.get(command.contact)
@@ -169,6 +213,14 @@ export default class Hub extends EventEmitter {
     this._append({ type: 'status', status })
   }
 
+  _appendAround(): void {
+    const json = JSON.stringify(this._around)
+    if (json === this._aroundJson) return
+    this._aroundJson = json
+    this._aroundAt = Date.now()
+    this._append({ type: 'around', around: this._around! })
+  }
+
   // In order: each append waits for the one before.
   _append(entry: Entry): void {
     entry.format = FORMAT
@@ -189,5 +241,12 @@ function valid(command: any): boolean {
   }
   if (command?.type === 'retry' || command?.type === 'irc') return Number.isInteger(command.ref)
   if (command?.type === 'state') return true
+  if (command?.type === 'channel') {
+    return (
+      typeof command.name === 'string' &&
+      /^#[^\s,]{1,49}$/.test(command.name) &&
+      typeof command.join === 'boolean'
+    )
+  }
   return false
 }

@@ -18,6 +18,12 @@ export interface Person {
   nicks: { nick: string; network: Network; channels: string[] }[]
 }
 
+export interface Seen {
+  self: { node: string | null; nick: string | null }
+  nodes: Node[]
+  irc: Record<string, string[]>
+}
+
 // motaba shows mesh users on IRC with a suffix for their network.
 const SUFFIX: Record<string, Network> = { mt: 'meshtastic', mc: 'meshcore', bc: 'bitchat' }
 
@@ -78,6 +84,22 @@ export default class Presence extends EventEmitter {
     for (const members of this._channels.values()) {
       if (members.delete(from)) members.add(to)
     }
+    this.emit('change')
+  }
+
+  // Who we are, the nodes known, and who's in each IRC channel: for a
+  // linked device.
+  toJSON(): Seen {
+    const irc: Record<string, string[]> = {}
+    for (const [channel, members] of this._channels) irc[channel] = [...members]
+    return { self: { ...this.self }, nodes: [...this._nodes.values()], irc }
+  }
+
+  // Everything from another device's toJSON, in place of what was known.
+  load(value: Seen): void {
+    this.self = { ...value.self }
+    this._nodes = new Map(value.nodes.map((n) => [n.id, n]))
+    this._channels = new Map(Object.entries(value.irc).map(([c, nicks]) => [c, new Set(nicks)]))
     this.emit('change')
   }
 

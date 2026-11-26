@@ -2,6 +2,7 @@ import EventEmitter from 'bare-events'
 import Devices from './devices.ts'
 import type { Device, Saved } from './devices.ts'
 import Hub from './hub.ts'
+import type { Around } from './hub.ts'
 import Mirror from './mirror.ts'
 import type Messenger from './messenger.ts'
 import type { LinkState } from './ui/linking.ts'
@@ -11,7 +12,9 @@ import type { LinkState } from './ui/linking.ts'
 // or linked, mirroring a hub's feed.
 //
 // Events: change, when the state shown or what's saved changed; role (role),
-// when this device becomes linked or stops being.
+// when this device becomes linked or stops being; around (around), as linked,
+// with what the hub sees; channel (name, join), as the hub, when a linked
+// device joins or leaves an IRC channel.
 export default class Linker extends EventEmitter {
   messenger: Messenger
   devices: Devices
@@ -142,6 +145,7 @@ export default class Linker extends EventEmitter {
       device.done = done
       this.emit('change')
     })
+    hub.on('channel', (name: string, join: boolean) => this.emit('channel', name, join))
     await hub.ready()
     for (const device of this.devices.saved.devices) await this._follow(device)
   }
@@ -175,6 +179,7 @@ export default class Linker extends EventEmitter {
       link.synced = true
       this.emit('change')
     })
+    mirror.on('around', (around: Around) => this.emit('around', around))
     mirror.on('applied', (applied: number) => {
       link.applied = applied
       this.emit('change')
