@@ -20,6 +20,8 @@
   <img src="docs/screenshots/phone-chats.png" width="250" alt="Your conversations">
   &nbsp;
   <img src="docs/screenshots/phone-thread.png" width="250" alt="A conversation with Ivan: a link preview and a voice note">
+  &nbsp;
+  <img src="docs/screenshots/phone-translate.png" width="250" alt="A Bulgarian channel shown in English, with a message sent in Bulgarian">
 </p>
 
 ## What it does
@@ -32,7 +34,7 @@ ekho is a messenger for people with a Meshtastic radio, such as the Seeed T1000-
 - **Channels too.** `#bulgaria` and the regional channels (`#sofia`, `#varna`, `#burgas` and more) are a tap away. Channels your radio also has are marked as reaching the mesh; the rest are internet only.
 - **See who's around.** The contacts tab shows everyone heard on the radio and everyone online in your channels, one entry per person.
 - **Links come alive.** Pages show a preview with their picture, and a link to a sound or video plays right in the conversation: send a voice note as a link to the recording.
-- **Bulgarian in English, if you like.** Turn on translation in the radio tab and Bulgarian messages show in English, translated on your phone. The model (Mozilla's, from Firefox Translations) downloads once; the original is a hold away.
+- **Bulgarian in English, if you like.** Turn on translation in the radio tab and messages with Bulgarian in them show in English, translated on your phone; hold one to see the original, or to translate any other. Switch on `→ bg` above the message box to write in English and send in Bulgarian, with the Bulgarian shown before it goes. The models (Mozilla's, from Firefox Translations) download once. Android only for now.
 - **You decide on failures.** If a radio message isn't delivered, ekho never resends it behind your back. Tap it to try the radio again or send it over the internet instead.
 
 <p align="center">
