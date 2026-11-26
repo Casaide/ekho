@@ -4,9 +4,6 @@ name: Screens
 # app and printed to the log as base64 between markers, so it can be read
 # back without artifact storage.
 on:
-  push:
-    branches:
-      - feat/readme
   workflow_dispatch:
 permissions:
   contents: read
