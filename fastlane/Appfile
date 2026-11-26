@@ -1,0 +1,4 @@
+package_name("casa.cassidy.ekho")
+# The Play service account key. CI writes it here from the
+# PLAY_SERVICE_ACCOUNT_JSON secret; locally, point PLAY_JSON_KEY at your copy.
+json_key_file(ENV.fetch("PLAY_JSON_KEY", "fastlane/play-service-account.json"))

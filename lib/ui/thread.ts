@@ -15,6 +15,7 @@ import {
   primary,
   link,
   press,
+  font,
   clear,
   detach,
   label,
@@ -80,6 +81,10 @@ export default class Thread {
   _route: any
   _input: any
   _count: any
+  // The box around the message input, lit while typing, and how many
+  // characters fit on one of its lines.
+  _box: any
+  _perLine: number
   _detail: any
   _open: Message | null
   // The message being answered, and the line saying so above the box.
@@ -128,15 +133,52 @@ export default class Thread {
       this._act(() => this.ui.messenger.react(msg, emoji))
     })
 
-    this._input = input('message')
+    // On a phone the box grows as the message does, up to a few lines; on a
+    // desktop it's one line, Return sending.
+    const phone = Bare.platform === 'android' || Bare.platform === 'ios'
+    this._input = input('message', { multiline: phone })
     // A message, unlike a nick or a code: the keyboard's suggestions and
     // capitals help.
     this._input.autoCorrect = true
     this._input.autoCapitalize = 'sentences'
     this._input.returnKeyType = 'send'
-    this._input.style = { color: colors.text, fontSize: 13, flex: 1, padding: 8 }
+    // The box is lit instead, all of it, not just the text inside.
+    this._input.focusRing = false
+    this._perLine = 0
     this._input.on('submit', () => this._send())
-    this._input.on('change', () => this._renderCount())
+    this._input.on('change', (value: string) => {
+      // A message is one line: Return sends, on a phone too.
+      if (value.includes('\n')) {
+        this._input.value = value.replace(/\n/g, ' ')
+        return this._send()
+      }
+      this._renderCount()
+      this._grow()
+    })
+    this._input.on('layout', (frame: { width: number }) => {
+      const perLine = Math.max(1, Math.floor((frame.width - 2 * INPUT_PAD) / (INPUT_SIZE * 0.6)))
+      if (perLine === this._perLine) return
+      this._perLine = perLine
+      this._grow()
+    })
+    this._box = view(
+      {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 8,
+        backgroundColor: colors.panel,
+        paddingLeft: 12
+      },
+      [text('>', { color: colors.accent, fontSize: 15 }), this._input]
+    )
+    const lit = (on: boolean) =>
+      (this._box.style = { ...this._box.style, borderColor: on ? colors.accent : colors.line })
+    this._input.on('focus', () => lit(true))
+    this._input.on('blur', () => lit(false))
+    this._grow()
 
     this.root = view({ flex: 1 }, [
       view(
@@ -167,24 +209,22 @@ export default class Thread {
         view(
           {
             flexDirection: 'row',
-            alignItems: 'center',
+            alignItems: 'flex-end',
             gap: 8,
-            paddingBottom: 10
+            paddingBottom: 14
           },
           [
-            view(
-              {
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                borderWidth: 1,
-                borderColor: colors.line,
-                borderRadius: 6,
-                paddingLeft: 10
-              },
-              [text('>', { color: colors.accent, fontSize: 14 }), this._input]
-            ),
-            button('send', () => this._send(), primary())
+            // A tap anywhere on the box, the `>` too, is a tap on the input.
+            press(this._box, () => this._input.focus()),
+            button('send', () => this._send(), {
+              ...primary(),
+              fontSize: 14,
+              alignSelf: 'flex-end',
+              justifyContent: 'center',
+              minHeight: INPUT_LINE + 2 * INPUT_PAD + 2,
+              paddingHorizontal: 16,
+              borderRadius: 8
+            })
           ]
         )
       ])
@@ -474,7 +514,7 @@ export default class Thread {
     if (split.length === 1 && split[0].url === null) return text(value, style)
     const body = text('', style)
     for (const part of split) {
-      const fragment = new TextFragment(part.text)
+      const fragment = new TextFragment(part.url === null ? part.text : breakable(part.text))
       if (part.url !== null) {
         fragment.style = { color: colors.accent, textDecorationLine: 'underline' }
       }
@@ -707,6 +747,25 @@ export default class Thread {
     this._count.style = { color: used > limit ? colors.failed : colors.muted, fontSize: 11 }
   }
 
+  // As tall as the message needs, from one line up to MAX_LINES, by how
+  // many characters of the monospace font fit across.
+  _grow(): void {
+    const value = this._input.value
+    const lines =
+      this._perLine === 0 || !this._input.multiline
+        ? 1
+        : Math.min(MAX_LINES, Math.max(1, Math.ceil(value.length / this._perLine)))
+    this._input.style = {
+      fontFamily: font,
+      color: colors.text,
+      fontSize: INPUT_SIZE,
+      flex: 1,
+      paddingHorizontal: INPUT_PAD,
+      paddingVertical: INPUT_PAD,
+      height: lines * INPUT_LINE + 2 * INPUT_PAD
+    }
+  }
+
   _send(): void {
     const value = this._input.value.trim()
     const contact = this.ui.selected
@@ -722,6 +781,21 @@ export default class Thread {
     this._renderCount()
   }
 }
+
+// A link with places to wrap: after each `/`, `.`, `-` and the like, and
+// within a long run of letters. bare-native measures a run too long for the
+// line as if it fit, while the platform breaks it anywhere, so the text was
+// drawn a line taller than its box and ran into the card below it.
+function breakable(url: string): string {
+  return url.replace(/[/.\-_?&=#]+/g, '$&\u200b').replace(/[^\u200b]{16}(?=[^\u200b])/g, '$&\u200b')
+}
+
+// The message input: its font size, the height of one of its lines, its
+// padding, and the most lines it grows to before scrolling.
+const INPUT_SIZE = 15
+const INPUT_LINE = 21
+const INPUT_PAD = 11
+const MAX_LINES = 4
 
 // bare-native 0.3.8's image view on macOS and iOS doesn't record its own
 // size, so a picture filling it is drawn at no size, leaving a blank box.

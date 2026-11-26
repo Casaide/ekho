@@ -219,6 +219,27 @@ base64 -w0 release.keystore   # the value of ANDROID_KEYSTORE
 
 Keep the keystore safe: Android only installs updates signed with the same key, so switching keys means uninstalling once.
 
+### Releasing to testers (Google Play internal testing)
+
+Each release can also go to Google Play's internal testing track: up to 100 testers you name by email, no review, on their phones within minutes. The release workflow builds an app bundle (`bare-build --package`), signs it with the upload key, and sends it with fastlane (`fastlane/Fastfile`), as Чети does. The version code comes from the release's version (`major * 1000000 + minor * 1000 + patch`), so each release is higher than the last.
+
+Once:
+
+1. Make the upload key, outside the repository, with a password you choose:
+   `keytool -genkeypair -v -keystore ~/Keys/ekho-upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload`.
+   Back it up with its password. Play App Signing holds the key that signs what testers install; a lost upload key can be reset through Play support.
+2. Add two repository secrets:
+   - `ANDROID_UPLOAD_KEYSTORE_BASE64`: `base64 -i ~/Keys/ekho-upload.jks | pbcopy`
+   - `ANDROID_UPLOAD_KEYSTORE_PASSWORD`: its password
+
+   From then on, each release has a signed `ekho-v….aab` beside the APK.
+
+3. In the Play Console, create the app, set up Testing › Internal testing with your testers' emails (or a Google Group), and upload that `.aab` by hand to an internal testing release. Play's API can't make an app's very first release, and the package name, `casa.cassidy.ekho`, comes with this first upload. Copy the opt-in link for testers.
+4. Give Чети's service account (or a new one with the Google Play Android Developer API enabled) access to ekho in Play Console › Users and permissions, with permission to release to testing tracks. Add its JSON key as the secret `PLAY_SERVICE_ACCOUNT_JSON`.
+5. While the app is still a draft on Play (its setup isn't finished), uploads must be drafts too: set the repository variable `PLAY_RELEASE_STATUS` to `draft`, and delete it once the app is set up.
+
+Then every release goes to internal testing by itself. The APK on GitHub and the app from Play are signed with different keys, so a phone can't update one with the other: uninstall to switch.
+
 ## License
 
 Apache-2.0

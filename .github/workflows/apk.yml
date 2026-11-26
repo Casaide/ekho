@@ -60,3 +60,21 @@ jobs:
           name: ekho-apk
           path: build/*.apk
           if-no-files-found: error
+      # The app bundle Google Play takes (unsigned here: releases sign it), so
+      # a change that breaks it shows before a release.
+      - name: App bundle
+        run: >
+          npx bare-build app.ts
+          --package
+          --host android-arm64
+          --runtime bare-native/runtime
+          --name ekho
+          --identifier casa.cassidy.ekho
+          --android-manifest android/AndroidManifest.xml
+          --resources android/res
+          --minimum-version 33
+          --defer bare-notifications-darwin
+          --defer bare-open-url-darwin
+          --out bundle
+      - name: What's inside the bundle
+        run: unzip -l bundle/ekho.aab | grep -E 'AndroidManifest|\.so$|\.dex$|resources.pb'
