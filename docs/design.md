@@ -53,6 +53,7 @@ LoRa first, every time it can reach; IRC only when it can't. The path is shown o
 
 1. Any node heard in the last few minutes: send over LoRa.
 2. No nodes heard: send over IRC, which the bridge carries into the mesh.
+3. For one person, LoRa only if the radio knows their node (heard this session, or in its node list); otherwise IRC if they have a nick. The radio can't reach a node it has never heard of, so trying would only fail after its retries. With no nick either, the message fails at once.
 
 That's the whole rule. A failed LoRa message is never moved to IRC automatically; it offers **retry on LoRa** and **send via IRC**, and you decide. Never send both ways at once: the bridge mirrors one path onto the other, so both would arrive twice on stock clients.
 
@@ -117,6 +118,8 @@ Previews are fetched once and kept (`lib/previews.ts`): in memory for the sessio
 
 Two sites preview from elsewhere than the page: a picture on GitHub (`github.com/…/blob/….png`) from its raw file, so it shows as the picture rather than GitHub's card for the repository; and a YouTube video from its oEmbed (title, channel, thumbnail), since in the EU its page is a cookie consent page.
 
+A preview card keeps its place while it's fetched: a page's card is always the same height, and a picture's box the same size, shown empty until they arrive, so the conversation doesn't jump. A link with nothing to show shrinks to a chip.
+
 A link sits on lines of its own in the message, broken by ekho to fit the width (after a `/`, `.` or the like when one is near). Android wrapped a long link differently from how bare-native measured it, so the text ran a line past its box into the card below. A tap on a message with a link opens the link; holding it opens its details and actions.
 
 A link to a sound or a video (by its extension: mp3, wav, ogg, opus, m4a, aac, flac; mp4, m4v, webm, mov) gets a card to play it in place instead, with no fetch until tapped. The player is a web view holding an `<audio>` or `<video>` element, so each platform plays what its browser does, with no audio code of ours. It keeps playing while messages arrive, stops on ■ or on leaving the conversation, and ↗ opens it in the browser. This is the first step toward voice notes: a link to a recording, wherever it's hosted.
@@ -127,7 +130,9 @@ Bulgarian messages can show in English, on the device. It's off until turned on 
 
 A received message with some Bulgarian in it (a Cyrillic word of two letters or more, or two of any length) is translated by itself (`lib/translator.ts`), once per session, and shows in English in place of the Bulgarian, marked "translated". People mix English and Bulgarian, in either alphabet, so any received message can be translated from its details, on hold, where the original is too, and a translated one can be shown as written again. Bulgarian typed in Latin letters ("kvo gotvite") is spelled in Cyrillic first, since the model reads Cyrillic: the official transliteration backwards plus chat habits (4 for ч, 6 for ш, w for в, q for я). It's rough, so only messages you ask for go through it.
 
-What you write can go out in Bulgarian: the `→ bg` switch above the box (Mozilla's English→Bulgarian model, a second download when first switched on) shows the Bulgarian above the box as you type, turns the send button amber as "bg ➤", and sends the Bulgarian once it's shown. The byte counter counts the Bulgarian, which takes two bytes a letter.
+Translating runs on a path of its own, apart from drawing: showing a message only reads translations already made. What's translated is what's asked: new messages and the latest 30 of a conversation as it's opened or as one arrives, newest first, eight at a time with a short pause between, at most 60 waiting (older asks are dropped). Older messages translate on hold. Each translation is kept between sessions in a Hyperbee (`lib/kept.ts`, a local core per direction, like previews), so it's done once ever. Before this, drawing asked for every message on screen, and scrolling fast through a long channel froze the app and could crash it.
+
+Sent this way, your message shows what you typed, marked "sent in bg", with the Bulgarian that went out in its details (`Message.wrote` keeps what was typed). What you write can go out in Bulgarian: the `→ bg` switch above the box (Mozilla's English→Bulgarian model, a second download when first switched on) shows the Bulgarian above the box as you type, turns the send button amber as "bg ➤", and sends the Bulgarian once it's shown. The byte counter counts the Bulgarian, which takes two bytes a letter.
 
 ## Mentions
 

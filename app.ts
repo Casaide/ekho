@@ -15,7 +15,8 @@ import Notifier from './lib/notifier.ts'
 import Linker from './lib/linker.ts'
 import type { Around } from './lib/hub.ts'
 import Previews from './lib/previews.ts'
-import KeptPreviews from './lib/kept.ts'
+import type { KeptPreview } from './lib/previews.ts'
+import Kept from './lib/kept.ts'
 import Translator, { bulgarian, forModel } from './lib/translator.ts'
 import { modelFiles } from './lib/bergamot.ts'
 import fetch from 'bare-fetch'
@@ -108,6 +109,17 @@ let askedNotifications: boolean = saved?.askedNotifications ?? false
 // (Firefox Translations) fetched once and run by QVAC's translation addon,
 // loaded only when turned on.
 let translate: boolean = saved?.translate ?? false
+// Ask for it: set where notifications exist, on Android.
+let askToNotify = () => {}
+// Open a link in the browser: set where an addon for it exists.
+let openUrl: ((url: string) => void) | null = null
+
+// Other devices linked to this one, or the one this is linked to: then that
+// device holds the radio and IRC, and this one mirrors it (lib/linker.ts).
+const linker = new Linker(messenger, path.join(DATA, 'p2p'), saved?.link ?? null, {
+  name: Bare.platform === 'darwin' ? 'mac' : Bare.platform === 'android' ? 'phone' : Bare.platform
+})
+
 // One model per direction, each downloaded when first wanted.
 function translatorFor(from: string, to: string, opts = {}) {
   const translator = new Translator(
@@ -132,23 +144,20 @@ function translatorFor(from: string, to: string, opts = {}) {
   })
   return translator
 }
-const translator = translatorFor('bg', 'en', { detect: bulgarian, prepare: forModel })
+// Translations are kept between sessions, like previews, so each is done once.
+const translator = translatorFor('bg', 'en', {
+  detect: bulgarian,
+  prepare: forModel,
+  kept: new Kept<string>(linker.devices.store.get({ name: 'translations-bg-en' }))
+})
 // What you write, in Bulgarian, when you choose to send it so.
-const toBulgarian = translatorFor('en', 'bg')
+const toBulgarian = translatorFor('en', 'bg', {
+  kept: new Kept<string>(linker.devices.store.get({ name: 'translations-en-bg' }))
+})
 // Android only for now: on the Mac, QVAC's runtime picks one architecture
 // for both halves of the universal build, so it's left out of it.
 const translates = Bare.platform === 'android'
 if (translates && translate) translator.start()
-// Ask for it: set where notifications exist, on Android.
-let askToNotify = () => {}
-// Open a link in the browser: set where an addon for it exists.
-let openUrl: ((url: string) => void) | null = null
-
-// Other devices linked to this one, or the one this is linked to: then that
-// device holds the radio and IRC, and this one mirrors it (lib/linker.ts).
-const linker = new Linker(messenger, path.join(DATA, 'p2p'), saved?.link ?? null, {
-  name: Bare.platform === 'darwin' ? 'mac' : Bare.platform === 'android' ? 'phone' : Bare.platform
-})
 
 // Save a second after the last change, not on every message.
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -168,6 +177,7 @@ function save() {
         open,
         askedNotifications,
         translate,
+        cleared: ui.cleared,
         link: linker.devices.saved
       })
     } catch (err) {
@@ -470,10 +480,11 @@ const ui = new Ui(
     // Preview images go in a cache folder: the image view reads files.
     // Previews are kept between sessions in a Hyperbee of their own, beside
     // the linking cores, with their pictures when small.
+    cleared: saved?.cleared ?? {},
     translator: translates ? translator : undefined,
     toBulgarian: translates ? toBulgarian : undefined,
     previews: new Previews(fetch, {
-      kept: new KeptPreviews(linker.devices.store.get({ name: 'previews' })),
+      kept: new Kept<KeptPreview>(linker.devices.store.get({ name: 'previews' })),
       async save(name: string, bytes: Uint8Array) {
         const dir = path.join(DATA, 'previews')
         await fs.promises.mkdir(dir, { recursive: true })
@@ -500,6 +511,7 @@ window.on('resize', () => ui.setWidth(window.size.width))
 
 // Reopen the conversation that was open last time.
 ui.on('select', save)
+ui.on('clear', save)
 const reopen = onboarded && saved?.open ? messenger.contacts.get(saved.open) : null
 if (reopen) ui.select(reopen)
 

@@ -63,7 +63,7 @@ const TYPES: Record<string, string> = {
 // Fetching tells the site this device's address, as any messenger's previews
 // do.
 //
-// Events: preview (url), when one is ready to show.
+// Events: preview (url), once a link has been tried: get says what it got.
 export default class Previews extends EventEmitter {
   fetch: Fetch
   save: Save | null
@@ -85,6 +85,12 @@ export default class Previews extends EventEmitter {
     this._known = new Map()
     this._pending = new Set()
     this._pictures = new Map()
+  }
+
+  // Whether a link's preview has been tried: then `get` says what it is,
+  // a preview or none.
+  tried(url: string): boolean {
+    return this._known.has(url)
   }
 
   // The preview if it's ready; null otherwise, starting to fetch it.
@@ -112,7 +118,7 @@ export default class Previews extends EventEmitter {
     }
     this._pending.delete(url)
     this._known.set(url, result)
-    if (result !== null) this.emit('preview', url)
+    this.emit('preview', url)
   }
 
   async _preview(url: string): Promise<Preview | null> {

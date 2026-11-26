@@ -76,6 +76,8 @@ export interface Message {
   state: State
   reason: string | null
   hops?: number
+  // Ours, sent translated: what was typed.
+  wrote?: string
   // Received over the other path too, from the same person: the copy that
   // was folded into this one.
   also?: Via

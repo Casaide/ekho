@@ -87,7 +87,8 @@ const COMPACT = 700
 // Wide enough for the contact beside the conversation.
 const THREE_PANES = 1100
 
-// Events: select (contact | null), when the open conversation changes.
+// Events: select (contact | null), when the open conversation changes; clear
+// (contact), when one is swiped off the chats list.
 //
 // The whole app view, after the mockups. On a phone: one screen at a time,
 // with chats, contacts and radio as tabs, and conversation, contact, IRC setup
@@ -103,6 +104,9 @@ export default class Ui extends EventEmitter {
   // Link previews, where links can be fetched; null in tests and offline.
   previews: Previews | null
   translator: Translator | null
+  // Conversations swiped off the chats list, by id, with when: each comes
+  // back with a newer message.
+  cleared: Record<string, number>
   // What you write, in Bulgarian, when sending it so.
   toBulgarian: Translator | null
   radioInfo: RadioInfo
@@ -160,6 +164,7 @@ export default class Ui extends EventEmitter {
       presence?: Presence
       previews?: Previews
       translator?: Translator
+      cleared?: Record<string, number>
       toBulgarian?: Translator
     } = {}
   ) {
@@ -174,6 +179,7 @@ export default class Ui extends EventEmitter {
     this.presence = opts.presence ?? new Presence(messenger.heard)
     this.previews = opts.previews ?? null
     this.translator = opts.translator ?? null
+    this.cleared = opts.cleared ?? {}
     this.toBulgarian = opts.toBulgarian ?? null
     this.radioInfo = { longName: null, shortName: null, region: null, preset: null, channels: [] }
     this.compact = opts.compact ?? false
@@ -345,6 +351,14 @@ export default class Ui extends EventEmitter {
     if (this.page === 'contact') this.page = this._history.pop() ?? this.tab
     this.messenger.markRead(contact)
     this.open('thread')
+  }
+
+  // Swiped off the chats list until a newer message. Saved (`clear`).
+  clear(contact: Contact): void {
+    this.cleared[contact.id] = this.messenger.thread(contact).at(-1)?.time ?? 0
+    if (this.selected !== null && this.selected.id === contact.id) this.select(null)
+    this.emit('clear', contact)
+    this.render()
   }
 
   // A conversation's info: its own page on a phone; on a desktop, a pane

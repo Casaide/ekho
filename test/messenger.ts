@@ -411,20 +411,18 @@ test('a channel the radio also has goes over LoRa on that channel; others over I
   t.equal(stream.lines.at(-1), 'PRIVMSG #varna :hi varna')
 })
 
-test('a direct message to a node the radio doesn’t know fails at once, for IRC instead', (t) => {
-  const { radio, stream, messenger, ivan } = setup()
-  // Another node heard: LoRa is the route, but Ivan's node never was.
+test('a direct message to a node the radio doesn’t know, with no nick, fails at once', (t) => {
+  const { radio, messenger } = setup()
+  // Another node heard: LoRa is the route, but this one never was.
   radio.emit('position', { from: '!0000beef' })
+  const stranger = messenger.contacts.add({ name: 'stranger', node: '!00c0ffee' })
 
-  const msg = messenger.send(ivan, 'are you up?')
+  const msg = messenger.send(stranger, 'are you up?')
 
   t.equal(msg.via, 'lora')
   t.equal(msg.state, 'failed')
   t.equal(msg.reason, 'NO_NODE')
   t.equal(radio.sent.length, 0, 'nothing tried over the air')
-
-  messenger.sendViaIrc(msg)
-  t.deepStrictEqual(stream.lines, ['PRIVMSG ivanp :are you up?'])
 })
 
 test('the bridge’s radio repeating IRC onto the mesh is skipped while on IRC', (t) => {
@@ -496,4 +494,24 @@ test('the same line from someone not joined across paths shows twice', (t) => {
   })
   stream.serve(':BLAGOY!u@h PRIVMSG #sofiamesh :hi\r\n')
   t.equal(messenger.thread(messenger.channel).length, 2)
+})
+
+test('someone whose node the radio doesn’t know is written to over IRC, if they have a nick', (t) => {
+  const { radio, stream, messenger } = setup()
+  radio.emit('position', { from: '!0000beef' })
+  const mirco = messenger.contacts.add({ name: 'mirco', node: '!00c0ffee', nick: 'mirco' })
+
+  const msg = messenger.send(mirco, 'hey')
+
+  t.equal(messenger.route(), 'lora', 'LoRa is the route')
+  t.equal(msg.via, 'irc', 'but not to him')
+  t.deepStrictEqual(stream.lines, ['PRIVMSG mirco :hey'])
+  t.equal(radio.sent.length, 0)
+})
+
+test('a message sent translated keeps what was typed', (t) => {
+  const { messenger, ivan } = setup()
+  const msg = messenger.send(ivan, 'тръгвам в 9', { wrote: 'leaving at 9' })
+  t.equal(msg.text, 'тръгвам в 9')
+  t.equal(msg.wrote, 'leaving at 9')
 })

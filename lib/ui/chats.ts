@@ -115,8 +115,11 @@ export default class Chats {
     const filter = this._search.value.trim().toLowerCase()
     const last = (c: Contact) => messenger.thread(c).at(-1)?.time ?? 0
 
+    // Swiped away: gone until a newer message comes in.
+    const cleared = (c: Contact) => (this.ui.cleared[c.id] ?? -1) >= last(c)
     const contacts = messenger.contacts
       .all()
+      .filter((c) => !cleared(c))
       .filter((c) => filter === '' || displayName(c).toLowerCase().includes(filter))
       .sort((a, b) => last(b) - last(a))
 
@@ -126,6 +129,7 @@ export default class Chats {
       this.ui.selected?.id ?? '',
       messenger.route(),
       Math.floor(messenger.now() / 60_000),
+      Object.keys(this.ui.cleared).length,
       ...contacts.map((c) => {
         const msg = messenger.thread(c).at(-1)
         return c.id + displayName(c) + (msg ? msg.id + msg.state : '') + messenger.unread(c)
@@ -187,7 +191,9 @@ export default class Chats {
           ])
         ]
       ),
-      () => this.ui.select(contact)
+      () => this.ui.select(contact),
+      undefined,
+      () => this.ui.clear(contact)
     )
   }
 }

@@ -100,6 +100,17 @@ export default class Thread {
   // when a scroll to the end is still settling.
   _end: string
   _settling: number
+  // Kept at the end while the reader is there: through late layout, an
+  // app opening on the conversation, previews and translations coming in.
+  // Lost when they scroll up, back when they scroll down to it.
+  _stick: boolean
+  // Each message's view, by what it shows: reused when the list is rebuilt,
+  // so sending one builds one, not the whole conversation.
+  _built: Map<string, any>
+  _contentHeight: number
+  _viewHeight: number
+  // Until when scroll events are ours, from placing it, not the reader's.
+  _quiet: number
   _timers: ReturnType<typeof setTimeout>[]
   _emoji: any
   // Sounds and videos playing, by link, in this conversation: kept across
@@ -125,7 +136,9 @@ export default class Thread {
     this._sub = text('', { color: colors.muted, fontSize: 11 }, 1)
     this._list = scroll({ padding: 16, gap: 14 })
     this._width = 390
-    this._list.on('layout', (frame: { width: number }) => {
+    this._list.on('layout', (frame: { width: number; height: number }) => {
+      this._viewHeight = frame.height
+      if (this._stick) this._toBottom()
       if (Math.abs(frame.width - this._width) < 1) return
       this._width = frame.width
       this._shown = ''
@@ -141,6 +154,19 @@ export default class Thread {
     this._shown = ''
     this._end = ''
     this._settling = 0
+    this._stick = true
+    this._built = new Map()
+    this._contentHeight = 0
+    this._viewHeight = 0
+    this._quiet = 0
+    this._list.content.on('layout', (frame: { height: number }) => {
+      this._contentHeight = frame.height
+      if (this._stick) this._toBottom()
+    })
+    this._list.on('scroll', (offset: { y: number }) => {
+      if (Date.now() < this._quiet) return
+      this._stick = offset.y >= this._contentHeight - this._viewHeight - 40
+    })
     this._timers = []
     this._playing = new Map()
     this._playingIn = null
@@ -299,10 +325,23 @@ export default class Thread {
 
     // Where the reader was, to stay there after the rebuild.
     const was = this._list.contentOffset.y
-    clear(this._list.content)
+    // The latest SHOWN: older ones are in the history, but a phone builds
+    // hundreds of messages slowly.
+    const recent = thread.slice(-SHOWN)
+    const built = new Map<string, any>()
+    for (const msg of recent) {
+      const key = this._key(contact, msg)
+      built.set(key, this._built.get(key) ?? this._message(contact, msg))
+    }
+    const kept = new Set(built.values())
+    for (const child of [...this._list.content.children]) {
+      if (kept.has(child)) detach(child)
+      else child.destroy()
+    }
+    this._built = built
     let day = -1
     let side: boolean | null = null
-    for (const msg of thread) {
+    for (const msg of recent) {
       if (dayIndex(msg.time) !== day) {
         day = dayIndex(msg.time)
         this._list.content.appendChild(
@@ -317,7 +356,7 @@ export default class Thread {
       const mine = msg.state !== 'received'
       if (side !== null && side !== mine) this._list.content.appendChild(view({ height: 10 }))
       side = mine
-      this._list.content.appendChild(this._message(contact, msg))
+      this._list.content.appendChild(built.get(this._key(contact, msg)))
     }
     // Room under the last message: scrolled to the end, Android stops at the
     // last child, leaving the content's bottom padding out of view.
@@ -327,7 +366,17 @@ export default class Thread {
     // still settling goes to the end too: restoring the offset it caught
     // halfway would scroll back up.
     const at = contact.id + ':' + thread.length
-    if (at !== this._end || Date.now() < this._settling) this.toEnd()
+    // Opening a conversation, or a message in: its latest of theirs are
+    // translated, apart from drawing; what comes back redraws once a batch.
+    if (at !== this._end) {
+      this.ui.translator?.want(
+        recent
+          .slice(-30)
+          .filter((m) => m.state === 'received')
+          .map((m) => m.text)
+      )
+    }
+    if (at !== this._end || Date.now() < this._settling || this._stick) this.toEnd()
     else this._place(was)
     this._end = at
   }
@@ -336,8 +385,15 @@ export default class Thread {
   // list shrinks: the offset stays put, which would leave older messages in
   // view.
   toEnd(): void {
+    this._stick = true
     this._settling = Date.now() + 400
     this._place(Number.MAX_SAFE_INTEGER)
+  }
+
+  // To the end now, as the content is laid out.
+  _toBottom(): void {
+    this._quiet = Date.now() + 300
+    this._list.contentOffset = { y: Number.MAX_SAFE_INTEGER }
   }
 
   // The offset is clamped to the content as last laid out, which may not
@@ -345,7 +401,10 @@ export default class Thread {
   // placing still pending is dropped.
   _place(y: number): void {
     for (const timer of this._timers) clearTimeout(timer)
-    const place = () => (this._list.contentOffset = { y })
+    const place = () => {
+      this._quiet = Date.now() + 300
+      this._list.contentOffset = { y }
+    }
     place()
     this._timers = [setTimeout(place, 50), setTimeout(place, 250)]
   }
@@ -391,9 +450,9 @@ export default class Thread {
     const now = this.ui.messenger.now()
     this._detail.appendChild(row('when', dayLabel(msg.time, now) + ' ' + clock(msg.time)))
     this._detail.appendChild(row('from', mine ? 'you' : (msg.from ?? displayName(contact))))
-    const english = mine ? null : (this.ui.translator?.translation(msg.text) ?? null)
+    const english = mine ? (msg.wrote ?? null) : (this.ui.translator?.translation(msg.text) ?? null)
     if (english !== null && english !== msg.text) {
-      this._detail.appendChild(row('original', msg.text))
+      this._detail.appendChild(row(mine ? 'sent' : 'original', msg.text))
     }
     this._detail.appendChild(
       row(
@@ -531,9 +590,13 @@ export default class Thread {
     })
     // Theirs in Bulgarian shows in English once translated; the original is
     // in its details, on hold.
-    const english = mine ? null : (this.ui.translator?.translation(msg.text) ?? null)
+    // Ours sent in Bulgarian shows what we typed, marked so; what went out is
+    // in its details, on hold, like the original of theirs.
+    const english = mine ? (msg.wrote ?? null) : (this.ui.translator?.translation(msg.text) ?? null)
     const translated = english !== null && english !== msg.text && !this._original.has(msg.id)
-    if (translated) head.push(text('translated', { color: colors.muted, fontSize: 11 }))
+    if (translated) {
+      head.push(text(mine ? 'sent in bg' : 'translated', { color: colors.muted, fontSize: 11 }))
+    }
     const body = this._body(translated ? english : msg.text)
     // A message with a link is as wide as a message gets, rather than as
     // wide as its widest line: Android rounds a box fitted to a line down to
@@ -674,13 +737,16 @@ export default class Thread {
   _link(url: string, mine: boolean): any {
     const kind = media(url)
     if (kind !== null) return this._media(url, kind, mine)
-    const preview = this.ui.previews?.get(url) ?? null
+    const previews = this.ui.previews
+    const preview = previews?.get(url) ?? null
     const open = () => this.ui.actions.openUrl(url)
-    if (preview === null) {
+    const side = mine ? 'flex-end' : 'flex-start'
+    // Tried, with nothing to show (or no previews at all): just where it goes.
+    if (preview === null && (previews === null || previews.tried(url))) {
       return button('↗ ' + host(url), open, {
         ...chip(colors.accent),
         fontSize: 11,
-        alignSelf: mine ? 'flex-end' : 'flex-start'
+        alignSelf: side
       })
     }
     const card = {
@@ -688,28 +754,33 @@ export default class Thread {
       borderColor: colors.line,
       borderRadius: 6,
       backgroundColor: colors.panel,
-      cursor: 'pointer'
+      cursor: 'pointer',
+      overflow: 'hidden'
     }
 
+    // While it's fetched, a card the size it will be, so the conversation
+    // doesn't jump when it arrives: a picture's box for a link to a picture,
+    // a page's row otherwise.
+    const picturing =
+      preview === null ? /\.(png|jpe?g|gif|webp)([?#].*)?$/i.test(url) : preview.title === null
+
     // A link to a picture: the picture, whole, in a box of its own.
-    if (preview.title === null) {
-      return press(
-        view({ ...card, padding: 4, alignSelf: mine ? 'flex-end' : 'flex-start' }, [
-          picture(preview.image!, 232, 174, 'contain')
-        ]),
-        open
-      )
+    if (picturing) {
+      const inside =
+        preview === null
+          ? view({ width: 232, height: 174 })
+          : picture(preview.image!, 232, 174, 'contain')
+      return press(view({ ...card, padding: 4, alignSelf: side }, [inside]), open)
     }
 
     // A page: a small square of its picture beside where it's from, its
-    // title and the start of its description, the same size whatever the
-    // page's picture is.
+    // title and the start of its description, always the same height.
     const about = view({ flex: 1, gap: 3 }, [
-      text(preview.site, { color: colors.muted, fontSize: 11 }, 1),
-      text(preview.title, { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2)
+      text(preview?.site ?? host(url), { color: colors.muted, fontSize: 11 }, 1),
+      text(preview?.title ?? '…', { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2)
     ])
-    if (preview.description !== null) {
-      about.appendChild(text(preview.description, { color: colors.soft, fontSize: 12 }, 2))
+    if (preview?.description) {
+      about.appendChild(text(preview.description, { color: colors.soft, fontSize: 12 }, 1))
     }
     const row = view(
       {
@@ -718,12 +789,13 @@ export default class Thread {
         padding: 8,
         width: '100%',
         maxWidth: 300,
-        alignSelf: mine ? 'flex-end' : 'flex-start',
+        height: CARD,
+        alignSelf: side,
         ...card
       },
       [about]
     )
-    if (preview.image !== null) row.insertBefore(picture(preview.image, 56, 56, 'cover'), about)
+    if (preview?.image) row.insertBefore(picture(preview.image, 56, 56, 'cover'), about)
     return press(row, open)
   }
 
@@ -813,6 +885,31 @@ export default class Thread {
     if (recent.some((m) => links(m.text).includes(url))) this._settling = Date.now() + 400
   }
 
+  // Everything a message's view shows, so an unchanged one is reused.
+  _key(contact: Contact, msg: Message): string {
+    const cards = links(msg.text)
+      .slice(0, 2)
+      .map(
+        (url) =>
+          (this.ui.previews?.get(url) ? 'p' : this.ui.previews?.tried(url) ? 'x' : '-') +
+          (this._playing.has(url) ? 'v' : '')
+      )
+    const english = msg.state === 'received' ? this.ui.translator?.translation(msg.text) : null
+    return [
+      contact.id,
+      msg.id,
+      msg.state,
+      msg.reason,
+      msg.also,
+      msg.wrote,
+      this._open !== null && this._open.id === msg.id ? 'open' : '',
+      this._original.has(msg.id) ? 'original' : '',
+      english ?? '',
+      cards.join(','),
+      Math.round(this._width)
+    ].join('\u0000')
+  }
+
   // Hold a message for what to do with it: reply, react, copy, retry.
   _hold(msg: Message): void {
     this._open = msg
@@ -869,6 +966,8 @@ export default class Thread {
     let why: string
     if (contact.channel && messenger.radioChannel(contact) === null) {
       why = 'irc only'
+    } else if (via === 'irc' && messenger.route() === 'lora') {
+      why = 'their node is unknown to the radio'
     } else if (via === 'irc') {
       why = messenger.radio === null ? 'radio not connected' : 'no nodes heard'
     } else {
@@ -883,9 +982,7 @@ export default class Thread {
   }
 
   _via(contact: Contact): 'lora' | 'irc' {
-    const { messenger } = this.ui
-    if (contact.channel && messenger.radioChannel(contact) === null) return 'irc'
-    return messenger.route()
+    return this.ui.messenger.routeFor(contact)
   }
 
   // Room left: LoRa packets and motaba's bridge both have a byte limit.
@@ -1010,10 +1107,12 @@ export default class Thread {
     // Too long to go out in one piece: the counter is already red.
     if (bytes(prefix + value) > this._limit()) return
 
+    const typed = this._input.value.trim()
+    const wrote = value === typed ? {} : { wrote: typed }
     const sent =
       this._replyTo === null
-        ? this.ui.messenger.send(contact, value)
-        : this.ui.messenger.reply(this._replyTo, value)
+        ? this.ui.messenger.send(contact, value, wrote)
+        : this.ui.messenger.reply(this._replyTo, value, wrote)
     this._input.value = ''
     this._reply(null)
     // Their node unknown to the radio: it fails at once, and its choices
@@ -1026,6 +1125,12 @@ export default class Thread {
 
 // The message input: its font size, the height of one of its lines, its
 // padding, and the most lines it grows to before scrolling.
+// A page's preview card's height: its place is kept while it's fetched.
+const CARD = 86
+
+// The most messages a conversation shows.
+const SHOWN = 200
+
 const INPUT_SIZE = 14
 const INPUT_LINE = 19
 const INPUT_PAD = 7
