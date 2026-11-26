@@ -8,8 +8,7 @@ export interface MessengerOptions {
   contacts?: Contacts
   heard?: Heard
   now?: () => number
-  // Our own node ID, added to IRC messages so people can tell it's us. A hint,
-  // not proof: anyone on IRC can type it.
+  // Our own radio's node ID, once one is connected.
   node?: string | null
   channelName?: string
   // The IRC channel the community bridge mirrors the mesh channel to.
@@ -351,7 +350,7 @@ export default class Messenger extends EventEmitter {
     if (contact.nicks.length === 0) return this._fail(msg, 'NO_NICK')
 
     msg.address = contact.nicks[0]
-    this.irc.privmsg(msg.address, this.node ? msg.text + ' [' + this.node + ']' : msg.text)
+    this.irc.privmsg(msg.address, msg.text)
     msg.state = 'sent'
   }
 

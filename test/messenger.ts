@@ -45,7 +45,7 @@ function hearIvan(radio: FakeRadio) {
   })
 }
 
-test('with no nodes heard, sends over IRC tagged with our node', (t) => {
+test('with no nodes heard, sends over IRC', (t) => {
   const { radio, stream, messenger, ivan } = setup()
 
   const msg = messenger.send(ivan, 'take the spare cable')
@@ -53,7 +53,7 @@ test('with no nodes heard, sends over IRC tagged with our node', (t) => {
   t.equal(msg.via, 'irc')
   t.equal(msg.state, 'sent')
   t.equal(radio.sent.length, 0)
-  t.deepStrictEqual(stream.lines, ['PRIVMSG ivanp :take the spare cable [!e2f4a910]'])
+  t.deepStrictEqual(stream.lines, ['PRIVMSG ivanp :take the spare cable'])
 })
 
 test('with a node heard, sends over LoRa and waits for the ack', (t) => {
@@ -219,7 +219,7 @@ test('a reaction goes as a short text message on the current route', (t) => {
   const original = messenger.send(ivan, 'take the spare cable')
   messenger.react(original, '♥')
 
-  t.equal(stream.lines[1], 'PRIVMSG ivanp :♥ re: "take the spare cable" [!e2f4a910]')
+  t.equal(stream.lines[1], 'PRIVMSG ivanp :♥ re: "take the spare cable"')
 })
 
 test('state survives a restart, and unanswered sends come back failed', (t) => {

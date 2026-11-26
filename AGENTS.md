@@ -47,7 +47,7 @@ Don't relitigate these without the user.
 5. **Reactions over IRC go as a new text message.** No other option exists on IRC.
 6. **The T1000-E pairs with one device at a time,** so ekho replaces the Meshtastic app on the phone.
 7. **"Heard" means any packet** (message, position, telemetry), not node info, which radios broadcast only every 3 hours by default.
-8. **The motaba bridge doesn't know a nick and a node are the same person.** IRC messages are tagged with our node ID (`text [!e2f4a910]`). That's a hint, not proof: anyone can type it. Real protection needs motaba to verify a nick-to-node link (code sent over LoRa, confirmed on IRC).
+8. **The motaba bridge doesn't know a nick and a node are the same person.** ekho no longer tags IRC messages with our node ID: it confused people and proved nothing, as anyone can type it. Real protection needs motaba to verify a nick-to-node link (code sent over LoRa, confirmed on IRC).
 9. **Delivery states:** LoRa direct `sending -> delivered | failed`; LoRa channel `sending -> relayed | failed` (the radio's implicit ack: it heard another radio repeat the message, which says nothing about who read it); IRC goes to `sent` (no receipts); incoming messages are `received`.
 
 ## Layout
@@ -139,7 +139,7 @@ From the server's welcome, MOTD and NickServ (seen on 2026-11-25):
 
 - **Accounts:** only registered nicks may stay. NickServ gives 60 seconds to `IDENTIFY` and suggests SASL PLAIN, which ekho uses (falling back to `IDENTIFY`). One connection per nick: a second gets 433, so ekho reclaims a ghosted nick (see `docs/connections.md`).
 - **Channels:** the server joins everyone to `#bulgaria`, ekho's mesh channel. ekho asks for `LIST` once logged in and shows the rest as a list to join or leave (saved, rejoined on reconnect); those are IRC only. Regional ones are bridged too: `#blagoevgrad`, `#sandanski`, `#sofia`, `#silistra`, `#bansko`, `#burgas`, `#gabrovo`, `#petrich`, `#shumen`, `#varna`, `#vratsa`, `#vt`, `#gorna`. Joining a channel that doesn't exist creates it (ekho once made `#mesh`).
-- **Mesh users** appear as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The name is the node's long name with spaces as `_`, cut to fit `NICKLEN=30` (the user's T1000-E, long name "Dom", is `Dom|mt`). A DM to a node is most likely a PRIVMSG to that nick (to confirm).
+- **Mesh users** appear as nicks with a suffix: `name|mt` (Meshtastic), `name|mc` (MeshCore), `name|bc` (Bitchat). The name is the node's long name with spaces as `_`, cut to fit `NICKLEN=30` (the user's T1000-E, long name "Dom", is `Dom|mt`). A DM to a node is a PRIVMSG to that nick: mirco (motaba's operator) confirmed DMs work IRC to IRC and IRC to a Meshtastic node (`/msg Dom|mt hi`).
 - **Airtime:** one message per 10 s goes out to the mesh, 150 bytes at most; faster ones wait their turn. `lib/irc.ts` splits at 400 characters today, which is too long.
 - **Hosts** are cloaked (`~dom@64a18efa92.irc`), so the IP isn't shown.
 
@@ -153,7 +153,6 @@ From the server's welcome, MOTD and NickServ (seen on 2026-11-25):
 
 ## Open questions
 
-- Is a DM to `name|mt` delivered as a Meshtastic DM to that node?
 - Which channel maps to the default LongFast mesh channel? `#bulgaria` is the guess.
 - Can the T1000-E sign an arbitrary message with its key (XEdDSA), asked over Bluetooth? That would let app users verify each other on IRC.
 - Would motaba add a verified nick-to-node link?

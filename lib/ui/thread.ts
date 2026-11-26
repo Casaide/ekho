@@ -80,6 +80,8 @@ export default class Thread {
   _count: any
   _detail: any
   _open: Message | null
+  // The conversation and its length when last scrolled to the end.
+  _end: string
   _emoji: any
 
   constructor(ui: Ui) {
@@ -94,6 +96,7 @@ export default class Thread {
     // A message's details, when one is tapped.
     this._detail = view({ display: 'none' })
     this._open = null
+    this._end = ''
     // Lives across redraws, so a message arriving doesn't wipe what's typed.
     this._emoji = input('or type any emoji')
     this._emoji.returnKeyType = 'send'
@@ -170,6 +173,8 @@ export default class Thread {
     this._title.text = displayName(contact)
     this._sub.text = this.ui.reachLine(contact)
 
+    // Where the reader was, to stay there after the rebuild.
+    const was = this._list.contentOffset.y
     clear(this._list.content)
     const now = this.ui.messenger.now()
     let day = -1
@@ -186,7 +191,20 @@ export default class Thread {
       }
       this._list.content.appendChild(this._message(contact, msg))
     }
-    this._list.contentOffset = { y: Number.MAX_SAFE_INTEGER }
+    // Room under the last message: scrolled to the end, Android stops at the
+    // last child, leaving the content's bottom padding out of view.
+    this._list.content.appendChild(view({ height: 20 }))
+    // To the end on opening a conversation and when a message is added, but
+    // not on every redraw, so reading back up stays put. The offset is
+    // clamped to the content as last laid out, which doesn't have the new
+    // message yet: scroll again once the layout has caught up.
+    const at = contact.id + ':' + this.ui.messenger.thread(contact).length
+    const y = at === this._end ? was : Number.MAX_SAFE_INTEGER
+    this._end = at
+    const place = () => (this._list.contentOffset = { y })
+    place()
+    setTimeout(place, 50)
+    setTimeout(place, 250)
 
     this._renderRoute(contact)
     this._renderCount()
@@ -302,15 +320,19 @@ export default class Thread {
     const failed = msg.state === 'failed'
     const pathColor = msg.via === 'irc' ? colors.irc : colors.lora
 
-    const head = [
-      text(clock(msg.time), { color: colors.muted, fontSize: 11 }),
-      text(mine ? 'you' : (msg.from ?? displayName(contact)), {
-        color: mine ? colors.accent : colors.text,
-        fontSize: 11,
-        fontWeight: 'bold'
-      }),
-      text('[' + this._path(msg) + ']', { color: pathColor, fontSize: 11 })
-    ]
+    // Yours on the right, theirs on the left, as in other messengers; whose
+    // it is shows by the side, so only theirs carry a name.
+    const head = [text(clock(msg.time), { color: colors.muted, fontSize: 11 })]
+    if (!mine) {
+      head.push(
+        text(msg.from ?? displayName(contact), {
+          color: colors.text,
+          fontSize: 11,
+          fontWeight: 'bold'
+        })
+      )
+    }
+    head.push(text('[' + this._path(msg) + ']', { color: pathColor, fontSize: 11 }))
     if (mine) {
       head.push(
         text(failed ? 'failed · ' + (REASONS[msg.reason ?? ''] ?? msg.reason) : msg.state, {
@@ -324,21 +346,36 @@ export default class Thread {
       )
     }
 
+    const bar = view({
+      width: 2,
+      backgroundColor: failed ? colors.failed : mine ? colors.accent : colors.edge
+    })
+    const body = text(msg.text, { color: colors.text, fontSize: 14, lineHeight: 20, flexShrink: 1 })
     const children = [
-      view({ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, head),
-      view({ flexDirection: 'row', gap: 10 }, [
-        view({
-          width: 2,
-          backgroundColor: failed ? colors.failed : mine ? colors.accent : colors.edge
-        }),
-        text(msg.text, { color: colors.text, fontSize: 14, lineHeight: 20, flex: 1 })
-      ])
+      view(
+        {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: 8,
+          justifyContent: mine ? 'flex-end' : 'flex-start'
+        },
+        head
+      ),
+      view(
+        { flexDirection: 'row', gap: 10, justifyContent: mine ? 'flex-end' : 'flex-start' },
+        mine ? [body, bar] : [bar, body]
+      )
     ]
 
     // Only something that needs doing gets a line of its own.
     if (failed) {
       children.push(
-        text('tap for retry or irc', { color: colors.failed, fontSize: 11, paddingLeft: 12 })
+        text('tap for retry or irc', {
+          color: colors.failed,
+          fontSize: 11,
+          paddingHorizontal: 12,
+          textAlign: mine ? 'right' : 'left'
+        })
       )
     }
 
@@ -349,6 +386,8 @@ export default class Thread {
           gap: 6,
           padding: 6,
           borderRadius: 6,
+          alignSelf: mine ? 'flex-end' : 'flex-start',
+          maxWidth: '85%',
           backgroundColor: selected ? colors.panel : colors.ground,
           cursor: 'pointer'
         },
@@ -392,14 +431,11 @@ export default class Thread {
     return messenger.route()
   }
 
-  // Room left: LoRa packets and motaba's bridge both have a byte limit, and
-  // over IRC our node tag takes some of it.
+  // Room left: LoRa packets and motaba's bridge both have a byte limit.
   _limit(): number {
     const contact = this.ui.selected
-    if (contact === null) return LIMIT.lora
-    if (this._via(contact) === 'lora') return LIMIT.lora
-    const node = this.ui.messenger.node
-    return LIMIT.irc - (node ? bytes(' [' + node + ']') : 0)
+    if (contact === null || this._via(contact) === 'lora') return LIMIT.lora
+    return LIMIT.irc
   }
 
   _renderCount(): void {

@@ -39,12 +39,11 @@ The T1000-E is who you are. It holds your Meshtastic node ID and the key pair th
 
 **The bridge sees two people.** The motaba bridge doesn't know your nick and your node are the same person. A message you send over IRC reaches the mesh from the bridge under your nick, not from your node, so stock users see someone else, and their replies go to the bridge. ekho still threads both into one conversation on your side.
 
-**Impersonation**, weakest protection first:
+**Impersonation**, weakest protection first. ekho once tagged IRC messages with your node ID (`text [!e2f4a910]`); it confused people and proved nothing, as anyone can type it, so it's gone.
 
-1. **Tag:** ekho appends your node ID to IRC messages (`text [!e2f4a910]`). Anyone can type that, so it's a hint, not proof.
-2. **Registered nick:** NickServ stops others using your exact nick, if the server enforces it. It doesn't stop look-alikes.
-3. **Signed messages:** newer Meshtastic messages have a field for an XEdDSA signature with the node's key. If the T1000-E can be asked to sign, other ekho users could verify you on IRC. Stock users still couldn't.
-4. **Verified link in the bridge:** motaba ties a nick to a node with a code sent over LoRa and confirmed on IRC. The only layer that protects people without ekho.
+1. **Registered nick:** NickServ stops others using your exact nick, if the server enforces it. It doesn't stop look-alikes.
+2. **Signed messages:** newer Meshtastic messages have a field for an XEdDSA signature with the node's key. If the T1000-E can be asked to sign, other ekho users could verify you on IRC. Stock users still couldn't.
+3. **Verified link in the bridge:** motaba ties a nick to a node with a code sent over LoRa and confirmed on IRC. The only layer that protects people without ekho.
 
 ## Sending and receiving
 
