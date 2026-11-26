@@ -4,6 +4,8 @@ import type EventEmitter from 'bare-events'
 export interface Radio extends EventEmitter {
   // Our own node ID, like '!e2f4a910'.
   readonly id: string
+  // The radio's node list, once synced: nodes it has heard of.
+  readonly nodes?: Map<number, { user: unknown }>
   send(
     text: string,
     opts?: { to?: number; id?: number; wantAck?: boolean; channel?: number }

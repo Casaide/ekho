@@ -410,3 +410,19 @@ test('a channel the radio also has goes over LoRa on that channel; others over I
   t.equal(toVarna.via, 'irc')
   t.equal(stream.lines.at(-1), 'PRIVMSG #varna :hi varna')
 })
+
+test('a direct message to a node the radio doesn’t know fails at once, for IRC instead', (t) => {
+  const { radio, stream, messenger, ivan } = setup()
+  // Another node heard: LoRa is the route, but Ivan's node never was.
+  radio.emit('position', { from: '!0000beef' })
+
+  const msg = messenger.send(ivan, 'are you up?')
+
+  t.equal(msg.via, 'lora')
+  t.equal(msg.state, 'failed')
+  t.equal(msg.reason, 'NO_NODE')
+  t.equal(radio.sent.length, 0, 'nothing tried over the air')
+
+  messenger.sendViaIrc(msg)
+  t.deepStrictEqual(stream.lines, ['PRIVMSG ivanp :are you up?'])
+})

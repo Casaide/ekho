@@ -125,7 +125,7 @@ Bulgarian messages can show in English, on the device. It's off until turned on 
 
 A received message with some Bulgarian in it (a Cyrillic word of two letters or more, or two of any length) is translated by itself (`lib/translator.ts`), once per session, and shows in English in place of the Bulgarian, marked "translated". People mix English and Bulgarian, in either alphabet, so any received message can be translated from its details, on hold, where the original is too, and a translated one can be shown as written again. Bulgarian typed in Latin letters ("kvo gotvite") is spelled in Cyrillic first, since the model reads Cyrillic: the official transliteration backwards plus chat habits (4 for ч, 6 for ш, w for в, q for я). It's rough, so only messages you ask for go through it.
 
-What you write can go out in Bulgarian: the `→ bg` switch above the box (Mozilla's English→Bulgarian model, a second download when first switched on) shows the Bulgarian above the box as you type, turns the send button amber as "send bg", and sends the Bulgarian once it's shown. The byte counter counts the Bulgarian, which takes two bytes a letter.
+What you write can go out in Bulgarian: the `→ bg` switch above the box (Mozilla's English→Bulgarian model, a second download when first switched on) shows the Bulgarian above the box as you type, turns the send button amber as "bg ➤", and sends the Bulgarian once it's shown. The byte counter counts the Bulgarian, which takes two bytes a letter.
 
 ## Mentions
 

@@ -40,7 +40,7 @@ const REASONS: Record<string, string> = {
   NO_RESPONSE: 'no response',
   TIMEOUT: 'timed out',
   RADIO_OFFLINE: 'radio not connected',
-  NO_NODE: 'no node known for them',
+  NO_NODE: 'their node is unknown to the radio',
   IRC_OFFLINE: 'irc not connected',
   NO_NICK: 'no irc nick for them',
   NO_RADIO_CHANNEL: 'not a channel on the radio',
@@ -148,7 +148,7 @@ export default class Thread {
     this._inBulgarian = false
     this._toBg = view({})
     this._preview = text('', { color: colors.text, fontSize: 13, display: 'none' })
-    this._sendLabel = text('send', { color: colors.ground, fontSize: 14, fontWeight: 'bold' })
+    this._sendLabel = text('➤', { color: colors.ground, fontSize: 16, fontWeight: 'bold' })
     this._sendBox = view({}, [this._sendLabel])
     this._typing = null
     // Lives across redraws, so a message arriving doesn't wipe what's typed.
@@ -194,14 +194,23 @@ export default class Thread {
       {
         flex: 1,
         flexDirection: 'row',
-        alignItems: 'center',
+        // The prompt stays on the first line as the box grows.
+        alignItems: 'flex-start',
         borderWidth: 1,
         borderColor: colors.line,
         borderRadius: 8,
         backgroundColor: colors.panel,
         paddingLeft: 12
       },
-      [text('>', { color: colors.accent, fontSize: 15 }), this._input]
+      [
+        text('>', {
+          color: colors.accent,
+          fontSize: INPUT_SIZE,
+          lineHeight: INPUT_LINE,
+          paddingTop: INPUT_PAD
+        }),
+        this._input
+      ]
     )
     const lit = (on: boolean) =>
       (this._box.style = { ...this._box.style, borderColor: on ? colors.accent : colors.line })
@@ -292,6 +301,7 @@ export default class Thread {
     const was = this._list.contentOffset.y
     clear(this._list.content)
     let day = -1
+    let side: boolean | null = null
     for (const msg of thread) {
       if (dayIndex(msg.time) !== day) {
         day = dayIndex(msg.time)
@@ -303,6 +313,10 @@ export default class Thread {
           })
         )
       }
+      // More room where it turns from theirs to ours, or back.
+      const mine = msg.state !== 'received'
+      if (side !== null && side !== mine) this._list.content.appendChild(view({ height: 10 }))
+      side = mine
       this._list.content.appendChild(this._message(contact, msg))
     }
     // Room under the last message: scrolled to the end, Android stops at the
@@ -397,7 +411,8 @@ export default class Thread {
     )
 
     const actions = []
-    if (msg.state === 'failed') {
+    // Retrying a node the radio doesn't know would only fail again.
+    if (msg.state === 'failed' && msg.reason !== 'NO_NODE') {
       actions.push(
         button(
           'retry on lora',
@@ -405,6 +420,8 @@ export default class Thread {
           chip(colors.text)
         )
       )
+    }
+    if (msg.state === 'failed') {
       if (contact.nicks.length > 0) {
         actions.push(
           button(
@@ -547,7 +564,7 @@ export default class Thread {
     // Only something that needs doing gets a line of its own.
     if (failed) {
       children.push(
-        text('tap for retry or irc', {
+        text(msg.reason === 'NO_NODE' ? 'tap to send via irc' : 'tap for retry or irc', {
           color: colors.failed,
           fontSize: 11,
           paddingHorizontal: 12,
@@ -880,6 +897,8 @@ export default class Thread {
   // The switch to send in Bulgarian, the Bulgarian above the box, and the
   // send button, which turns amber and says so.
   renderCompose(): void {
+    // Emptied by sending, which says nothing: back to one line.
+    this._grow()
     const tr = this.ui.toBulgarian
     clear(this._toBg)
     if (tr !== null) {
@@ -907,15 +926,17 @@ export default class Thread {
       display: on ? 'flex' : 'none'
     }
     const color = on ? colors.irc : colors.accent
-    this._sendLabel.text = on ? 'send bg' : 'send'
+    this._sendLabel.text = on ? 'bg ➤' : '➤'
     this._sendBox.style = {
       backgroundColor: color,
       borderColor: color,
       borderWidth: 1,
       alignSelf: 'flex-end',
       justifyContent: 'center',
+      alignItems: 'center',
       minHeight: INPUT_LINE + 2 * INPUT_PAD + 2,
-      paddingHorizontal: 16,
+      minWidth: INPUT_LINE + 2 * INPUT_PAD + 2,
+      paddingHorizontal: 10,
       borderRadius: 8,
       cursor: 'pointer'
     }
@@ -988,20 +1009,26 @@ export default class Thread {
     // Too long to go out in one piece: the counter is already red.
     if (bytes(prefix + value) > this._limit()) return
 
-    if (this._replyTo === null) this.ui.messenger.send(contact, value)
-    else this.ui.messenger.reply(this._replyTo, value)
+    const sent =
+      this._replyTo === null
+        ? this.ui.messenger.send(contact, value)
+        : this.ui.messenger.reply(this._replyTo, value)
     this._input.value = ''
     this._reply(null)
+    // Their node unknown to the radio: it fails at once, and its choices
+    // (send via IRC) open, rather than waiting for a tap.
+    if (sent.state === 'failed' && sent.reason === 'NO_NODE') this._open = sent
     this.renderCompose()
+    this.render()
   }
 }
 
 // The message input: its font size, the height of one of its lines, its
 // padding, and the most lines it grows to before scrolling.
-const INPUT_SIZE = 15
-const INPUT_LINE = 21
-const INPUT_PAD = 11
-const MAX_LINES = 4
+const INPUT_SIZE = 14
+const INPUT_LINE = 19
+const INPUT_PAD = 7
+const MAX_LINES = 3
 
 // A picture in a box of a fixed size it never draws outside of. bare-native
 // doesn't clip a view's contents (as on the web), and on Android a picture

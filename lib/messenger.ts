@@ -439,8 +439,11 @@ export default class Messenger extends EventEmitter {
       return
     }
 
+    // Only to a node the radio knows: heard this session, or in its node
+    // list. It can't reach one it has never heard of, so this fails now,
+    // offering IRC, rather than after the radio's retries.
     const node = this._bestNode(contact)
-    if (node === null) return this._fail(msg, 'NO_NODE')
+    if (node === null || !this._knows(node)) return this._fail(msg, 'NO_NODE')
 
     msg.id = randomId()
     msg.address = node
@@ -518,6 +521,11 @@ export default class Messenger extends EventEmitter {
       address: m.direct ? m.from : m.to,
       time: this.now()
     })
+  }
+
+  _knows(node: string): boolean {
+    if (this.heard.since(node) !== Infinity) return true
+    return (this.radio!.nodes?.get(nodeNum(node))?.user ?? null) !== null
   }
 
   // The node to send to: the one of theirs heard most recently.
