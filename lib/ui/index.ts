@@ -252,11 +252,18 @@ export default class Ui {
     this.open(page)
   }
 
-  // A swipe right: back from a screen on top, or to chats from another tab.
+  // Back, from a swipe or Android's back gesture: from a screen on top to the
+  // one below, or to chats from another tab. False when there's nowhere to
+  // go back to (chats, onboarding), so Android can leave the app.
+  goBack(): boolean {
+    if (this.page === 'onboarding' || this.page === 'chats') return false
+    if (TABS.includes(this.page)) this.open('chats')
+    else this.back()
+    return true
+  }
+
   swipeBack(): void {
-    if (this.page === 'onboarding' || this.page === 'chats') return
-    if (TABS.includes(this.page)) return this.open('chats')
-    this.back()
+    this.goBack()
   }
 
   back(): void {

@@ -89,6 +89,7 @@ jobs:
           --identifier casa.cassidy.ekho
           --android-manifest android/AndroidManifest.xml
           --resources android/res
+          --minimum-version 33
           --out build
           $SIGN
       - name: Publish release
