@@ -344,3 +344,13 @@ window.on('resize', () => ui.setWidth(window.size.width))
 // Bring back what was up last time.
 if (wanted.radio) radioLink.start()
 if (wanted.irc && settings.nick) ircLink.start()
+
+// Android's back button and edge swipe: back within ekho, and out of the app
+// only from chats. Android only, so loaded only there; the macOS build defers
+// it (scripts/build-macos.sh).
+if (Bare.platform === 'android') {
+  const { default: back } = await import('bare-navigation-android')
+  back.on('back', () => {
+    if (!ui.goBack()) back.close()
+  })
+}

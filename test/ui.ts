@@ -339,3 +339,20 @@ test("a failed message's details offer a retry, which puts them away", (t) => {
   t.equal(ui._thread._open, null)
   t.equal(msg.state, 'sending')
 })
+
+test('back goes to the screen below, or to chats, and says when there is nowhere left', (t) => {
+  const messenger = new Messenger()
+  const ui = new Ui(messenger, actions(), { compact: true })
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
+  t.teardown(() => window.hide())
+
+  ui.open('radio')
+  ui.open('log')
+  t.ok(ui.goBack())
+  t.equal(ui.page, 'radio')
+  t.ok(ui.goBack())
+  t.equal(ui.page, 'chats')
+  t.notOk(ui.goBack(), 'from chats, Android may leave the app')
+})
