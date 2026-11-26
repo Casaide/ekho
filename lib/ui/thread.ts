@@ -598,12 +598,11 @@ export default class Thread {
       head.push(text(mine ? 'sent in bg' : 'translated', { color: colors.muted, fontSize: 11 }))
     }
     const body = this._body(translated ? english : msg.text)
-    // A message with a link is as wide as a message gets, rather than as
-    // wide as its widest line: Android rounds a box fitted to a line down to
-    // whole pixels, and the line then wraps once more than measured, drawing
-    // past the box. Its link's lines (`lines`) leave a character spare.
-    const linked = links(msg.text).length > 0
-    if (linked) body.style = { ...body.style, flex: 1, textAlign: mine ? 'right' : 'left' }
+    // Every message is as wide as a message gets, rather than as wide as its
+    // widest line: a box fitted to a line is rounded down to whole pixels,
+    // and the line then wraps once more than measured, drawing past the box
+    // into the next message. A link's lines (`lines`) leave a character spare.
+    body.style = { ...body.style, flex: 1, textAlign: mine ? 'right' : 'left' }
     // Above the message, not in it, so a tap on the name doesn't also tap
     // the message.
     const top = view(
@@ -659,8 +658,7 @@ export default class Thread {
     )
     // Links open from their own cards, beside the message rather than in
     // it, so a tap on one doesn't also open the message's details.
-    const width = linked ? { width: '85%' } : { maxWidth: '85%' }
-    return view({ gap: 6, alignSelf: mine ? 'flex-end' : 'flex-start', ...width }, [
+    return view({ gap: 6, alignSelf: mine ? 'flex-end' : 'flex-start', width: '85%' }, [
       top,
       bubble,
       ...links(msg.text)
