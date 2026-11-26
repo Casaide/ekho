@@ -488,6 +488,7 @@ export default class Thread {
         resizeMode: 'cover'
       }
       image.source = preview.image
+      fitOnApple(image)
       // Undecodable: the card shows without it.
       image.on('error', () => {})
       lines.push(image)
@@ -631,5 +632,18 @@ export default class Thread {
     this._input.value = ''
     this._reply(null)
     this._renderCount()
+  }
+}
+
+// bare-native 0.3.8's image view on macOS and iOS doesn't record its own
+// size, so a picture filling it is drawn at no size, leaving a blank box.
+// Recorded here until it's fixed upstream (lib/image/darwin.js, ios.js).
+function fitOnApple(image: any): void {
+  if (Bare.platform !== 'darwin' && Bare.platform !== 'ios') return
+  const resized = image._resized
+  image._resized = function (width: number, height: number) {
+    resized.call(this, width, height)
+    this._box = { width, height }
+    this._fitted()
   }
 }

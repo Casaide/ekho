@@ -49,7 +49,6 @@ jobs:
           ls -la shots
           # Link preview images, as fetched: what the cards should show.
           ls -la ~/.ekho/previews 2>/dev/null && file ~/.ekho/previews/* || true
-          for f in ~/.ekho/previews/*.png; do sips -Z 300 "$f" --out shots/preview-image.png >/dev/null && break; done || true
       - name: Crop and print
         run: |
           python3 - <<'PY'
