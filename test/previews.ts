@@ -1,4 +1,5 @@
 import tap from 'bare-tap'
+import b4a from 'b4a'
 import Previews from '../lib/previews.ts'
 import { settle } from './helpers.ts'
 
@@ -9,7 +10,10 @@ function page(body: string, type = 'text/html; charset=utf-8') {
     ok: true,
     headers: { get: (name: string) => (name === 'content-type' ? type : null) },
     text: async () => body,
-    arrayBuffer: async () => new TextEncoder().encode(body).buffer
+    arrayBuffer: async () => {
+      const bytes = b4a.from(body)
+      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+    }
   }
 }
 
