@@ -186,6 +186,9 @@ export default class Thread {
       }
       this._list.content.appendChild(this._message(contact, msg))
     }
+    // Room under the last message: scrolled to the end, Android stops at the
+    // last child, leaving the content's bottom padding out of view.
+    this._list.content.appendChild(view({ height: 20 }))
     this._list.contentOffset = { y: Number.MAX_SAFE_INTEGER }
 
     this._renderRoute(contact)
