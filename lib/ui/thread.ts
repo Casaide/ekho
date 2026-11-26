@@ -50,12 +50,17 @@ const EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅', 
 function meaning(msg: Message): string {
   if (msg.state === 'received') return 'received over ' + msg.via
   if (msg.state === 'delivered') return 'their radio confirmed it arrived'
-  if (msg.state === 'sending') return 'waiting for their radio to confirm'
+  if (msg.state === 'relayed') return 'another radio repeated it onto the mesh'
+  if (msg.state === 'sending') {
+    return msg.address?.startsWith('channel')
+      ? 'waiting to hear another radio repeat it'
+      : 'waiting for their radio to confirm'
+  }
   if (msg.state === 'failed') return 'not delivered: ' + (REASONS[msg.reason ?? ''] ?? msg.reason)
   if (msg.via === 'irc') {
     return 'the server took it; irc has no delivery receipts, so this is as far as ekho can see'
   }
-  return 'sent on the channel; channels have no receipts'
+  return 'sent on the channel'
 }
 
 // A conversation, log style: one line per message with time, who, the path
@@ -308,7 +313,11 @@ export default class Thread {
     if (mine) {
       head.push(
         text(failed ? 'failed · ' + (REASONS[msg.reason ?? ''] ?? msg.reason) : msg.state, {
-          color: failed ? colors.failed : msg.state === 'delivered' ? colors.accent : colors.muted,
+          color: failed
+            ? colors.failed
+            : msg.state === 'delivered' || msg.state === 'relayed'
+              ? colors.accent
+              : colors.muted,
           fontSize: 11
         })
       )
