@@ -44,6 +44,19 @@ export interface Status {
   route: Via
 }
 
+// How far apart the same message over both paths can arrive and still be
+// taken as one.
+const TWIN_WINDOW = 2 * 60 * 1000
+
+// Text compared as words, whatever the spacing.
+function same(text: string): string {
+  return text.trim().replace(/\s+/g, ' ')
+}
+
+// The long name of the motaba bridge's radio, which repeats IRC lines onto
+// the mesh.
+const BRIDGE = 'irc'
+
 // The core of ekho: one thread per person, LoRa first, IRC when no LoRa node
 // has been heard. The radio is a bare-meshtastic Client and the IRC side an
 // Irc; either is attached when it connects.
@@ -439,8 +452,11 @@ export default class Messenger extends EventEmitter {
       return
     }
 
+    // Only to a node the radio knows: heard this session, or in its node
+    // list. It can't reach one it has never heard of, so this fails now,
+    // offering IRC, rather than after the radio's retries.
     const node = this._bestNode(contact)
-    if (node === null) return this._fail(msg, 'NO_NODE')
+    if (node === null || !this._knows(node)) return this._fail(msg, 'NO_NODE')
 
     msg.id = randomId()
     msg.address = node
@@ -476,6 +492,12 @@ export default class Messenger extends EventEmitter {
 
   _onradio(m: RadioMessage): void {
     this.heard.mark(m.from)
+
+    // The bridge's own radio repeats IRC lines onto the mesh, from a node
+    // named "irc". While we're on IRC we have each line already, with who
+    // said it, so the radio's copy is skipped; without IRC it's the only way
+    // to see them, and kept.
+    if (!m.direct && m.name.toLowerCase() === BRIDGE && this.irc !== null && this.irc.ready) return
 
     const contact = m.direct
       ? (this.contacts.byNode(m.from) ?? this.contacts.add({ name: m.name, node: m.from }))
@@ -520,6 +542,19 @@ export default class Messenger extends EventEmitter {
     })
   }
 
+  _knows(node: string): boolean {
+    if (this.heard.since(node) !== Infinity) return true
+    return (this.radio!.nodes?.get(nodeNum(node))?.user ?? null) !== null
+  }
+
+  // Who sent a received message, as a contact, if they're one: in a channel
+  // by their node on LoRa or nick on IRC, otherwise the conversation's.
+  _senderOf(contact: Contact, msg: Message): Contact | null {
+    if (!contact.channel) return contact
+    if (msg.via === 'lora') return this.contacts.byNode(msg.address!)
+    return this.contacts.byNick(msg.from!)
+  }
+
   // The node to send to: the one of theirs heard most recently.
   _bestNode(contact: Contact): string | null {
     let best: string | null = null
@@ -554,6 +589,28 @@ export default class Messenger extends EventEmitter {
     if (thread === undefined) {
       thread = []
       this._threads.set(contact.id, thread)
+    }
+
+    // The same words from the same person over the other path, just now:
+    // one message, marked as having come both ways. Only for people you've
+    // joined across both paths, so it's never a guess.
+    const sender = msg.state === 'received' ? this._senderOf(contact, msg) : null
+    if (sender !== null && sender.nodes.length > 0 && sender.nicks.length > 0) {
+      const words = same(msg.text)
+      const twin = thread.findLast(
+        (m) =>
+          m.state === 'received' &&
+          m.via !== msg.via &&
+          m.also === undefined &&
+          msg.time - m.time <= TWIN_WINDOW &&
+          same(m.text) === words &&
+          this._senderOf(contact, m) === sender
+      )
+      if (twin !== undefined) {
+        twin.also = msg.via
+        this.emit('update', twin)
+        return
+      }
     }
 
     thread.push(msg)

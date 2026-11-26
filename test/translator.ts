@@ -1,5 +1,5 @@
 import tap from 'bare-tap'
-import Translator, { bulgarian } from '../lib/translator.ts'
+import Translator, { bulgarian, cyrillic, forModel } from '../lib/translator.ts'
 import { pickFiles } from '../lib/bergamot.ts'
 import { settle } from './helpers.ts'
 
@@ -8,7 +8,7 @@ const { test } = tap
 const files = { model: 'm', srcVocab: 'v', dstVocab: 'v' }
 
 function translator(batches: string[][] = []) {
-  return new Translator(
+  const tr = new Translator(
     async (onprogress) => {
       onprogress(0.5)
       onprogress(1)
@@ -20,8 +20,10 @@ function translator(batches: string[][] = []) {
         return texts.map((t) => 'en:' + t)
       },
       unload: async () => {}
-    })
+    }),
+    { detect: bulgarian, prepare: forModel }
   )
+  return tr
 }
 
 test('Bulgarian is told from English by its letters', (t) => {
@@ -29,7 +31,9 @@ test('Bulgarian is told from English by its letters', (t) => {
   t.ok(bulgarian('Обиждам лесно'))
   t.notOk(bulgarian('claude ? codex ?'))
   t.notOk(bulgarian('ok'))
-  t.notOk(bulgarian('Hi Иван, see you at the hut tonight'))
+  t.ok(bulgarian('В malla колко е hop to gw'), 'English terms in a Bulgarian line')
+  t.ok(bulgarian('и hops to gateway в malla'), 'two Cyrillic words, however short')
+  t.notOk(bulgarian('see you в 9'), 'one letter alone isn’t enough')
 })
 
 test('once on, a Bulgarian message comes back in English', async (t) => {
@@ -40,15 +44,15 @@ test('once on, a Bulgarian message comes back in English', async (t) => {
   const done: string[] = []
   tr.on('translated', (text: string) => done.push(text))
 
-  t.equal(tr.english('Обиждам лесно'), null, 'off: nothing')
+  t.equal(tr.translation('Обиждам лесно'), null, 'off: nothing')
   await tr.start()
   t.deepStrictEqual([...new Set(states)], ['downloading', 'loading', 'on'])
 
-  t.equal(tr.english('Обиждам лесно'), null, 'on its way')
-  t.equal(tr.english('hello there'), null, 'English is left alone')
+  t.equal(tr.translation('Обиждам лесно'), null, 'on its way')
+  t.equal(tr.translation('hello there'), null, 'English is left alone')
   await settle()
   t.deepStrictEqual(done, ['Обиждам лесно'])
-  t.equal(tr.english('Обиждам лесно'), 'en:Обиждам лесно')
+  t.equal(tr.translation('Обиждам лесно'), 'en:Обиждам лесно')
   t.deepStrictEqual(batches, [['Обиждам лесно']], 'translated once')
 })
 
@@ -118,4 +122,26 @@ test('the newest released model of a pair is picked, with its vocabulary', (t) =
   t.equal(pick.srcVocab.name, 'vocab.bgen.spm')
   t.equal(pick.dstVocab.name, 'vocab.bgen.spm')
   t.equal(pickFiles(records, 'bg', 'de'), null)
+})
+
+test('any text can be translated when asked, Latin Bulgarian spelled in Cyrillic first', async (t) => {
+  const batches: string[][] = []
+  const tr = translator(batches)
+  await tr.start()
+
+  t.equal(tr.translation('eiiiii kvo gotvite ?'), null, 'not taken for Bulgarian by itself')
+  await settle()
+  t.deepStrictEqual(batches, [])
+
+  tr.translate('eiiiii kvo gotvite ?')
+  await settle()
+  t.deepStrictEqual(batches, [['еиииии кво готвите ?']])
+  t.equal(tr.translation('eiiiii kvo gotvite ?'), 'en:еиииии кво готвите ?')
+})
+
+test('Latin Bulgarian in Cyrillic: letters, pairs and chat habits', (t) => {
+  t.equal(cyrillic('Zdravei, kak si?'), 'Здравеи, как си?')
+  t.equal(cyrillic('shte doida v 6'), 'ще доида в 6')
+  t.equal(cyrillic('4akai, 6efe'), 'чакаи, шефе')
+  t.equal(cyrillic('Zhivotat e hubav'), 'Животат е хубав')
 })

@@ -4,6 +4,8 @@ import type EventEmitter from 'bare-events'
 export interface Radio extends EventEmitter {
   // Our own node ID, like '!e2f4a910'.
   readonly id: string
+  // The radio's node list, once synced: nodes it has heard of.
+  readonly nodes?: Map<number, { user: unknown }>
   send(
     text: string,
     opts?: { to?: number; id?: number; wantAck?: boolean; channel?: number }
@@ -74,6 +76,9 @@ export interface Message {
   state: State
   reason: string | null
   hops?: number
+  // Received over the other path too, from the same person: the copy that
+  // was folded into this one.
+  also?: Via
   // The exact address it came from or went to: a node ID, a nick or a
   // channel. Shown in message info, since one person can have several.
   address: string | null

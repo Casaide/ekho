@@ -40,7 +40,7 @@ const REASONS: Record<string, string> = {
   NO_RESPONSE: 'no response',
   TIMEOUT: 'timed out',
   RADIO_OFFLINE: 'radio not connected',
-  NO_NODE: 'no node known for them',
+  NO_NODE: 'their node is unknown to the radio',
   IRC_OFFLINE: 'irc not connected',
   NO_NICK: 'no irc nick for them',
   NO_RADIO_CHANNEL: 'not a channel on the radio',
@@ -106,6 +106,16 @@ export default class Thread {
   // redraws so a message arriving doesn't stop one.
   _playing: Map<string, any>
   _playingIn: string | null
+  // Messages shown as written though translated, by id.
+  _original: Set<number>
+  // Sending what's typed in Bulgarian: the switch, the translation shown
+  // above the box, the send button, and the wait before translating.
+  _inBulgarian: boolean
+  _toBg: any
+  _preview: any
+  _sendBox: any
+  _sendLabel: any
+  _typing: ReturnType<typeof setTimeout> | null
 
   constructor(ui: Ui) {
     this.ui = ui
@@ -134,6 +144,13 @@ export default class Thread {
     this._timers = []
     this._playing = new Map()
     this._playingIn = null
+    this._original = new Set()
+    this._inBulgarian = false
+    this._toBg = view({})
+    this._preview = text('', { color: colors.text, fontSize: 13, display: 'none' })
+    this._sendLabel = text('➤', { color: colors.ground, fontSize: 16, fontWeight: 'bold' })
+    this._sendBox = view({}, [this._sendLabel])
+    this._typing = null
     // Lives across redraws, so a message arriving doesn't wipe what's typed.
     this._emoji = input('or type any emoji')
     this._emoji.returnKeyType = 'send'
@@ -165,6 +182,7 @@ export default class Thread {
       }
       this._renderCount()
       this._grow()
+      this._translateSoon()
     })
     this._input.on('layout', (frame: { width: number }) => {
       const perLine = Math.max(1, Math.floor((frame.width - 2 * INPUT_PAD) / (INPUT_SIZE * 0.6)))
@@ -176,14 +194,23 @@ export default class Thread {
       {
         flex: 1,
         flexDirection: 'row',
-        alignItems: 'center',
+        // The prompt stays on the first line as the box grows.
+        alignItems: 'flex-start',
         borderWidth: 1,
         borderColor: colors.line,
         borderRadius: 8,
         backgroundColor: colors.panel,
         paddingLeft: 12
       },
-      [text('>', { color: colors.accent, fontSize: 15 }), this._input]
+      [
+        text('>', {
+          color: colors.accent,
+          fontSize: INPUT_SIZE,
+          lineHeight: INPUT_LINE,
+          paddingTop: INPUT_PAD
+        }),
+        this._input
+      ]
     )
     const lit = (on: boolean) =>
       (this._box.style = { ...this._box.style, borderColor: on ? colors.accent : colors.line })
@@ -214,9 +241,11 @@ export default class Thread {
         view({ flexDirection: 'row', alignItems: 'center', gap: 6 }, [
           this._route,
           view({ flex: 1 }),
+          this._toBg,
           this._count
         ]),
         this._replying,
+        this._preview,
         view(
           {
             flexDirection: 'row',
@@ -227,15 +256,7 @@ export default class Thread {
           [
             // A tap anywhere on the box, the `>` too, is a tap on the input.
             press(this._box, () => this._input.focus()),
-            button('send', () => this._send(), {
-              ...primary(),
-              fontSize: 14,
-              alignSelf: 'flex-end',
-              justifyContent: 'center',
-              minHeight: INPUT_LINE + 2 * INPUT_PAD + 2,
-              paddingHorizontal: 16,
-              borderRadius: 8
-            })
+            press(this._sendBox, () => this._send())
           ]
         )
       ])
@@ -256,7 +277,7 @@ export default class Thread {
     if (this._replyTo !== null && this._replyTo.contact !== contact.id) this._replyTo = null
     this._renderRoute(contact)
     this._renderReplying()
-    this._renderCount()
+    this.renderCompose()
     this._renderDetail(contact)
 
     // Another conversation: what played in the last one stops.
@@ -280,6 +301,7 @@ export default class Thread {
     const was = this._list.contentOffset.y
     clear(this._list.content)
     let day = -1
+    let side: boolean | null = null
     for (const msg of thread) {
       if (dayIndex(msg.time) !== day) {
         day = dayIndex(msg.time)
@@ -291,6 +313,10 @@ export default class Thread {
           })
         )
       }
+      // More room where it turns from theirs to ours, or back.
+      const mine = msg.state !== 'received'
+      if (side !== null && side !== mine) this._list.content.appendChild(view({ height: 10 }))
+      side = mine
       this._list.content.appendChild(this._message(contact, msg))
     }
     // Room under the last message: scrolled to the end, Android stops at the
@@ -365,7 +391,7 @@ export default class Thread {
     const now = this.ui.messenger.now()
     this._detail.appendChild(row('when', dayLabel(msg.time, now) + ' ' + clock(msg.time)))
     this._detail.appendChild(row('from', mine ? 'you' : (msg.from ?? displayName(contact))))
-    const english = mine ? null : (this.ui.translator?.english(msg.text) ?? null)
+    const english = mine ? null : (this.ui.translator?.translation(msg.text) ?? null)
     if (english !== null && english !== msg.text) {
       this._detail.appendChild(row('original', msg.text))
     }
@@ -385,7 +411,8 @@ export default class Thread {
     )
 
     const actions = []
-    if (msg.state === 'failed') {
+    // Retrying a node the radio doesn't know would only fail again.
+    if (msg.state === 'failed' && msg.reason !== 'NO_NODE') {
       actions.push(
         button(
           'retry on lora',
@@ -393,6 +420,8 @@ export default class Thread {
           chip(colors.text)
         )
       )
+    }
+    if (msg.state === 'failed') {
       if (contact.nicks.length > 0) {
         actions.push(
           button(
@@ -404,6 +433,35 @@ export default class Thread {
       }
     }
     actions.push(button('↩️ reply', () => this._reply(msg), chip(colors.accent)))
+    // Any message of theirs can be translated, or shown as written again:
+    // people mix English and Bulgarian, in either alphabet.
+    const translator = this.ui.translator
+    if (!mine && translator !== null && translator.state === 'on') {
+      const english = translator.translation(msg.text)
+      if (english === null) {
+        actions.push(
+          button(
+            'translate',
+            () => this._act(() => translator.translate(msg.text)),
+            chip(colors.text)
+          )
+        )
+      } else if (english !== msg.text) {
+        const original = this._original.has(msg.id)
+        actions.push(
+          button(
+            original ? 'show english' : 'show original',
+            () => {
+              if (original) this._original.delete(msg.id)
+              else this._original.add(msg.id)
+              this._shown = ''
+              this.render()
+            },
+            chip(colors.text)
+          )
+        )
+      }
+    }
     if (msg.state === 'received') {
       // Any emoji: the common ones a tap away, anything else typed. Sent as
       // a short text until bare-meshtastic carries Meshtastic's reactions.
@@ -442,12 +500,15 @@ export default class Thread {
     // it is shows by the side, so only theirs carry a name.
     const head = [text(clock(msg.time), { color: colors.muted, fontSize: 11 })]
     if (!mine) {
+      const name = text(msg.from ?? displayName(contact), {
+        color: colors.text,
+        fontSize: 11,
+        fontWeight: 'bold'
+      })
+      // In a channel, their name opens them: their conversation and info,
+      // where two of them can be joined into one person.
       head.push(
-        text(msg.from ?? displayName(contact), {
-          color: colors.text,
-          fontSize: 11,
-          fontWeight: 'bold'
-        })
+        contact.channel ? press(view({ cursor: 'pointer' }, [name]), () => this._sender(msg)) : name
       )
     }
     head.push(text('[' + this._path(msg) + ']', { color: pathColor, fontSize: 11 }))
@@ -470,8 +531,8 @@ export default class Thread {
     })
     // Theirs in Bulgarian shows in English once translated; the original is
     // in its details, on hold.
-    const english = mine ? null : (this.ui.translator?.english(msg.text) ?? null)
-    const translated = english !== null && english !== msg.text
+    const english = mine ? null : (this.ui.translator?.translation(msg.text) ?? null)
+    const translated = english !== null && english !== msg.text && !this._original.has(msg.id)
     if (translated) head.push(text('translated', { color: colors.muted, fontSize: 11 }))
     const body = this._body(translated ? english : msg.text)
     // A message with a link is as wide as a message gets, rather than as
@@ -480,16 +541,20 @@ export default class Thread {
     // past the box. Its link's lines (`lines`) leave a character spare.
     const linked = links(msg.text).length > 0
     if (linked) body.style = { ...body.style, flex: 1, textAlign: mine ? 'right' : 'left' }
+    // Above the message, not in it, so a tap on the name doesn't also tap
+    // the message.
+    const top = view(
+      {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 6,
+        justifyContent: mine ? 'flex-end' : 'flex-start'
+      },
+      head
+    )
     const children = [
-      view(
-        {
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: 8,
-          justifyContent: mine ? 'flex-end' : 'flex-start'
-        },
-        head
-      ),
       view(
         { flexDirection: 'row', gap: 10, justifyContent: mine ? 'flex-end' : 'flex-start' },
         mine ? [body, bar] : [bar, body]
@@ -499,7 +564,7 @@ export default class Thread {
     // Only something that needs doing gets a line of its own.
     if (failed) {
       children.push(
-        text('tap for retry or irc', {
+        text(msg.reason === 'NO_NODE' ? 'tap to send via irc' : 'tap for retry or irc', {
           color: colors.failed,
           fontSize: 11,
           paddingHorizontal: 12,
@@ -533,11 +598,27 @@ export default class Thread {
     // it, so a tap on one doesn't also open the message's details.
     const width = linked ? { width: '85%' } : { maxWidth: '85%' }
     return view({ gap: 6, alignSelf: mine ? 'flex-end' : 'flex-start', ...width }, [
+      top,
       bubble,
       ...links(msg.text)
         .slice(0, 2)
         .map((url) => this._link(url, mine))
     ])
+  }
+
+  // Who sent a channel message, as a contact, made one if need be: by nick
+  // on IRC, by node on LoRa. Opened with its info.
+  _sender(msg: Message): void {
+    const { messenger } = this.ui
+    const contact =
+      msg.via === 'irc'
+        ? (messenger.contacts.byNick(msg.from!) ?? messenger.addContact({ nicks: [msg.from!] }))
+        : (messenger.contacts.byNode(msg.address!) ??
+          messenger.addContact({ name: msg.from!, nodes: [msg.address!] }))
+    this.ui.select(contact)
+    if (this.ui.compact) return this.ui.open('contact')
+    this.ui.info = true
+    this.ui.render()
   }
 
   // A message's text, its links and mentions marked. A link goes on lines
@@ -774,6 +855,7 @@ export default class Thread {
 
   // What's in the brackets: `lora · 2 hops`, `lora · direct`, `irc`.
   _path(msg: Message): string {
+    if (msg.also !== undefined) return msg.via + ' + ' + msg.also
     if (msg.via === 'irc') return 'irc'
     if (msg.address !== null && msg.address.startsWith('channel')) return 'lora · channel'
     if (msg.hops) return 'lora · ' + msg.hops + (msg.hops === 1 ? ' hop' : ' hops')
@@ -813,9 +895,87 @@ export default class Thread {
     return LIMIT.irc
   }
 
+  // The switch to send in Bulgarian, the Bulgarian above the box, and the
+  // send button, which turns amber and says so.
+  renderCompose(): void {
+    // Emptied by sending, which says nothing: back to one line.
+    this._grow()
+    const tr = this.ui.toBulgarian
+    clear(this._toBg)
+    if (tr !== null) {
+      this._toBg.appendChild(
+        button('→ bg', () => this._switchBulgarian(), {
+          ...chip(this._inBulgarian ? colors.irc : colors.muted),
+          fontSize: 11,
+          paddingVertical: 3,
+          paddingHorizontal: 8
+        })
+      )
+    }
+    const on = tr !== null && this._inBulgarian
+    const value = this._input.value.trim()
+    let shown = ''
+    if (on && tr.state === 'downloading') {
+      shown = 'bg: getting the model, ' + Math.round(tr.progress * 100) + '%'
+    } else if (on && tr.state === 'failed') shown = 'bg: failed: ' + tr.error
+    else if (on && value !== '') shown = 'bg: ' + (tr.translation(value) ?? '…')
+    else if (on) shown = 'bg: type in English, it goes out in Bulgarian'
+    this._preview.text = shown
+    this._preview.style = {
+      color: shown.startsWith('bg: failed') ? colors.failed : colors.irc,
+      fontSize: 13,
+      display: on ? 'flex' : 'none'
+    }
+    const color = on ? colors.irc : colors.accent
+    this._sendLabel.text = on ? 'bg ➤' : '➤'
+    this._sendBox.style = {
+      backgroundColor: color,
+      borderColor: color,
+      borderWidth: 1,
+      alignSelf: 'flex-end',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: INPUT_LINE + 2 * INPUT_PAD + 2,
+      minWidth: INPUT_LINE + 2 * INPUT_PAD + 2,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      cursor: 'pointer'
+    }
+    this._renderCount()
+  }
+
+  _switchBulgarian(): void {
+    const tr = this.ui.toBulgarian!
+    this._inBulgarian = !this._inBulgarian
+    if (this._inBulgarian && (tr.state === 'off' || tr.state === 'failed')) tr.start()
+    this._translateSoon()
+    this.renderCompose()
+  }
+
+  // Once typing pauses, what's typed is translated for the preview.
+  _translateSoon(): void {
+    if (!this._inBulgarian) return
+    if (this._typing !== null) clearTimeout(this._typing)
+    this._typing = setTimeout(() => {
+      this._typing = null
+      const value = this._input.value.trim()
+      if (value !== '') this.ui.toBulgarian!.translate(value)
+      this.renderCompose()
+    }, 400)
+  }
+
+  // What goes out: what's typed, or its Bulgarian; null while that's on
+  // its way.
+  _outgoing(): string | null {
+    const value = this._input.value.trim()
+    if (!this._inBulgarian || this.ui.toBulgarian === null) return value
+    return this.ui.toBulgarian.translation(value)
+  }
+
   _renderCount(): void {
     const used = bytes(
-      (this._replyTo === null ? '' : this.ui.messenger.replyTo(this._replyTo)) + this._input.value
+      (this._replyTo === null ? '' : this.ui.messenger.replyTo(this._replyTo)) +
+        (this._outgoing() ?? this._input.value)
     )
     const limit = this._limit()
     this._count.text = used + '/' + limit
@@ -842,27 +1002,34 @@ export default class Thread {
   }
 
   _send(): void {
-    const value = this._input.value.trim()
+    const value = this._outgoing()
     const contact = this.ui.selected
-    if (value === '' || contact === null) return
+    // In Bulgarian, nothing goes until its translation is shown.
+    if (value === null || value === '' || contact === null) return
     const prefix = this._replyTo === null ? '' : this.ui.messenger.replyTo(this._replyTo)
     // Too long to go out in one piece: the counter is already red.
     if (bytes(prefix + value) > this._limit()) return
 
-    if (this._replyTo === null) this.ui.messenger.send(contact, value)
-    else this.ui.messenger.reply(this._replyTo, value)
+    const sent =
+      this._replyTo === null
+        ? this.ui.messenger.send(contact, value)
+        : this.ui.messenger.reply(this._replyTo, value)
     this._input.value = ''
     this._reply(null)
-    this._renderCount()
+    // Their node unknown to the radio: it fails at once, and its choices
+    // (send via IRC) open, rather than waiting for a tap.
+    if (sent.state === 'failed' && sent.reason === 'NO_NODE') this._open = sent
+    this.renderCompose()
+    this.render()
   }
 }
 
 // The message input: its font size, the height of one of its lines, its
 // padding, and the most lines it grows to before scrolling.
-const INPUT_SIZE = 15
-const INPUT_LINE = 21
-const INPUT_PAD = 11
-const MAX_LINES = 4
+const INPUT_SIZE = 14
+const INPUT_LINE = 19
+const INPUT_PAD = 7
+const MAX_LINES = 3
 
 // A picture in a box of a fixed size it never draws outside of. bare-native
 // doesn't clip a view's contents (as on the web), and on Android a picture

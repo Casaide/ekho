@@ -82,7 +82,9 @@ That's the whole rule. A failed LoRa message is never moved to IRC automatically
 
 Channel messages have no per-person acknowledgement, but the radio still reports an implicit ack: it listens for another radio repeating the message, and retries if it hears none. ekho shows that as relayed (it reached the mesh), or failed if no radio repeated it. IRC messages are sent with no receipt.
 
-**Duplicates:** no dedupe. Meshtastic devices dedupe by packet ID, and duplicates haven't been a problem in practice. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are skipped, because the radio hears those itself. Plain IRC users, MeshCore and Bitchat users, and IRC-only channels are always kept: none of those reach the radio.
+**Duplicates:** no dedupe. Meshtastic devices dedupe by packet ID, and duplicates haven't been a problem in practice. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are skipped, because the radio hears those itself. Plain IRC users, MeshCore and Bitchat users, and IRC-only channels are always kept: none of those reach the radio. The other way round, the bridge's own radio (long name `irc`) repeats IRC lines onto the mesh. ekho is on both paths, so it got each IRC line twice, the second from `irc` without who said it. Stock clients, on one path, see it once. So while ekho is on IRC, channel messages from that node are skipped; without IRC they're how those lines arrive, and kept. The node is known by its name, as its ID isn't known yet.
+
+The rest is left to the user, who knows who's who: once they join someone's radio node and IRC nick into one contact, the same words from that person over the other path within two minutes fold into the first message, marked `lora + irc`. Nobody else's lines are touched, so two people saying "ok" stay two messages.
 
 **Offline:** with no nodes heard and no internet, messages wait on the phone and go out on whichever path returns first.
 
@@ -123,7 +125,9 @@ A link to a sound or a video (by its extension: mp3, wav, ogg, opus, m4a, aac, f
 
 Bulgarian messages can show in English, on the device. It's off until turned on in the radio tab; then Mozilla's Bulgarian→English model (Firefox Translations, Bergamot, MPL-2.0) is fetched once the way Firefox gets it, from Remote Settings and its CDN (`lib/bergamot.ts`), into the app's data folder, and run by QVAC's translation addon (`@qvac/translation-nmtcpp`), loaded only then. Nothing is built into the app, and no message leaves the device. Android only for now: QVAC's runtime package picks its native library by the build machine's architecture, not each host's, so the universal macOS build defers the addon. Its GPU backends (Vulkan, OpenCL, RPC, about 88 MB) are removed before building (`scripts/qvac-hosts.sh`), since Bergamot runs on the CPU. QVAC's own TranslatePsy models are smaller and better but don't cover Bulgarian yet; one would load the same way.
 
-A received message that's mostly Cyrillic letters is translated (`lib/translator.ts`), once per session, and shows in English in place of the Bulgarian, marked "translated". The original is in its details, on hold.
+A received message with some Bulgarian in it (a Cyrillic word of two letters or more, or two of any length) is translated by itself (`lib/translator.ts`), once per session, and shows in English in place of the Bulgarian, marked "translated". People mix English and Bulgarian, in either alphabet, so any received message can be translated from its details, on hold, where the original is too, and a translated one can be shown as written again. Bulgarian typed in Latin letters ("kvo gotvite") is spelled in Cyrillic first, since the model reads Cyrillic: the official transliteration backwards plus chat habits (4 for ч, 6 for ш, w for в, q for я). It's rough, so only messages you ask for go through it.
+
+What you write can go out in Bulgarian: the `→ bg` switch above the box (Mozilla's English→Bulgarian model, a second download when first switched on) shows the Bulgarian above the box as you type, turns the send button amber as "bg ➤", and sends the Bulgarian once it's shown. The byte counter counts the Bulgarian, which takes two bytes a letter.
 
 ## Mentions
 

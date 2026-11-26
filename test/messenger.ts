@@ -410,3 +410,90 @@ test('a channel the radio also has goes over LoRa on that channel; others over I
   t.equal(toVarna.via, 'irc')
   t.equal(stream.lines.at(-1), 'PRIVMSG #varna :hi varna')
 })
+
+test('a direct message to a node the radio doesn’t know fails at once, for IRC instead', (t) => {
+  const { radio, stream, messenger, ivan } = setup()
+  // Another node heard: LoRa is the route, but Ivan's node never was.
+  radio.emit('position', { from: '!0000beef' })
+
+  const msg = messenger.send(ivan, 'are you up?')
+
+  t.equal(msg.via, 'lora')
+  t.equal(msg.state, 'failed')
+  t.equal(msg.reason, 'NO_NODE')
+  t.equal(radio.sent.length, 0, 'nothing tried over the air')
+
+  messenger.sendViaIrc(msg)
+  t.deepStrictEqual(stream.lines, ['PRIVMSG ivanp :are you up?'])
+})
+
+test('the bridge’s radio repeating IRC onto the mesh is skipped while on IRC', (t) => {
+  const { radio, stream, messenger } = setup()
+  const line = {
+    from: '!0000b41d',
+    name: 'irc',
+    text: 'it is worse there',
+    snr: 5,
+    rssi: -90,
+    hops: 1,
+    direct: false
+  }
+
+  stream.serve(':BLAGOY!u@h PRIVMSG #sofiamesh :it is worse there\r\n')
+  radio.emit('message', line)
+  t.deepStrictEqual(
+    messenger.thread(messenger.channel).map((m) => m.from),
+    ['BLAGOY'],
+    'once, with who said it'
+  )
+
+  const alone = new Messenger({ ircChannel: '#sofiamesh' })
+  const own = new FakeRadio()
+  alone.setRadio(own as never)
+  own.emit('message', line)
+  t.deepStrictEqual(
+    alone.thread(alone.channel).map((m) => m.text),
+    ['it is worse there'],
+    'without IRC, the radio’s copy is how the line arrives'
+  )
+})
+
+test('the same line from someone joined across both paths shows once, marked both ways', (t) => {
+  const { c, radio, stream, messenger } = setup()
+  messenger.contacts.add({ name: 'blagoy', node: '!0b1a6000', nicks: ['BLAGOY', 'BLAGOY|mt'] })
+
+  radio.emit('message', {
+    from: '!0b1a6000',
+    name: 'BLAGOY',
+    text: 'it is  worse there',
+    snr: 5,
+    rssi: -90,
+    hops: 1,
+    direct: false
+  })
+  c.tick(5000)
+  stream.serve(':BLAGOY!u@h PRIVMSG #sofiamesh :it is worse there\r\n')
+  stream.serve(':georgi!u@h PRIVMSG #sofiamesh :it is worse there\r\n')
+
+  const thread = messenger.thread(messenger.channel)
+  t.deepStrictEqual(
+    thread.map((m) => m.from + ':' + m.via + (m.also ? '+' + m.also : '')),
+    ['BLAGOY:lora+irc', 'georgi:irc'],
+    'once for him; someone else saying the same is their own'
+  )
+})
+
+test('the same line from someone not joined across paths shows twice', (t) => {
+  const { radio, stream, messenger } = setup()
+  radio.emit('message', {
+    from: '!0b1a6000',
+    name: 'BLAGOY',
+    text: 'hi',
+    snr: 5,
+    rssi: -90,
+    hops: 1,
+    direct: false
+  })
+  stream.serve(':BLAGOY!u@h PRIVMSG #sofiamesh :hi\r\n')
+  t.equal(messenger.thread(messenger.channel).length, 2)
+})

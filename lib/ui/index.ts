@@ -103,6 +103,8 @@ export default class Ui extends EventEmitter {
   // Link previews, where links can be fetched; null in tests and offline.
   previews: Previews | null
   translator: Translator | null
+  // What you write, in Bulgarian, when sending it so.
+  toBulgarian: Translator | null
   radioInfo: RadioInfo
   compact: boolean
   // On screen: off while Android has the app paused.
@@ -158,6 +160,7 @@ export default class Ui extends EventEmitter {
       presence?: Presence
       previews?: Previews
       translator?: Translator
+      toBulgarian?: Translator
     } = {}
   ) {
     super()
@@ -171,6 +174,7 @@ export default class Ui extends EventEmitter {
     this.presence = opts.presence ?? new Presence(messenger.heard)
     this.previews = opts.previews ?? null
     this.translator = opts.translator ?? null
+    this.toBulgarian = opts.toBulgarian ?? null
     this.radioInfo = { longName: null, shortName: null, region: null, preset: null, channels: [] }
     this.compact = opts.compact ?? false
     this.visible = true
@@ -274,6 +278,8 @@ export default class Ui extends EventEmitter {
     this.radio.on('change', () => this.schedule())
     this.irc.on('change', () => this.schedule())
     this.presence.on('change', () => this.schedule())
+    this.toBulgarian?.on('change', () => this._thread.renderCompose())
+    this.toBulgarian?.on('translated', () => this._thread.renderCompose())
     this.translator?.on('change', () => this.schedule())
     this.translator?.on('translated', () => {
       this._thread.invalidate(null)
