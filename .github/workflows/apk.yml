@@ -27,8 +27,11 @@ jobs:
           java-version: 21
       - name: Android SDK platform and build tools
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+      # Our own addons (packages/), compiled here: they aren't on npm.
+      - name: Native addons
+        run: sh scripts/build-addons.sh
       - name: Dependencies against npm
-        run: node -e "const p=require('./package.json');for(const [n,r] of Object.entries({...p.dependencies,...p.devDependencies}))console.log(n,r)" | while read n r; do echo "$n $r latest $(npm view $n version)"; done
+        run: node -e "const p=require('./package.json');for(const [n,r] of Object.entries({...p.dependencies,...p.devDependencies}))console.log(n,r)" | while read n r; do case $r in file:*) continue;; esac; echo "$n $r latest $(npm view $n version)"; done
       - run: npm install
       # A fixed, public debug key, so each build installs over the last one.
       # Temporary: replace with a private release key (see README) before

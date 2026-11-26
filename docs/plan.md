@@ -18,6 +18,8 @@ The app replaces the Meshtastic app on the phone, and adds IRC when no nodes are
 - [x] Contacts UI: every known address on the contact page and on each message, join two contacts as one person, optional alias
 - [ ] Reactions and replies on LoRa; reactions over IRC as a new text message
 - [ ] Mockup fidelity: radio screen, IRC setup screen, light mode
+- [x] Keep running in the background (foreground service) and notify of messages to you: `packages/`, untested on a phone
+- [ ] Move `packages/*` to their own repos once they work on a phone
 
 Upstream, in bare-meshtastic (see `docs/design.md` for detail):
 

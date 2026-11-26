@@ -20,6 +20,8 @@ npx bare-build app.ts \
   --host darwin-x64 \
   --runtime bare-native/runtime \
   --defer bare-navigation-android \
+  --defer bare-notifications-android \
+  --defer bare-foreground-service-android \
   --name ekho \
   --identifier casa.cassidy.ekho \
   --icon "$out/ekho.icns" \
