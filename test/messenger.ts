@@ -457,3 +457,43 @@ test('the bridge’s radio repeating IRC onto the mesh is skipped while on IRC',
     'without IRC, the radio’s copy is how the line arrives'
   )
 })
+
+test('the same line from someone joined across both paths shows once, marked both ways', (t) => {
+  const { c, radio, stream, messenger } = setup()
+  messenger.contacts.add({ name: 'blagoy', node: '!0b1a6000', nicks: ['BLAGOY', 'BLAGOY|mt'] })
+
+  radio.emit('message', {
+    from: '!0b1a6000',
+    name: 'BLAGOY',
+    text: 'it is  worse there',
+    snr: 5,
+    rssi: -90,
+    hops: 1,
+    direct: false
+  })
+  c.tick(5000)
+  stream.serve(':BLAGOY!u@h PRIVMSG #sofiamesh :it is worse there\r\n')
+  stream.serve(':georgi!u@h PRIVMSG #sofiamesh :it is worse there\r\n')
+
+  const thread = messenger.thread(messenger.channel)
+  t.deepStrictEqual(
+    thread.map((m) => m.from + ':' + m.via + (m.also ? '+' + m.also : '')),
+    ['BLAGOY:lora+irc', 'georgi:irc'],
+    'once for him; someone else saying the same is their own'
+  )
+})
+
+test('the same line from someone not joined across paths shows twice', (t) => {
+  const { radio, stream, messenger } = setup()
+  radio.emit('message', {
+    from: '!0b1a6000',
+    name: 'BLAGOY',
+    text: 'hi',
+    snr: 5,
+    rssi: -90,
+    hops: 1,
+    direct: false
+  })
+  stream.serve(':BLAGOY!u@h PRIVMSG #sofiamesh :hi\r\n')
+  t.equal(messenger.thread(messenger.channel).length, 2)
+})

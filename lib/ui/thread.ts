@@ -855,6 +855,7 @@ export default class Thread {
 
   // What's in the brackets: `lora · 2 hops`, `lora · direct`, `irc`.
   _path(msg: Message): string {
+    if (msg.also !== undefined) return msg.via + ' + ' + msg.also
     if (msg.via === 'irc') return 'irc'
     if (msg.address !== null && msg.address.startsWith('channel')) return 'lora · channel'
     if (msg.hops) return 'lora · ' + msg.hops + (msg.hops === 1 ? ' hop' : ' hops')

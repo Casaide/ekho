@@ -84,6 +84,8 @@ Channel messages have no per-person acknowledgement, but the radio still reports
 
 **Duplicates:** no dedupe. Meshtastic devices dedupe by packet ID, and duplicates haven't been a problem in practice. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are skipped, because the radio hears those itself. Plain IRC users, MeshCore and Bitchat users, and IRC-only channels are always kept: none of those reach the radio. The other way round, the bridge's own radio (long name `irc`) repeats IRC lines onto the mesh. ekho is on both paths, so it got each IRC line twice, the second from `irc` without who said it. Stock clients, on one path, see it once. So while ekho is on IRC, channel messages from that node are skipped; without IRC they're how those lines arrive, and kept. The node is known by its name, as its ID isn't known yet.
 
+The rest is left to the user, who knows who's who: once they join someone's radio node and IRC nick into one contact, the same words from that person over the other path within two minutes fold into the first message, marked `lora + irc`. Nobody else's lines are touched, so two people saying "ok" stay two messages.
+
 **Offline:** with no nodes heard and no internet, messages wait on the phone and go out on whichever path returns first.
 
 ## Version 1 scope

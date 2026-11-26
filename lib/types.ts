@@ -76,6 +76,9 @@ export interface Message {
   state: State
   reason: string | null
   hops?: number
+  // Received over the other path too, from the same person: the copy that
+  // was folded into this one.
+  also?: Via
   // The exact address it came from or went to: a node ID, a nick or a
   // channel. Shown in message info, since one person can have several.
   address: string | null
