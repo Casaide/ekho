@@ -2,7 +2,8 @@ import native from 'bare-native'
 import type Ui from './index.ts'
 import type { Contact, Message } from '../types.ts'
 import { displayName } from '../contacts.ts'
-import { parts, links, host } from '../links.ts'
+import { parts, links, host, media } from '../links.ts'
+import type { Media } from '../links.ts'
 import {
   colors,
   view,
@@ -43,7 +44,7 @@ const REASONS: Record<string, string> = {
   INTERRUPTED: 'interrupted'
 }
 
-const { Clipboard, TextFragment, Image } = native
+const { Clipboard, TextFragment, Image, WebView } = native
 
 // The reactions offered first; any other can be typed.
 const EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅', '👎', '📡']
@@ -92,6 +93,10 @@ export default class Thread {
   _settling: number
   _timers: ReturnType<typeof setTimeout>[]
   _emoji: any
+  // Sounds and videos playing, by link, in this conversation: kept across
+  // redraws so a message arriving doesn't stop one.
+  _playing: Map<string, any>
+  _playingIn: string | null
 
   constructor(ui: Ui) {
     this.ui = ui
@@ -111,6 +116,8 @@ export default class Thread {
     this._end = ''
     this._settling = 0
     this._timers = []
+    this._playing = new Map()
+    this._playingIn = null
     // Lives across redraws, so a message arriving doesn't wipe what's typed.
     this._emoji = input('or type any emoji')
     this._emoji.returnKeyType = 'send'
@@ -200,6 +207,12 @@ export default class Thread {
     this._renderReplying()
     this._renderCount()
     this._renderDetail(contact)
+
+    // Another conversation: what played in the last one stops.
+    if (this._playingIn !== contact.id) {
+      this._playing.clear()
+      this._playingIn = contact.id
+    }
 
     // Redraws come often (presence, status): the list is rebuilt only when
     // what it shows changed, and so it keeps its place otherwise.
@@ -470,8 +483,11 @@ export default class Thread {
     return body
   }
 
-  // A link to open: its preview once fetched, else just where it goes.
+  // A link to open: its preview once fetched, else just where it goes. A
+  // sound or a video plays in place instead.
   _link(url: string): any {
+    const kind = media(url)
+    if (kind !== null) return this._media(url, kind)
     const preview = this.ui.previews?.get(url) ?? null
     const open = () => this.ui.actions.openUrl(url)
     if (preview === null) {
@@ -516,6 +532,78 @@ export default class Thread {
       ),
       open
     )
+  }
+
+  // A sound or a video: a card to tap, then the player in its place, in a
+  // web view, as each platform plays any format its browser does.
+  _media(url: string, kind: Media): any {
+    const name = decodeURIComponent(
+      url
+        .replace(/[?#].*$/, '')
+        .split('/')
+        .pop()!
+    )
+    const card = (children: any[]) =>
+      view(
+        {
+          gap: 6,
+          padding: 8,
+          width: 296,
+          borderWidth: 1,
+          borderColor: colors.line,
+          borderRadius: 6,
+          backgroundColor: colors.panel
+        },
+        children
+      )
+    const about = text(
+      (kind === 'audio' ? 'sound' : 'video') + ' · ' + host(url) + ' · ' + name,
+      {
+        color: colors.muted,
+        fontSize: 11
+      },
+      1
+    )
+
+    const player = this._playing.get(url)
+    if (player === undefined) {
+      return press(
+        card([
+          text('▶ play ' + (kind === 'audio' ? 'sound' : 'video'), {
+            color: colors.accent,
+            fontSize: 13,
+            fontWeight: 'bold'
+          }),
+          about
+        ]),
+        () => this._play(url, kind)
+      )
+    }
+    detach(player)
+    return card([
+      player,
+      view({ flexDirection: 'row', alignItems: 'center', gap: 8 }, [
+        view({ flex: 1 }, [about]),
+        button('■ stop', () => this._stop(url), { ...chip(colors.muted), fontSize: 11 }),
+        button('↗', () => this.ui.actions.openUrl(url), { ...chip(colors.accent), fontSize: 11 })
+      ])
+    ])
+  }
+
+  _play(url: string, kind: Media): void {
+    const player = new WebView()
+    player.style = { width: 278, height: kind === 'audio' ? 56 : 158, borderRadius: 4 }
+    player.html = page(url, kind)
+    this._playing.set(url, player)
+    this._shown = ''
+    this.ui.schedule()
+  }
+
+  _stop(url: string): void {
+    this._playing.get(url).html = ''
+    this._playing.delete(url)
+    this._shown = ''
+    this.ui.schedule()
   }
 
   // A preview came in: show it. Its card is taller than the link it
@@ -646,4 +734,23 @@ function fitOnApple(image: any): void {
     this._box = { width, height }
     this._fitted()
   }
+}
+
+// The page a sound or video plays in: the player filling it, on the card's
+// colour. Android reads the page as a data URL, so it's escaped as one there.
+function page(url: string, kind: Media): string {
+  const src = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+  const html =
+    '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<style>html,body{margin:0;height:100%;background:' +
+    colors.panel +
+    '}audio,video{display:block;width:100%;height:100%}</style>' +
+    '<' +
+    kind +
+    ' controls autoplay playsinline src="' +
+    src +
+    '"></' +
+    kind +
+    '>'
+  return Bare.platform === 'android' ? encodeURIComponent(html) : html
 }
