@@ -23,7 +23,10 @@ export function text(value: string, style: object, lines = 0): any {
   return t
 }
 
-export function input(placeholder: string, opts: { secureTextEntry?: boolean } = {}): any {
+export function input(
+  placeholder: string,
+  opts: { secureTextEntry?: boolean; multiline?: boolean } = {}
+): any {
   const i = new TextInput(opts)
   i.placeholder = placeholder
   i.autoCapitalize = 'none'
