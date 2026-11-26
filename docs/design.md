@@ -83,7 +83,7 @@ That's the whole rule. A failed LoRa message is never moved to IRC automatically
 
 Channel messages stop at sent, as channels have no per-person acknowledgement. IRC messages are sent with no receipt.
 
-**Duplicates:** no dedupe. Meshtastic devices dedupe by packet ID, and duplicates haven't been a problem in practice. The one exception: while LoRa is the route, IRC copies of mesh channel traffic are skipped, because the bridge mirrors what the radio already heard.
+**Duplicates:** no dedupe. Meshtastic devices dedupe by packet ID, and duplicates haven't been a problem in practice. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are skipped, because the radio hears those itself. Plain IRC users, MeshCore and Bitchat users, and IRC-only channels are always kept: none of those reach the radio.
 
 **Offline:** with no nodes heard and no internet, messages wait on the phone and go out on whichever path returns first.
 
