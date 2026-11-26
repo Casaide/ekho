@@ -29,6 +29,8 @@ import Setup from './setup.ts'
 import type { Channel } from './setup.ts'
 import LogScreen from './log.ts'
 import Onboarding from './onboarding.ts'
+import { LinkCard } from './linking.ts'
+import type { LinkState } from './linking.ts'
 
 export type { Channel } from './setup.ts'
 
@@ -41,6 +43,12 @@ export interface UiActions {
   logOutIrc(): void
   finishOnboarding(): void
   toggleChannel(name: string): void
+  // Linking devices (lib/ui/linking.ts).
+  openLink(): void
+  closeLink(): void
+  joinLink(code: string): void
+  unlink(): void
+  forgetDevice(name: string): void
 }
 
 const PAGES = [
@@ -98,6 +106,8 @@ export default class Ui extends EventEmitter {
 
   device: DeviceCard
   form: IrcForm
+  linkCard: LinkCard
+  linking: LinkState
 
   _history: Page[]
   _banner: any
@@ -155,6 +165,8 @@ export default class Ui extends EventEmitter {
 
     this.device = new DeviceCard(this)
     this.form = new IrcForm(this, { nick: opts.nick, password: opts.password })
+    this.linkCard = new LinkCard(this)
+    this.linking = { role: 'alone', code: null, devices: [], joining: false, error: null }
 
     this._history = []
     this._chats = new Chats(this)
@@ -338,6 +350,11 @@ export default class Ui extends EventEmitter {
   }
 
   // Data from the app.
+
+  setLinking(state: LinkState): void {
+    this.linking = state
+    this.schedule()
+  }
 
   setRadioInfo(info: RadioInfo): void {
     this.radioInfo = info

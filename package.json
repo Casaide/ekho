@@ -43,12 +43,17 @@
     "bare-notifications-android": "file:packages/bare-notifications-android",
     "bare-os": "^3.9.4",
     "bare-path": "^3.1.3",
-    "bare-tls": "^4.1.2"
+    "bare-tls": "^4.1.2",
+    "blind-pairing": "^2.3.1",
+    "corestore": "^7.4.0",
+    "hypercore-crypto": "^3.6.0",
+    "hyperswarm": "^4.11.0"
   },
   "devDependencies": {
     "bare-build": "^1.7.0",
     "bare-native-test": "^0.1.8",
     "bare-tap": "^1.1.0",
+    "hyperdht": "^6.20.0",
     "lunte": "^1.8.6",
     "prettier": "^3.10.1",
     "prettier-config-holepunch": "^2.0.0",

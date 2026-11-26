@@ -2,7 +2,16 @@ import EventEmitter from 'bare-events'
 import Contacts, { type Address, type ContactEntry } from './contacts.ts'
 import Heard from './heard.ts'
 import type Irc from './irc.ts'
-import type { Contact, IrcMessage, Message, Radio, RadioAck, RadioMessage, Via } from './types.ts'
+import type {
+  Command,
+  Contact,
+  IrcMessage,
+  Message,
+  Radio,
+  RadioAck,
+  RadioMessage,
+  Via
+} from './types.ts'
 
 export interface MessengerOptions {
   contacts?: Contacts
@@ -53,6 +62,10 @@ export default class Messenger extends EventEmitter {
   irc: Irc | null
   channel: Contact
   keep: number
+  // On a linked device, the radio and IRC are another device's: sends go to
+  // it through relay, and remote is its status, as its feed last said.
+  relay: ((command: Command) => void) | null
+  remote: Status | null
 
   _threads: Map<string, Message[]>
   _read: Map<string, number>
@@ -71,6 +84,8 @@ export default class Messenger extends EventEmitter {
     this.radio = null
     this.irc = null
     this.keep = opts.keep ?? 500
+    this.relay = null
+    this.remote = null
 
     this._threads = new Map()
     this._read = new Map()
@@ -247,10 +262,12 @@ export default class Messenger extends EventEmitter {
 
   // The whole routing rule: any node heard recently, LoRa; otherwise IRC.
   route(): Via {
+    if (this.remote !== null) return this.remote.route
     return this.radio !== null && this.heard.any() ? 'lora' : 'irc'
   }
 
   status(): Status {
+    if (this.remote !== null) return this.remote
     return {
       radio: this.radio !== null,
       irc: this.irc !== null && this.irc.ready,
@@ -279,7 +296,12 @@ export default class Messenger extends EventEmitter {
     }
 
     this._push(contact, msg)
-    this._dispatch(contact, msg)
+
+    if (this.relay !== null) {
+      this.relay({ type: 'send', local: msg.id, contact: contact.id, text, via: opts.via ?? null })
+    } else {
+      this._dispatch(contact, msg)
+    }
 
     return msg
   }
@@ -303,13 +325,72 @@ export default class Messenger extends EventEmitter {
   // Try a failed message again on LoRa.
   retry(msg: Message): void {
     msg.via = 'lora'
-    this._dispatch(this.contacts.get(msg.contact)!, msg)
+    if (this.relay !== null) this._relayed(msg, { type: 'retry', ref: msg.ref! })
+    else this._dispatch(this.contacts.get(msg.contact)!, msg)
   }
 
   // Send a failed LoRa message over IRC instead. Never done automatically.
   sendViaIrc(msg: Message): void {
     msg.via = 'irc'
-    this._dispatch(this.contacts.get(msg.contact)!, msg)
+    if (this.relay !== null) this._relayed(msg, { type: 'irc', ref: msg.ref! })
+    else this._dispatch(this.contacts.get(msg.contact)!, msg)
+  }
+
+  _relayed(msg: Message, command: Command): void {
+    msg.state = 'sending'
+    msg.reason = null
+    this.relay!(command)
+    this.emit('update', msg)
+  }
+
+  // On a linked device, applying the feed of the one holding the radio and
+  // IRC (lib/feed.ts): its whole state, then each message, change, contact
+  // list and status as they come.
+
+  adopt(state: SavedState): void {
+    for (const contact of this.contacts.all()) this.contacts.remove(contact)
+    this._threads.clear()
+    this._read.clear()
+    for (const contact of state.contacts) this.contacts.add(contact)
+    for (const [id, thread] of Object.entries(state.threads)) this._threads.set(id, thread)
+    for (const [id, last] of Object.entries(state.read ?? {})) this._read.set(id, last)
+    this.channel = this.contacts.get(this.channel.id) ?? this.contacts.add(this.channel)
+    this.emit('contacts')
+  }
+
+  // A message, taking the place of our own copy of it if we sent it.
+  receive(contact: Contact, msg: Message): void {
+    const known = this.contacts.get(contact.id) ?? this.contacts.add(contact)
+    const ours =
+      msg.local === undefined
+        ? undefined
+        : this.thread(known).find((m) => m.id === msg.local && m.ref === undefined)
+    if (ours === undefined) return this._push(known, msg)
+    Object.assign(ours, msg)
+    this.emit('update', ours)
+  }
+
+  // A change to a message: its state, mostly.
+  change(msg: Message): void {
+    for (const thread of this._threads.values()) {
+      const found = thread.find((m) => m.ref === msg.ref)
+      if (found === undefined) continue
+      Object.assign(found, msg)
+      this.emit('update', found)
+      return
+    }
+  }
+
+  setContacts(contacts: Contact[]): void {
+    for (const contact of this.contacts.all()) this.contacts.remove(contact)
+    for (const contact of contacts) this.contacts.add(contact)
+    this.channel = this.contacts.get(this.channel.id) ?? this.contacts.add(this.channel)
+    this.emit('contacts')
+  }
+
+  setRemote(status: Status | null): void {
+    this.remote = status
+    this.emit('status')
   }
 
   _dispatch(contact: Contact, msg: Message): void {

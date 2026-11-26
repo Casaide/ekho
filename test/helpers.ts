@@ -49,3 +49,32 @@ export function clock(start = 1000): { now: () => number; tick: (ms: number) => 
   let time = start
   return { now: () => time, tick: (ms) => (time += ms) }
 }
+
+// A Hypercore stand-in with JSON values, as the feed and outboxes use: kept
+// in memory, copied in and out as replication would.
+export class FakeLog<T> extends EventEmitter {
+  values: string[]
+
+  constructor() {
+    super()
+    this.values = []
+  }
+
+  get length(): number {
+    return this.values.length
+  }
+
+  async append(value: T): Promise<void> {
+    this.values.push(JSON.stringify(value))
+    this.emit('append')
+  }
+
+  async get(index: number): Promise<T> {
+    return JSON.parse(this.values[index])
+  }
+}
+
+// Let pending promises and the events they lead to settle.
+export function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 10))
+}

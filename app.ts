@@ -11,6 +11,7 @@ import type { RadioConnection } from './lib/radio.ts'
 import Link, { FatalError } from './lib/link.ts'
 import Presence from './lib/presence.ts'
 import Notifier from './lib/notifier.ts'
+import Linker from './lib/linker.ts'
 import type { RadioState } from './lib/types.ts'
 import showCrash from './lib/crash.ts'
 import Log from './lib/log.ts'
@@ -90,6 +91,12 @@ let askedNotifications: boolean = saved?.askedNotifications ?? false
 // Ask for it: set where notifications exist, on Android.
 let askToNotify = () => {}
 
+// Other devices linked to this one, or the one this is linked to: then that
+// device holds the radio and IRC, and this one mirrors it (lib/linker.ts).
+const linker = new Linker(messenger, path.join(DATA, 'p2p'), saved?.link ?? null, {
+  name: Bare.platform === 'darwin' ? 'mac' : Bare.platform === 'android' ? 'phone' : Bare.platform
+})
+
 // Save a second after the last change, not on every message.
 let timer: ReturnType<typeof setTimeout> | null = null
 function save() {
@@ -106,7 +113,8 @@ function save() {
         onboarded,
         channels,
         open,
-        askedNotifications
+        askedNotifications,
+        link: linker.devices.saved
       })
     } catch (err) {
       console.error('save:', (err as Error).message)
@@ -328,6 +336,28 @@ const ui = new Ui(
       ui.setChannels(serverChannels, channels, IRC_CHANNEL)
     },
 
+    openLink() {
+      linker.open()
+    },
+
+    closeLink() {
+      linker.close()
+    },
+
+    joinLink(code: string) {
+      log.info('link: linking to a phone')
+      linker.join(code)
+    },
+
+    unlink() {
+      log.info('link: unlinked')
+      linker.unlink()
+    },
+
+    forgetDevice(name: string) {
+      linker.forget(name)
+    },
+
     finishOnboarding() {
       onboarded = true
       save()
@@ -378,9 +408,37 @@ ui.on('select', save)
 const reopen = onboarded && saved?.open ? messenger.contacts.get(saved.open) : null
 if (reopen) ui.select(reopen)
 
-// Bring back what was up last time.
-if (wanted.radio) radioLink.start()
-if (wanted.irc && settings.nick) ircLink.start()
+// Bring back what was up last time, unless another device holds the radio
+// and IRC for this one.
+function startLinks() {
+  if (wanted.radio) radioLink.start()
+  if (wanted.irc && settings.nick) ircLink.start()
+}
+if (!linker.linked) startLinks()
+
+linker.on('change', () => {
+  save()
+  ui.setLinking(linker.state())
+})
+// Linked: the radio and IRC are the hub's, and our own would fight it for
+// them (one connection per nick on motaba). Unlinked: ours come back.
+linker.on('role', (role: string) => {
+  log.info('link: ' + role)
+  if (role === 'linked') {
+    radioLink.stop()
+    ircLink.stop()
+  } else {
+    startLinks()
+  }
+})
+linker.ready().then(
+  () => {
+    log.info('link: ready' + (linker.linked ? ', linked to a phone' : ''))
+    ui.setLinking(linker.state())
+  },
+  (err: Error) => log.error('link:', err)
+)
+Bare.on('exit', () => linker.destroy())
 
 // Android's back button and edge swipe: back within ekho, and out of the app
 // only from chats. Android only, so loaded only there; the macOS build defers

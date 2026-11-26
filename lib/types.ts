@@ -78,4 +78,16 @@ export interface Message {
   // channel. Shown in message info, since one person can have several.
   address: string | null
   time: number
+  // On a linked device: the message's number in the feed of the device that
+  // sent or received it, by which retries and updates name it.
+  ref?: number
+  // The same, as the linked device first numbered its own message, before
+  // the feed had it.
+  local?: number
 }
+
+// What a linked device asks of the one holding the radio and IRC.
+export type Command =
+  | { type: 'send'; local: number; contact: string; text: string; via: Via | null }
+  | { type: 'retry'; ref: number }
+  | { type: 'irc'; ref: number }
