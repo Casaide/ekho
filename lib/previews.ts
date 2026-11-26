@@ -1,5 +1,5 @@
 import EventEmitter from 'bare-events'
-import { preview, host } from './links.ts'
+import { preview, host, rawImage, oembed } from './links.ts'
 import type { Preview } from './links.ts'
 
 // The slice of fetch that previews use.
@@ -75,6 +75,15 @@ export default class Previews extends EventEmitter {
   }
 
   async _preview(url: string): Promise<Preview | null> {
+    const raw = rawImage(url)
+    if (raw !== null) {
+      const image = await this._image(raw)
+      if (image === null) return null
+      return { url, site: host(url), title: null, description: null, imageUrl: raw, image }
+    }
+    const embed = oembed(url)
+    if (embed !== null) return this._embed(url, embed)
+
     const res = await timed(
       this.fetch(url, {
         headers: { accept: 'text/html, image/*', 'user-agent': 'ekho (link preview)' }
@@ -95,6 +104,27 @@ export default class Previews extends EventEmitter {
     const found = preview(url, (await timed(res.text())).slice(0, PAGE))
     if (found === null || found.imageUrl === null) return found
     // The page's image is a bonus: the preview shows without it if it fails.
+    try {
+      found.image = await this._image(found.imageUrl)
+    } catch {}
+    return found
+  }
+
+  // A video's title, channel and thumbnail, from its oEmbed JSON.
+  async _embed(url: string, from: string): Promise<Preview | null> {
+    const res = await timed(this.fetch(from, { headers: { accept: 'application/json' } }))
+    if (!res.ok) return null
+    const about = JSON.parse((await timed(res.text())).slice(0, PAGE))
+    if (typeof about.title !== 'string') return null
+    const found: Preview = {
+      url,
+      site: typeof about.provider_name === 'string' ? about.provider_name : host(url),
+      title: about.title,
+      description: typeof about.author_name === 'string' ? about.author_name : null,
+      imageUrl: typeof about.thumbnail_url === 'string' ? about.thumbnail_url : null,
+      image: null
+    }
+    if (found.imageUrl === null) return found
     try {
       found.image = await this._image(found.imageUrl)
     } catch {}

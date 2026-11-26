@@ -113,6 +113,10 @@ Links in a message are marked, and each gets a card beside the message (up to tw
 
 Previews are fetched once per session and kept in memory (`lib/previews.ts`): at most 512 KB of a page, given up after 8 s. A page's image (`og:image`) shows on its card, and a link to an image shows the image itself: PNG, JPEG, GIF or WebP, up to 5 MB, kept in a cache folder because the native image view reads files. Fetching tells the site this device's address, as any messenger's previews do; a page that can't be had shows the link plain.
 
+Two sites preview from elsewhere than the page: a picture on GitHub (`github.com/…/blob/….png`) from its raw file, so it shows as the picture rather than GitHub's card for the repository; and a YouTube video from its oEmbed (title, channel, thumbnail), since in the EU its page is a cookie consent page.
+
+A link sits on lines of its own in the message, broken by ekho to fit the width (after a `/`, `.` or the like when one is near). Android wrapped a long link differently from how bare-native measured it, so the text ran a line past its box into the card below. A tap on a message with a link opens the link; holding it opens its details and actions.
+
 A link to a sound or a video (by its extension: mp3, wav, ogg, opus, m4a, aac, flac; mp4, m4v, webm, mov) gets a card to play it in place instead, with no fetch until tapped. The player is a web view holding an `<audio>` or `<video>` element, so each platform plays what its browser does, with no audio code of ours. It keeps playing while messages arrive, stops on ■ or on leaving the conversation, and ↗ opens it in the browser. This is the first step toward voice notes: a link to a recording, wherever it's hosted.
 
 ## Mentions

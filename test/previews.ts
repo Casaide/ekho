@@ -78,3 +78,29 @@ test('a page that fails or isn’t HTML or an image shows the link plain', async
   t.equal(previews.get('https://a.bg/x.pdf'), null)
   t.equal(previews.get('https://down.bg'), null)
 })
+
+test('a video’s preview comes from its oEmbed, with its thumbnail', async (t) => {
+  const asked: string[] = []
+  const previews = new Previews(
+    async (url) => {
+      asked.push(url)
+      return url.includes('/oembed')
+        ? page(
+            '{"title":"Meshtastic in the mountains","author_name":"mesh bg","provider_name":"YouTube","thumbnail_url":"https://i.ytimg.com/vi/x/hq.jpg"}',
+            'application/json'
+          )
+        : page('jpg bytes', 'image/jpeg')
+    },
+    { save: async (name) => '/cache/' + name }
+  )
+  const ready = new Promise((resolve) => previews.on('preview', resolve))
+  previews.get('https://youtu.be/x')
+  await ready
+
+  const video = previews.get('https://youtu.be/x')!
+  t.equal(video.title, 'Meshtastic in the mountains')
+  t.equal(video.description, 'mesh bg')
+  t.equal(video.site, 'YouTube')
+  t.ok(video.image!.endsWith('.jpg'))
+  t.equal(asked.length, 2, 'the oEmbed and the thumbnail, not the page')
+})
