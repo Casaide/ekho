@@ -105,6 +105,25 @@ export function link(label: string, onpress: () => void, style: object = {}): an
   )
 }
 
+// Back, at the top left: a 44 px square, the smallest target a thumb hits
+// every time, though the arrow is small.
+export function back(onpress: () => void): any {
+  return press(
+    view(
+      {
+        width: 44,
+        height: 44,
+        marginLeft: -10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer'
+      },
+      [text('‹', { color: colors.text, fontSize: 26 })]
+    ),
+    onpress
+  )
+}
+
 // How far a finger may drift and still tap; how far right a swipe must go,
 // mostly sideways, to go back.
 const SLOP = 12

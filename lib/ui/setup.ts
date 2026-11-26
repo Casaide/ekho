@@ -8,12 +8,12 @@ import {
   button,
   chip,
   chipBox,
-  link,
   clear,
   detach,
   rule,
   label,
-  box
+  box,
+  back
 } from './kit.ts'
 
 export interface Channel {
@@ -44,7 +44,7 @@ export default class Setup {
     this.joined = []
     this.main = ''
 
-    this._back = link('‹', () => this.ui.back(), { fontSize: 22, color: colors.text })
+    this._back = back(() => this.ui.back())
     this._body = scroll({ padding: 18, gap: 14 })
 
     this.root = view({ flex: 1 }, [

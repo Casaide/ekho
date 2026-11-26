@@ -86,7 +86,7 @@ The password stays on your device. ekho logs in for you from then on, and joins 
 - **Start a conversation:** open **contacts**, pick someone heard on the radio or online on IRC, and write.
 - **Where a message went** shows above it: `lora · direct`, `lora · 2 hops`, `irc`. The line at the bottom of a conversation says which way the next message will go.
 - **Message details:** tap a message to see when and how it was sent, to copy it, to react with any emoji, or to retry a failed one.
-- **Channels:** the ones you've joined are in **contacts**. To join or leave others, go to **radio** › **irc**, which lists every channel on the server.
+- **Channels:** the **channels** tab lists the ones you're in, with how many people are there now and whether they reach the radio, then the rest of the server's channels to join. Open a channel's **info** to see who's in it, or **edit** to give it your own name. To leave one, go to **radio** › **irc**.
 - **Go back** with the back gesture or the arrow at the top left.
 
 ### What the labels mean
@@ -176,7 +176,7 @@ Attach the radio and the IRC client as each one connects.
 
 #### `const msg = messenger.send(contact, text[, { via }])`
 
-Send a message by the current route, or by `via`. `msg.state` moves through `sending`, then `delivered` or `failed` on LoRa, or `sent` on IRC and on channels.
+Send a message by the current route, or by `via`. `msg.state` moves through `sending`, then `delivered` or `failed` on LoRa, `relayed` or `failed` on a LoRa channel, or `sent` on IRC.
 
 #### `messenger.retry(msg)`, `messenger.sendViaIrc(msg)`
 

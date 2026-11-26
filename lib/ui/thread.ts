@@ -21,7 +21,8 @@ import {
   clock,
   dayLabel,
   dayIndex,
-  bytes
+  bytes,
+  back
 } from './kit.ts'
 
 // The most a LoRa text can hold (bare-meshtastic's MAX_PAYLOAD is 233 bytes),
@@ -84,7 +85,7 @@ export default class Thread {
   constructor(ui: Ui) {
     this.ui = ui
 
-    this._back = link('‹', () => this.ui.back(), { fontSize: 22, color: colors.text })
+    this._back = back(() => this.ui.back())
     this._title = text('', { color: colors.text, fontSize: 15, fontWeight: 'bold' }, 1)
     this._sub = text('', { color: colors.muted, fontSize: 11 }, 1)
     this._list = scroll({ padding: 16, gap: 14 })

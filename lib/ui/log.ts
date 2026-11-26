@@ -2,7 +2,7 @@ import native from 'bare-native'
 import type Ui from './index.ts'
 import { line } from '../log.ts'
 import type { Entry } from '../log.ts'
-import { colors, view, text, scroll, button, chip, link, clear, rule } from './kit.ts'
+import { colors, view, text, scroll, button, chip, clear, rule, back } from './kit.ts'
 
 const { Clipboard } = native
 
@@ -29,7 +29,7 @@ export default class LogScreen {
           paddingVertical: 10
         },
         [
-          link('‹', () => this.ui.back(), { fontSize: 22, color: colors.text }),
+          back(() => this.ui.back()),
           text('~/log', { color: colors.text, fontSize: 15, fontWeight: 'bold', flex: 1 }),
           button('copy', () => this.copy(), chip(colors.accent))
         ]
