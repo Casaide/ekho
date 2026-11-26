@@ -193,7 +193,7 @@ export function personRow(ui: Ui, person: Person, contact: Contact | null): any 
         ])
       ]
     ),
-    () => ui.select(contact ?? add(ui, person))
+    () => ui.select(contact ?? addPerson(ui, person))
   )
 }
 
@@ -217,7 +217,7 @@ export function contactOf(ui: Ui, person: Person): Contact | null {
 
 // Someone tapped who isn't a contact yet: make them one, with every address
 // we've seen them on.
-function add(ui: Ui, person: Person): Contact {
+export function addPerson(ui: Ui, person: Person): Contact {
   return ui.messenger.addContact({
     name: person.name,
     nodes: person.nodes.map((n) => n.id),

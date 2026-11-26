@@ -423,9 +423,9 @@ if (Bare.platform === 'android') {
   const running = () => {
     if (!wanted.radio && !wanted.irc) return null
     const parts = []
-    if (wanted.radio)
-      parts.push('radio ' + (radioLink.state === 'on' ? 'connected' : radioLink.state))
-    if (wanted.irc) parts.push('irc ' + (ircLink.state === 'on' ? 'connected' : ircLink.state))
+    const state = (link: Link) => (link.state === 'on' ? 'connected' : link.state)
+    if (wanted.radio) parts.push('radio ' + state(radioLink))
+    if (wanted.irc) parts.push('irc ' + state(ircLink))
     return parts.join(' · ')
   }
   let shown: string | null = null
