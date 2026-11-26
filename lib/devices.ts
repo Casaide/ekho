@@ -115,13 +115,19 @@ export default class Devices extends EventEmitter {
         this.saved.devices = [...this.saved.devices.filter((d) => d.swarm !== device.swarm), device]
         this.swarm.join(this.feed.discoveryKey)
         this._replicateAll()
-        this.close()
+        // Once the answer is on its way: it goes out after this returns.
+        setTimeout(() => this.close(), 2000)
         this.emit('change')
         this.emit('linked', device)
       }
     })
     this._expiry = setTimeout(() => this.close(), OPEN)
     return code
+  }
+
+  // Resolves once an open code can be found by the other device.
+  announced(): Promise<void> {
+    return this._member === null ? Promise.resolve() : this._member.flushed()
   }
 
   // Stop accepting a code.
