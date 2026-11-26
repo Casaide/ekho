@@ -211,6 +211,15 @@ export default class Thread {
     this._renderDetail(contact)
   }
 
+  // To the latest message, as when the keyboard opens and the list shrinks:
+  // the offset stays put, which would leave older messages in view.
+  toEnd(): void {
+    const end = () => (this._list.contentOffset = { y: Number.MAX_SAFE_INTEGER })
+    end()
+    setTimeout(end, 50)
+    setTimeout(end, 250)
+  }
+
   // Tap a message for its details; tap it again, or close, to hide them.
   _toggle(msg: Message): void {
     this._open = this._open !== null && this._open.id === msg.id ? null : msg
