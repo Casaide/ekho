@@ -84,15 +84,13 @@ export default class People {
     const onIrc = people.filter((p) => p.nicks.length > 0).length
     this._summary.text = onLora + ' heard on lora · ' + onIrc + ' on irc'
 
-    const online = people.filter((p) => matches(this._nameOf(p)))
-    const channels = this.ui.channels().filter((c) => matches(c.name))
+    const online = people.filter((p) => matches(nameOf(this.ui, p)))
     const saved = messenger.contacts.all().filter((c) => !c.channel && matches(displayName(c)))
 
     // Rebuild only when what's listed changed, not for every event.
     const key = [
       filter,
       this._limit,
-      channels.map((c) => c.name + c.users + (c.joined ? '+' : '')).join(),
       online
         .slice(0, this._limit)
         .map((p) => p.name + p.nodes.map((n) => Math.round(n.heard / 60_000)) + p.nicks.length)
@@ -105,29 +103,13 @@ export default class People {
     const content = this._list.content
     clear(content)
 
-    // Channels: tap to open, joining it if need be.
-    if (channels.length > 0) {
-      content.appendChild(label('channels · tap to open'))
-      const wrap = view({ flexDirection: 'row', flexWrap: 'wrap', gap: 8 })
-      for (const channel of channels) {
-        wrap.appendChild(
-          button(
-            channel.name + (channel.users > 0 ? ' · ' + channel.users : ''),
-            () => this.ui.openChannel(channel.name),
-            chip(channel.joined ? colors.accent : colors.muted)
-          )
-        )
-      }
-      content.appendChild(wrap)
-    }
-
     // People seen, under their contact name where they are one.
     const shown = new Set<string>()
     content.appendChild(label('around now · ' + online.length))
     for (const person of online.slice(0, this._limit)) {
-      const contact = this._contactOf(person)
+      const contact = contactOf(this.ui, person)
       if (contact !== null) shown.add(contact.id)
-      content.appendChild(this._row(person, contact))
+      content.appendChild(personRow(this.ui, person, contact))
     }
     if (online.length > this._limit) {
       const more = Math.min(PAGE, online.length - this._limit)
@@ -148,95 +130,97 @@ export default class People {
       content.appendChild(label('saved, not seen'))
       for (const contact of unseen) {
         content.appendChild(
-          this._row({ name: displayName(contact), nodes: [], nicks: [] }, contact)
+          personRow(this.ui, { name: displayName(contact), nodes: [], nicks: [] }, contact)
         )
       }
     }
   }
+}
 
-  _row(person: Person, contact: Contact | null): any {
-    const { messenger } = this.ui
-    const name = contact !== null ? displayName(contact) : person.name
-    const heardRecently = person.nodes.some((n) => n.heard < messenger.heard.window)
-    const lines: any[] = []
+// Someone seen, with where: tapping opens their conversation, making them a
+// contact if they weren't one.
+export function personRow(ui: Ui, person: Person, contact: Contact | null): any {
+  const { messenger } = ui
+  const name = contact !== null ? displayName(contact) : person.name
+  const heardRecently = person.nodes.some((n) => n.heard < messenger.heard.window)
+  const lines: any[] = []
 
-    for (const node of person.nodes) {
-      lines.push(
-        text(
-          'lora · ' +
-            node.id +
-            ' · ' +
-            (node.heard === Infinity ? 'not heard yet' : 'heard ' + ago(node.heard)),
-          {
-            color: node.heard < messenger.heard.window ? colors.lora : colors.muted,
-            fontSize: 11
-          },
-          1
-        )
-      )
-    }
-    for (const nick of person.nicks) {
-      lines.push(
-        text(
-          (BRIDGED[nick.network] ?? 'irc') + ' · ' + nick.nick + ' · ' + nick.channels.join(' '),
-          { color: colors.irc, fontSize: 11 },
-          1
-        )
-      )
-    }
-    if (lines.length === 0) lines.push(text('not seen', { color: colors.muted, fontSize: 11 }))
-
-    return press(
-      view(
+  for (const node of person.nodes) {
+    lines.push(
+      text(
+        'lora · ' +
+          node.id +
+          ' · ' +
+          (node.heard === Infinity ? 'not heard yet' : 'heard ' + ago(node.heard)),
         {
-          flexDirection: 'row',
-          gap: 12,
-          paddingVertical: 8,
-          cursor: 'pointer'
+          color: node.heard < messenger.heard.window ? colors.lora : colors.muted,
+          fontSize: 11
         },
-        [
-          avatar(name),
-          view({ flex: 1, gap: 3 }, [
-            view({ flexDirection: 'row', alignItems: 'center', gap: 8 }, [
-              text(name, { color: colors.text, fontSize: 14, fontWeight: 'bold' }, 1),
-              dot(
-                heardRecently || person.nicks.length > 0,
-                heardRecently ? colors.accent : colors.irc
-              )
-            ]),
-            ...lines
-          ])
-        ]
-      ),
-      () => this.ui.select(contact ?? this._add(person))
+        1
+      )
     )
   }
-
-  _nameOf(person: Person): string {
-    const contact = this._contactOf(person)
-    return contact !== null ? displayName(contact) : person.name
+  for (const nick of person.nicks) {
+    lines.push(
+      text(
+        (BRIDGED[nick.network] ?? 'irc') + ' · ' + nick.nick + ' · ' + nick.channels.join(' '),
+        { color: colors.irc, fontSize: 11 },
+        1
+      )
+    )
   }
+  if (lines.length === 0) lines.push(text('not seen', { color: colors.muted, fontSize: 11 }))
 
-  _contactOf(person: Person): Contact | null {
-    const { contacts } = this.ui.messenger
-    for (const node of person.nodes) {
-      const contact = contacts.byNode(node.id)
-      if (contact !== null) return contact
-    }
-    for (const nick of person.nicks) {
-      const contact = contacts.byNick(nick.nick)
-      if (contact !== null) return contact
-    }
-    return null
-  }
+  return press(
+    view(
+      {
+        flexDirection: 'row',
+        gap: 12,
+        paddingVertical: 8,
+        cursor: 'pointer'
+      },
+      [
+        avatar(name),
+        view({ flex: 1, gap: 3 }, [
+          view({ flexDirection: 'row', alignItems: 'center', gap: 8 }, [
+            text(name, { color: colors.text, fontSize: 14, fontWeight: 'bold' }, 1),
+            dot(
+              heardRecently || person.nicks.length > 0,
+              heardRecently ? colors.accent : colors.irc
+            )
+          ]),
+          ...lines
+        ])
+      ]
+    ),
+    () => ui.select(contact ?? add(ui, person))
+  )
+}
 
-  // Someone tapped who isn't a contact yet: make them one, with every address
-  // we've seen them on.
-  _add(person: Person): Contact {
-    return this.ui.messenger.addContact({
-      name: person.name,
-      nodes: person.nodes.map((n) => n.id),
-      nicks: person.nicks.map((n) => n.nick)
-    })
+function nameOf(ui: Ui, person: Person): string {
+  const contact = contactOf(ui, person)
+  return contact !== null ? displayName(contact) : person.name
+}
+
+export function contactOf(ui: Ui, person: Person): Contact | null {
+  const { contacts } = ui.messenger
+  for (const node of person.nodes) {
+    const contact = contacts.byNode(node.id)
+    if (contact !== null) return contact
   }
+  for (const nick of person.nicks) {
+    const contact = contacts.byNick(nick.nick)
+    if (contact !== null) return contact
+  }
+  return null
+}
+
+// Someone tapped who isn't a contact yet: make them one, with every address
+// we've seen them on.
+function add(ui: Ui, person: Person): Contact {
+  return ui.messenger.addContact({
+    name: person.name,
+    nodes: person.nodes.map((n) => n.id),
+    nicks: person.nicks.map((n) => n.nick)
+  })
 }

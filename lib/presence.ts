@@ -87,6 +87,14 @@ export default class Presence extends EventEmitter {
     this.emit('change')
   }
 
+  // Everyone in one of our IRC channels, as people() lists them.
+  inChannel(channel: string): Person[] {
+    const name = channel.toLowerCase()
+    return this.people().filter((p) =>
+      p.nicks.some((n) => n.channels.some((c) => c.toLowerCase() === name))
+    )
+  }
+
   // Everyone, most recently seen first: heard on the radio, or in a channel.
   people(): Person[] {
     const byNode = new Map<string, Person>()

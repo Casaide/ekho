@@ -23,6 +23,7 @@ import Chats from './chats.ts'
 import Thread from './thread.ts'
 import ContactScreen from './contact.ts'
 import People from './people.ts'
+import Channels from './channels.ts'
 import RadioScreen from './radio.ts'
 import Setup from './setup.ts'
 import type { Channel } from './setup.ts'
@@ -45,6 +46,7 @@ export interface UiActions {
 const PAGES = [
   'onboarding',
   'chats',
+  'channels',
   'contacts',
   'radio',
   'thread',
@@ -55,7 +57,7 @@ const PAGES = [
 
 export type Page = (typeof PAGES)[number]
 
-const TABS: Page[] = ['chats', 'contacts', 'radio']
+const TABS: Page[] = ['chats', 'channels', 'contacts', 'radio']
 
 // What the radio told us about itself, for the radio screen.
 export interface RadioInfo {
@@ -112,6 +114,7 @@ export default class Ui extends EventEmitter {
   _contact: ContactScreen
   _side: ContactScreen
   _people: People
+  _channels: Channels
   _radio: RadioScreen
   _setup: Setup
   _log: LogScreen
@@ -156,6 +159,7 @@ export default class Ui extends EventEmitter {
     this._contact = new ContactScreen(this)
     this._side = new ContactScreen(this)
     this._people = new People(this)
+    this._channels = new Channels(this)
     this._radio = new RadioScreen(this)
     this._setup = new Setup(this)
     this._log = new LogScreen(this)
@@ -326,7 +330,7 @@ export default class Ui extends EventEmitter {
     this._setup.channels = list
     this._setup.joined = joined
     this._setup.main = main
-    if (this.page === 'setup' || this.page === 'onboarding') this.render()
+    this.schedule()
   }
 
   setIrcNotice(value: string): void {
@@ -489,6 +493,7 @@ export default class Ui extends EventEmitter {
       this._contact,
       this._side,
       this._people,
+      this._channels,
       this._radio,
       this._setup,
       this._log,
@@ -500,6 +505,7 @@ export default class Ui extends EventEmitter {
     const screens: Record<Page, { root: any; render(): void }> = {
       onboarding: this._onboarding,
       chats: this._chats,
+      channels: this._channels,
       contacts: this._people,
       radio: this._radio,
       thread: this._thread,
@@ -510,7 +516,7 @@ export default class Ui extends EventEmitter {
     return screens[page]
   }
 
-  // chats · contacts · radio, the current one lit, with unread on chats.
+  // chats · channels · contacts · radio, the current one lit, with unread on chats.
   _renderTabbar(): void {
     const unread = this.messenger.contacts.all().reduce((n, c) => n + this.messenger.unread(c), 0)
 

@@ -61,3 +61,20 @@ test('follows people leaving, renaming and quitting, and forgets IRC when it goe
   presence.clearIrc()
   t.equal(presence.people().length, 0)
 })
+
+test('who is in one channel, matched whatever its case', (t) => {
+  const presence = new Presence(new Heard())
+  presence.self = { node: null, nick: 'dom' }
+
+  presence.names('#bulgaria', ['dom', 'georgi', 'sho|mc'])
+  presence.names('#Sofia', ['georgi', 'maria'])
+
+  t.deepStrictEqual(
+    presence.inChannel('#sofia').map((p) => p.name),
+    ['georgi', 'maria']
+  )
+  t.deepStrictEqual(
+    presence.inChannel('#bulgaria').map((p) => p.name),
+    ['georgi', 'sho']
+  )
+})

@@ -1,6 +1,7 @@
 import type Ui from './index.ts'
 import { displayName } from '../contacts.ts'
 import type { Contact } from '../types.ts'
+import { personRow, contactOf } from './people.ts'
 import {
   colors,
   view,
@@ -19,6 +20,9 @@ import {
   ago
 } from './kit.ts'
 
+// People listed under a channel; the contacts tab has everyone.
+const HERE = 40
+
 // `~/contacts/ivan`: who they are, every address they're reached on in the
 // order ekho tries them, linking another node or nick, and joining two
 // contacts that turn out to be the same person.
@@ -28,6 +32,7 @@ export default class ContactScreen {
 
   _back: any
   _crumb: any
+  _where: any
   _body: any
   _alias: any
   _link: any
@@ -39,16 +44,12 @@ export default class ContactScreen {
     this._editing = false
 
     this._back = link('‹', () => this.ui.back(), { fontSize: 22, color: colors.text })
+    this._where = text('~/contacts/', { color: colors.muted, fontSize: 15, fontWeight: 'bold' })
     this._crumb = text('', { color: colors.text, fontSize: 15, fontWeight: 'bold' }, 1)
 
     this._alias = input('alias, optional')
     this._alias.returnKeyType = 'done'
-    this._alias.on('submit', () => {
-      const alias = this._alias.value.trim()
-      this.ui.messenger.rename(this.ui.selected!, alias === '' ? null : alias)
-      this._editing = false
-      this.render()
-    })
+    this._alias.on('submit', () => this._edit())
 
     this._link = input('+ link another node (!a7c3e91f) or nick')
     this._link.returnKeyType = 'done'
@@ -68,10 +69,7 @@ export default class ContactScreen {
         },
         [
           this._back,
-          view({ flexDirection: 'row', flex: 1 }, [
-            text('~/contacts/', { color: colors.muted, fontSize: 15, fontWeight: 'bold' }),
-            this._crumb
-          ]),
+          view({ flexDirection: 'row', flex: 1 }, [this._where, this._crumb]),
           this._editButton
         ]
       ),
@@ -88,13 +86,12 @@ export default class ContactScreen {
 
     this._back.style = { ...this._back.style, display: this.ui.compact ? 'flex' : 'none' }
     this._crumb.text = name
+    this._where.text = contact.channel ? '~/channels/' : '~/contacts/'
 
     clear(this._editButton)
-    if (!contact.channel) {
-      this._editButton.appendChild(
-        button(this._editing ? 'done' : 'edit', () => this._edit(), chip(colors.text))
-      )
-    }
+    this._editButton.appendChild(
+      button(this._editing ? 'done' : 'edit', () => this._edit(), chip(colors.text))
+    )
 
     detach(this._alias)
     detach(this._link)
@@ -108,7 +105,8 @@ export default class ContactScreen {
           text(name, { color: colors.text, fontSize: 17, fontWeight: 'bold' }),
           text(
             contact.channel
-              ? 'channel · ' +
+              ? (contact.alias === null ? '' : contact.id + ' · ') +
+                  'channel · ' +
                   (messenger.radioChannel(contact) === null ? 'irc only' : 'radio and irc')
               : 'linked by you · stock apps · unverified',
             { color: colors.muted, fontSize: 11 }
@@ -151,6 +149,20 @@ export default class ContactScreen {
         content.appendChild(row('lora', 'radio channel ' + index, '', colors.lora))
       }
       content.appendChild(row('irc', contact.id, '', colors.irc))
+
+      const here = this.ui.presence.inChannel(contact.id)
+      content.appendChild(label('here now · ' + here.length + ' · tap to message'))
+      for (const person of here.slice(0, HERE)) {
+        content.appendChild(personRow(this.ui, person, contactOf(this.ui, person)))
+      }
+      if (here.length > HERE) {
+        content.appendChild(
+          text('and ' + (here.length - HERE) + ' more: see contacts', {
+            color: colors.muted,
+            fontSize: 11
+          })
+        )
+      }
     } else {
       for (const node of contact.nodes) {
         content.appendChild(row('lora', node, ago(messenger.heard.since(node)), colors.lora))
@@ -195,7 +207,12 @@ export default class ContactScreen {
     content.appendChild(button('message', () => this.ui.select(contact), primary()))
   }
 
+  // Edit, or done: done saves the alias as typed.
   _edit(): void {
+    if (this._editing) {
+      const alias = this._alias.value.trim()
+      this.ui.messenger.rename(this.ui.selected!, alias === '' ? null : alias)
+    }
     this._editing = !this._editing
     this.render()
   }
