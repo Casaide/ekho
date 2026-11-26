@@ -123,3 +123,28 @@ test('applying the feed again from the start changes nothing', async (t) => {
 
   t.equal(JSON.stringify(mac.toJSON().threads), before)
 })
+
+test('the phone skips what isn’t a request from a linked device', async (t) => {
+  const { stream, outbox } = await linked()
+  stream.lines.length = 0
+
+  await outbox.append({ type: 'send', contact: 'irc:georgi', text: 7 } as never)
+  await outbox.append({ type: 'wipe' } as never)
+  await outbox.append({ type: 'send', local: 1, contact: 'irc:georgi', text: 'ok', via: null })
+  await settle()
+
+  t.deepStrictEqual(stream.lines, ['PRIVMSG georgi :ok'])
+})
+
+test('a feed from a newer ekho stops being applied, and says so', async (t) => {
+  const { feed, mac, mirror } = await linked()
+  let newer = false
+  mirror.on('newer', () => (newer = true))
+  const at = mirror.applied
+
+  await feed.append({ format: 99, type: 'status', status: mac.status() } as never)
+  await settle()
+
+  t.ok(newer)
+  t.equal(mirror.applied, at)
+})

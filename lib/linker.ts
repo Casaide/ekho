@@ -134,6 +134,10 @@ export default class Linker extends EventEmitter {
       applied: link.applied
     })
     this.mirror = mirror
+    mirror.on('newer', () => {
+      this.error = 'your phone runs a newer ekho: update this one'
+      this.emit('change')
+    })
     mirror.on('applied', (applied: number) => {
       link.applied = applied
       this.emit('change')

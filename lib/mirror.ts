@@ -1,5 +1,6 @@
 import EventEmitter from 'bare-events'
 import type Messenger from './messenger.ts'
+import { FORMAT } from './hub.ts'
 import type { Entry } from './hub.ts'
 import type { Command } from './types.ts'
 
@@ -14,7 +15,8 @@ export interface Log<T> {
 // On a linked device: the Messenger shows what the hub's feed says, and what
 // the user sends goes into this device's outbox for the hub to do.
 //
-// Events: applied (index), once the feed has been applied that far.
+// Events: applied (index), once the feed has been applied that far; newer,
+// when the feed comes from a newer ekho, and applying stops there.
 export default class Mirror extends EventEmitter {
   messenger: Messenger
   feed: Log<Entry>
@@ -50,7 +52,12 @@ export default class Mirror extends EventEmitter {
     if (this._applying) return
     this._applying = true
     while (this.applied < this.feed.length) {
-      this._apply(await this.feed.get(this.applied))
+      const entry = await this.feed.get(this.applied)
+      if ((entry.format ?? FORMAT) > FORMAT) {
+        this.emit('newer')
+        break
+      }
+      this._apply(entry)
       this.applied++
       this.emit('applied', this.applied)
     }

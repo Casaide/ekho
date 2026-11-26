@@ -4,10 +4,14 @@ import type { Status } from './messenger.ts'
 import type { Command, Contact, Message } from './types.ts'
 import type { Log } from './mirror.ts'
 
+// The feed's format: entries carry it, so a device reading a feed from a
+// newer ekho stops instead of guessing at what it doesn't know.
+export const FORMAT = 1
+
 // What goes in the feed, in order: the whole state first, then each change.
 // Each carries the next message number, so numbering carries on from the
 // feed after a restart, even if the state saved on disk is older.
-export type Entry = { next?: number } & (
+export type Entry = { format?: number; next?: number } & (
   | { type: 'state'; state: ReturnType<Messenger['toJSON']>; status: Status }
   | { type: 'message'; contact: Contact; msg: Message }
   | { type: 'update'; msg: Message }
@@ -120,7 +124,10 @@ export default class Hub extends EventEmitter {
     read()
   }
 
+  // A linked device's request. From another device's core, so checked:
+  // anything that isn't one is skipped.
   run(command: Command): void {
+    if (!valid(command)) return
     const { messenger } = this
     if (command.type === 'send') {
       const contact = messenger.contacts.get(command.contact)
@@ -158,7 +165,22 @@ export default class Hub extends EventEmitter {
 
   // In order: each append waits for the one before.
   _append(entry: Entry): void {
+    entry.format = FORMAT
     entry.next = this._next
     this._tail = this._tail.then(() => this.feed.append(entry))
   }
+}
+
+function valid(command: any): boolean {
+  if (command?.type === 'send') {
+    return (
+      Number.isInteger(command.local) &&
+      typeof command.contact === 'string' &&
+      typeof command.text === 'string' &&
+      command.text.length <= 1000 &&
+      (command.via === null || command.via === 'lora' || command.via === 'irc')
+    )
+  }
+  if (command?.type === 'retry' || command?.type === 'irc') return Number.isInteger(command.ref)
+  return false
 }

@@ -49,6 +49,7 @@ test(
 
     await phone.ready()
     await mac.ready()
+    t.ok(phone.devices.feed.padding > 0, 'the feed is block encrypted')
 
     phone.open()
     t.ok(phone.code, 'a code to type')
