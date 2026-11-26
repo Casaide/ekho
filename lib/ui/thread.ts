@@ -43,7 +43,7 @@ const REASONS: Record<string, string> = {
   INTERRUPTED: 'interrupted'
 }
 
-const { Clipboard, TextFragment } = native
+const { Clipboard, TextFragment, Image } = native
 
 // The reactions offered first; any other can be typed.
 const EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅', '👎', '📡']
@@ -477,10 +477,25 @@ export default class Thread {
     if (preview === null) {
       return button('↗ ' + host(url), open, { ...chip(colors.accent), fontSize: 11 })
     }
-    const lines = [
-      text(preview.site, { color: colors.muted, fontSize: 11 }, 1),
-      text(preview.title, { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2)
-    ]
+    const lines: any[] = []
+    if (preview.image !== null) {
+      const image = new Image()
+      // A link to an image shows it taller, with nothing else.
+      image.style = {
+        width: 280,
+        height: preview.title === null ? 200 : 140,
+        borderRadius: 4,
+        resizeMode: 'cover'
+      }
+      image.source = preview.image
+      // Undecodable: the card shows without it.
+      image.on('error', () => {})
+      lines.push(image)
+    }
+    if (preview.title !== null) {
+      lines.push(text(preview.site, { color: colors.muted, fontSize: 11 }, 1))
+      lines.push(text(preview.title, { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2))
+    }
     if (preview.description !== null) {
       lines.push(text(preview.description, { color: colors.soft, fontSize: 12 }, 3))
     }
@@ -488,7 +503,8 @@ export default class Thread {
       view(
         {
           gap: 4,
-          padding: 10,
+          padding: preview.title === null ? 4 : 10,
+          maxWidth: 300,
           borderWidth: 1,
           borderColor: colors.line,
           borderRadius: 6,

@@ -31,15 +31,27 @@ test('a preview comes from Open Graph tags, else the title', (t) => {
     url: 'https://github.com/Casaide/ekho',
     site: 'GitHub',
     title: 'Casaide/ekho & more',
-    description: 'LoRa first, IRC fallback'
+    description: 'LoRa first, IRC fallback',
+    imageUrl: null,
+    image: null
   })
 
   t.deepStrictEqual(preview('https://www.motaba.net/x', '<title> motaba </title>'), {
     url: 'https://www.motaba.net/x',
     site: 'motaba.net',
     title: 'motaba',
-    description: null
+    description: null,
+    imageUrl: null,
+    image: null
   })
+  t.equal(
+    preview(
+      'https://a.bg/x',
+      '<title>a</title><meta property="og:image" content="/i.png?a=1&amp;b=2">'
+    )!.imageUrl,
+    'https://a.bg/i.png?a=1&b=2',
+    'the page’s image, made absolute'
+  )
   t.equal(preview('https://a.bg', '<html></html>'), null, 'nothing to show')
   t.equal(host('https://www.a.bg/b?c'), 'a.bg')
 })

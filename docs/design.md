@@ -111,7 +111,7 @@ Out: MQTT (including the client proxy), a hub, a second radio, MeshCore, Nostr, 
 
 Links in a message are marked, and each gets a card beside the message (up to two): the page's title, site and description from its Open Graph tags, or just where it goes until those arrive. Tapping a card opens the link in the browser, through ekho's own small addons for Android (an `ACTION_VIEW` intent) and macOS (`NSWorkspace`). Cards sit beside the message rather than in it, so a tap on a link doesn't also open the message's details.
 
-Previews are fetched once per session and kept in memory (`lib/previews.ts`): at most 512 KB of the page, given up after 8 s, HTML only. Fetching tells the site this device's address, as any messenger's previews do; a page that can't be had shows the link plain.
+Previews are fetched once per session and kept in memory (`lib/previews.ts`): at most 512 KB of a page, given up after 8 s. A page's image (`og:image`) shows on its card, and a link to an image shows the image itself: PNG, JPEG, GIF or WebP, up to 5 MB, kept in a cache folder because the native image view reads files. Fetching tells the site this device's address, as any messenger's previews do; a page that can't be had shows the link plain.
 
 ## First P2P step, built: a linked Mac mirrors the phone
 
