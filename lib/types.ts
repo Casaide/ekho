@@ -91,3 +91,5 @@ export type Command =
   | { type: 'send'; local: number; contact: string; text: string; via: Via | null }
   | { type: 'retry'; ref: number }
   | { type: 'irc'; ref: number }
+  // The whole state again, for a device that may have missed some of it.
+  | { type: 'state' }

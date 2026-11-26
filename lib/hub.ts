@@ -91,15 +91,20 @@ export default class Hub extends EventEmitter {
         else this._next = Math.max(this._next, msg.ref + 1)
       }
     }
-    if (this.feed.length === 0 || unnumbered) {
-      for (const contact of this.messenger.contacts.all()) {
-        for (const msg of this.messenger.thread(contact)) this._number(msg)
-      }
-      const status = this.messenger.status()
-      this._status = JSON.stringify(status)
-      this._append({ type: 'state', state: this.messenger.toJSON(), status })
-    }
+    if (this.feed.length === 0 || unnumbered) this.snapshot()
     return this.flushed()
+  }
+
+  // The whole state, as it is now: a linked device applying it has every
+  // conversation, whatever it missed. Written when the feed starts, when a
+  // device links, and when one asks.
+  snapshot(): void {
+    for (const contact of this.messenger.contacts.all()) {
+      for (const msg of this.messenger.thread(contact)) this._number(msg)
+    }
+    const status = this.messenger.status()
+    this._status = JSON.stringify(status)
+    this._append({ type: 'state', state: this.messenger.toJSON(), status })
   }
 
   flushed(): Promise<unknown> {
@@ -128,6 +133,7 @@ export default class Hub extends EventEmitter {
   // anything that isn't one is skipped.
   run(command: Command): void {
     if (!valid(command)) return
+    if (command.type === 'state') return this.snapshot()
     const { messenger } = this
     if (command.type === 'send') {
       const contact = messenger.contacts.get(command.contact)
@@ -182,5 +188,6 @@ function valid(command: any): boolean {
     )
   }
   if (command?.type === 'retry' || command?.type === 'irc') return Number.isInteger(command.ref)
+  if (command?.type === 'state') return true
   return false
 }
