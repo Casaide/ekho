@@ -75,11 +75,11 @@ Don't relitigate these without the user.
 
 ## Conventions
 
-- **One open pull request at a time.** Add each change to it rather than opening another: every merge to `main` makes a release, and a release per commit is noise. If it's merged while work goes on, the next changes start the next one.
+- **One open pull request at a time.** Add each change to it rather than opening another: every merge to `main` that changes the app makes a release, and a release per commit is noise. If it's merged while work goes on, the next changes start the next one.
 - **Conventional Commits** for commit messages (`feat(irc): ...`, `fix(ci): ...`, `docs: ...`) and branch names (`feat/contacts-ui`, `fix/ble-reconnect`).
 - **Dependencies match npm.** Take versions from `npm view <name> version`, never from a clone or memory, and declare peer dependencies of what we use (bare-meshtastic needs `bare-logger`). The APK workflow prints each declared range next to the latest published version.
 - **Android back** comes from `bare-navigation-android` (Holepunch's): it needs minSdk 33 and `enableOnBackInvokedCallback` in the manifest, and it's Android only, so `app.ts` imports it only there and the macOS build defers it. `Ui.goBack()` decides; false lets Android leave the app.
-- **Releases are automatic:** every merge to `main` runs `.github/workflows/release.yml`, which works out the next version from the commits, builds the APK and publishes a GitHub release. Don't tag by hand.
+- **Releases are automatic:** every merge to `main` that changes more than docs (`**.md`, `docs/`, `.claude/`, the screenshot script) runs `.github/workflows/release.yml`, which works out the next version from the commits, builds the APK and publishes a GitHub release. Don't tag by hand.
 - **Watch every workflow** after a push (Integrate and APK), not just the one you changed.
 - **TypeScript, erasable syntax only.** Bare strips types natively and rejects anything that isn't erasable (enums, namespaces, parameter properties). No `private` keyword either; use the `_name` convention. `tsconfig.json` sets `erasableSyntaxOnly`.
 - **ESM with explicit `.ts` imports** (`import Heard from './heard.ts'`), and `import type` for types.

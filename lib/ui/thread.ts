@@ -43,7 +43,7 @@ const REASONS: Record<string, string> = {
   INTERRUPTED: 'interrupted'
 }
 
-const { Clipboard, TextFragment } = native
+const { Clipboard, TextFragment, Image } = native
 
 // The reactions offered first; any other can be typed.
 const EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅', '👎', '📡']
@@ -477,10 +477,26 @@ export default class Thread {
     if (preview === null) {
       return button('↗ ' + host(url), open, { ...chip(colors.accent), fontSize: 11 })
     }
-    const lines = [
-      text(preview.site, { color: colors.muted, fontSize: 11 }, 1),
-      text(preview.title, { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2)
-    ]
+    const lines: any[] = []
+    if (preview.image !== null) {
+      const image = new Image()
+      // A link to an image shows it taller, with nothing else.
+      image.style = {
+        width: 280,
+        height: preview.title === null ? 200 : 140,
+        borderRadius: 4,
+        resizeMode: 'cover'
+      }
+      image.source = preview.image
+      fitOnApple(image)
+      // Undecodable: the card shows without it.
+      image.on('error', () => {})
+      lines.push(image)
+    }
+    if (preview.title !== null) {
+      lines.push(text(preview.site, { color: colors.muted, fontSize: 11 }, 1))
+      lines.push(text(preview.title, { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2))
+    }
     if (preview.description !== null) {
       lines.push(text(preview.description, { color: colors.soft, fontSize: 12 }, 3))
     }
@@ -488,7 +504,8 @@ export default class Thread {
       view(
         {
           gap: 4,
-          padding: 10,
+          padding: preview.title === null ? 4 : 10,
+          maxWidth: 300,
           borderWidth: 1,
           borderColor: colors.line,
           borderRadius: 6,
@@ -501,9 +518,15 @@ export default class Thread {
     )
   }
 
-  // A preview came in: show it.
-  invalidate(): void {
+  // A preview came in: show it. Its card is taller than the link it
+  // replaces, so if it's on one of the last messages, the list goes to the
+  // end again rather than leaving the newest under the box.
+  invalidate(url: string): void {
     this._shown = ''
+    const contact = this.ui.selected
+    if (contact === null) return
+    const recent = this.ui.messenger.thread(contact).slice(-3)
+    if (recent.some((m) => links(m.text).includes(url))) this._settling = Date.now() + 400
   }
 
   // Hold a message for what to do with it: reply, react, copy, retry.
@@ -609,5 +632,18 @@ export default class Thread {
     this._input.value = ''
     this._reply(null)
     this._renderCount()
+  }
+}
+
+// bare-native 0.3.8's image view on macOS and iOS doesn't record its own
+// size, so a picture filling it is drawn at no size, leaving a blank box.
+// Recorded here until it's fixed upstream (lib/image/darwin.js, ios.js).
+function fitOnApple(image: any): void {
+  if (Bare.platform !== 'darwin' && Bare.platform !== 'ios') return
+  const resized = image._resized
+  image._resized = function (width: number, height: number) {
+    resized.call(this, width, height)
+    this._box = { width, height }
+    this._fitted()
   }
 }

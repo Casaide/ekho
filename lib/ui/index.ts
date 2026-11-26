@@ -268,8 +268,8 @@ export default class Ui extends EventEmitter {
     this.radio.on('change', () => this.schedule())
     this.irc.on('change', () => this.schedule())
     this.presence.on('change', () => this.schedule())
-    this.previews?.on('preview', () => {
-      this._thread.invalidate()
+    this.previews?.on('preview', (url: string) => {
+      this._thread.invalidate(url)
       this.schedule()
     })
     this.log.on('entry', () => {

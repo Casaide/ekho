@@ -47,6 +47,8 @@ jobs:
           shot phone-onboarding 390x844 --first-run
           shot desktop 1240x780 '!a7c3e91f'
           ls -la shots
+          # Link preview images, as fetched: what the cards should show.
+          ls -la ~/.ekho/previews 2>/dev/null && file ~/.ekho/previews/* || true
       - name: Crop and print
         run: |
           python3 - <<'PY'

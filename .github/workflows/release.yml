@@ -1,5 +1,5 @@
 name: Release
-# Every merge to main is a release. The version comes from the Conventional
+# Every merge to main that changes the app is a release. The version comes from the Conventional
 # Commits since the last tag: a breaking change bumps minor while we're on 0.x
 # (major after 1.0), feat bumps minor, anything else bumps patch. The first
 # release takes the version in package.json.
@@ -7,6 +7,14 @@ on:
   push:
     branches:
       - main
+    # Nothing to release when only the docs, the README or its screenshots
+    # changed; they go out with the next release that changes the app.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.claude/**'
+      - 'scripts/demo-state.py'
+      - '.github/workflows/screens.yml'
   workflow_dispatch:
 permissions: {}
 concurrency:

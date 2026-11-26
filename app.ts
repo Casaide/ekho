@@ -1,5 +1,6 @@
 import native from 'bare-native'
 import tls from 'bare-tls'
+import fs from 'bare-fs'
 import os from 'bare-os'
 import path from 'bare-path'
 import Messenger from './lib/messenger.ts'
@@ -411,7 +412,16 @@ const ui = new Ui(
     radio: radioLink,
     irc: ircLink,
     presence,
-    previews: new Previews(fetch)
+    // Preview images go in a cache folder: the image view reads files.
+    previews: new Previews(fetch, {
+      async save(name: string, bytes: Uint8Array) {
+        const dir = path.join(DATA, 'previews')
+        await fs.promises.mkdir(dir, { recursive: true })
+        const file = path.join(dir, name)
+        await fs.promises.writeFile(file, bytes)
+        return file
+      }
+    })
   }
 )
 

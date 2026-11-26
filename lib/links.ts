@@ -43,8 +43,13 @@ function trim(link: string): string {
 export interface Preview {
   url: string
   site: string
-  title: string
+  // Null for a link to an image itself.
+  title: string | null
   description: string | null
+  // The page's image (og:image), absolute, to fetch; and once fetched, the
+  // file it's kept in.
+  imageUrl: string | null
+  image: string | null
 }
 
 // From the start of a page's HTML. Null if it has no title to show.
@@ -64,8 +69,22 @@ export function preview(url: string, html: string): Preview | null {
     url,
     site: clean(meta('og:site_name'), 60) ?? host(url),
     title,
-    description: clean(meta('og:description') ?? meta('description'), 200)
+    description: clean(meta('og:description') ?? meta('description'), 200),
+    imageUrl: absolute(url, meta('og:image') ?? meta('twitter:image')),
+    image: null
   }
+}
+
+// An address on a page, made absolute against the page's. Null if it isn't
+// an http(s) one.
+function absolute(page: string, value: string | null): string | null {
+  if (value === null) return null
+  const link = value.replace(/&amp;/g, '&').trim()
+  if (/^https?:\/\//i.test(link)) return link
+  const origin = /^(https?:\/\/[^/?#]+)/i.exec(page)![1]
+  if (link.startsWith('//')) return origin.split('//')[0] + link
+  if (link.startsWith('/')) return origin + link
+  return null
 }
 
 export function host(url: string): string {
