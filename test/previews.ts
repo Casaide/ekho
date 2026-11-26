@@ -46,9 +46,13 @@ test('a page’s image, and a linked image, are kept in files to show', async (t
     }
   )
 
+  const ready = new Promise((resolve) => {
+    let left = 2
+    previews.on('preview', () => --left === 0 && resolve(null))
+  })
   previews.get('https://a.bg/post')
   previews.get('https://a.bg/photo.png')
-  await settle()
+  await ready
 
   const post = previews.get('https://a.bg/post')!
   t.equal(post.title, 'a')
