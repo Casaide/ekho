@@ -83,7 +83,7 @@ The password stays on your device. ekho logs in for you from then on, and joins 
 
 ## Using ekho
 
-- **Start a conversation:** open **contacts**, pick someone heard on the radio or online on IRC, and write.
+- **Start a conversation:** open **contacts**, pick someone heard on the radio or online on IRC, and write. Tap **lora** to list only people your radio knows, most recently heard first, or another chip for MeshCore, Bitchat or plain IRC users; the last chip switches between last seen and name order.
 - **Where a message went** shows above it: `lora · direct`, `lora · 2 hops`, `irc`. The line at the bottom of a conversation says which way the next message will go.
 - **Message details:** tap a message to see when and how it was sent, to copy it, to react with any emoji, or to retry a failed one.
 - **Channels:** the **channels** tab lists the ones you're in, with how many people are there now and whether they reach the radio, then the rest of the server's channels to join. Open a channel's **info** to see who's in it, or **edit** to give it your own name. To leave one, go to **radio** › **irc**.

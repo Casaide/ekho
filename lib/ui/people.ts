@@ -1,6 +1,7 @@
 import type Ui from './index.ts'
 import type { Contact } from '../types.ts'
-import type { Person } from '../presence.ts'
+import type { Person, Kind, Order } from '../presence.ts'
+import { reachedBy, sortPeople, networkOf } from '../presence.ts'
 import { displayName } from '../contacts.ts'
 import {
   colors,
@@ -30,6 +31,16 @@ const BRIDGED: Record<string, string> = {
   bitchat: 'bitchat via irc'
 }
 
+// The transports to list people by, as the filter chips name them.
+const KINDS: [Kind, string][] = [
+  ['all', 'all'],
+  ['lora', 'lora'],
+  ['meshtastic', 'meshtastic'],
+  ['meshcore', 'meshcore'],
+  ['bitchat', 'bitchat'],
+  ['irc', 'irc']
+]
+
 // `~/contacts`: who's around right now on every transport, then saved
 // contacts not seen. Tapping someone opens their conversation, making them a
 // contact if they weren't one.
@@ -39,6 +50,9 @@ export default class People {
 
   _summary: any
   _search: any
+  _chips: any
+  _kind: Kind
+  _order: Order
   _list: any
   _limit: number
   _key: string
@@ -61,13 +75,18 @@ export default class People {
     })
     this._limit = PAGE
     this._key = ''
+    this._kind = 'all'
+    this._order = 'seen'
+    // Rebuilt with the list, as their colours follow the choice.
+    this._chips = view({ flexDirection: 'row', flexWrap: 'wrap', gap: 6 })
     this._list = scroll({ paddingHorizontal: 18, paddingVertical: 10, gap: 10 })
 
     this.root = view({ flex: 1 }, [
       view({ paddingHorizontal: 18, paddingTop: 16, gap: 12 }, [
         heading('~/', 'contacts'),
         this._summary,
-        this._search
+        this._search,
+        this._chips
       ]),
       this._list
     ])
@@ -84,12 +103,21 @@ export default class People {
     const onIrc = people.filter((p) => p.nicks.length > 0).length
     this._summary.text = onLora + ' heard on lora · ' + onIrc + ' on irc'
 
-    const online = people.filter((p) => matches(nameOf(this.ui, p)))
-    const saved = messenger.contacts.all().filter((c) => !c.channel && matches(displayName(c)))
+    const kind = this._kind
+    const online = sortPeople(
+      people.filter((p) => reachedBy(p, kind) && matches(nameOf(this.ui, p))),
+      this._order,
+      kind
+    )
+    const saved = messenger.contacts
+      .all()
+      .filter((c) => !c.channel && savedBy(c, kind) && matches(displayName(c)))
 
     // Rebuild only when what's listed changed, not for every event.
     const key = [
       filter,
+      kind,
+      this._order,
       this._limit,
       online
         .slice(0, this._limit)
@@ -99,6 +127,8 @@ export default class People {
     ].join('|')
     if (key === this._key) return
     this._key = key
+
+    this._renderChips()
 
     const content = this._list.content
     clear(content)
@@ -135,6 +165,37 @@ export default class People {
       }
     }
   }
+  _renderChips(): void {
+    clear(this._chips)
+    for (const [kind, name] of KINDS) {
+      const on = this._kind === kind
+      this._chips.appendChild(
+        button(name, () => this._choose(kind, this._order), chip(on ? colors.accent : colors.muted))
+      )
+    }
+    const next: Order = this._order === 'seen' ? 'name' : 'seen'
+    this._chips.appendChild(
+      button(
+        this._order === 'seen' ? '↓ last seen' : '↓ name',
+        () => this._choose(this._kind, next),
+        chip(colors.text)
+      )
+    )
+  }
+
+  _choose(kind: Kind, order: Order): void {
+    this._kind = kind
+    this._order = order
+    this._limit = PAGE
+    this.render()
+  }
+}
+
+// A saved contact reachable that way, for the list of those not seen.
+function savedBy(contact: Contact, kind: Kind): boolean {
+  if (kind === 'all') return true
+  if (kind === 'lora') return contact.nodes.length > 0
+  return contact.nicks.some((nick) => networkOf(nick) === kind)
 }
 
 // Someone seen, with where: tapping opens their conversation, making them a
