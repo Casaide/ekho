@@ -465,6 +465,12 @@ export default class Thread {
       backgroundColor: failed ? colors.failed : mine ? colors.accent : colors.edge
     })
     const body = this._body(msg.text)
+    // A message with a link is as wide as a message gets, rather than as
+    // wide as its widest line: Android rounds a box fitted to a line down to
+    // whole pixels, and the line then wraps once more than measured, drawing
+    // past the box. Its link's lines (`lines`) leave a character spare.
+    const linked = links(msg.text).length > 0
+    if (linked) body.style = { ...body.style, flex: 1, textAlign: mine ? 'right' : 'left' }
     const children = [
       view(
         {
@@ -516,11 +522,12 @@ export default class Thread {
     )
     // Links open from their own cards, beside the message rather than in
     // it, so a tap on one doesn't also open the message's details.
-    return view({ gap: 6, alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '85%' }, [
+    const width = linked ? { width: '85%' } : { maxWidth: '85%' }
+    return view({ gap: 6, alignSelf: mine ? 'flex-end' : 'flex-start', ...width }, [
       bubble,
       ...links(msg.text)
         .slice(0, 2)
-        .map((url) => this._link(url))
+        .map((url) => this._link(url, mine))
     ])
   }
 
@@ -573,58 +580,66 @@ export default class Thread {
 
   // A link to open: its preview once fetched, else just where it goes. A
   // sound or a video plays in place instead.
-  _link(url: string): any {
+  // `mine`: on the right, under one of ours.
+  _link(url: string, mine: boolean): any {
     const kind = media(url)
-    if (kind !== null) return this._media(url, kind)
+    if (kind !== null) return this._media(url, kind, mine)
     const preview = this.ui.previews?.get(url) ?? null
     const open = () => this.ui.actions.openUrl(url)
     if (preview === null) {
-      return button('↗ ' + host(url), open, { ...chip(colors.accent), fontSize: 11 })
+      return button('↗ ' + host(url), open, {
+        ...chip(colors.accent),
+        fontSize: 11,
+        alignSelf: mine ? 'flex-end' : 'flex-start'
+      })
     }
-    const lines: any[] = []
-    if (preview.image !== null) {
-      const image = new Image()
-      // A link to an image shows it taller, with nothing else.
-      image.style = {
-        width: 280,
-        height: preview.title === null ? 200 : 140,
-        borderRadius: 4,
-        resizeMode: 'cover'
-      }
-      image.source = preview.image
-      fitOnApple(image)
-      // Undecodable: the card shows without it.
-      image.on('error', () => {})
-      lines.push(image)
+    const card = {
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 6,
+      backgroundColor: colors.panel,
+      cursor: 'pointer'
     }
-    if (preview.title !== null) {
-      lines.push(text(preview.site, { color: colors.muted, fontSize: 11 }, 1))
-      lines.push(text(preview.title, { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2))
+
+    // A link to a picture: the picture, whole, in a box of its own.
+    if (preview.title === null) {
+      return press(
+        view({ ...card, padding: 4, alignSelf: mine ? 'flex-end' : 'flex-start' }, [
+          picture(preview.image!, 232, 174, 'contain')
+        ]),
+        open
+      )
     }
+
+    // A page: a small square of its picture beside where it's from, its
+    // title and the start of its description, the same size whatever the
+    // page's picture is.
+    const about = view({ flex: 1, gap: 3 }, [
+      text(preview.site, { color: colors.muted, fontSize: 11 }, 1),
+      text(preview.title, { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2)
+    ])
     if (preview.description !== null) {
-      lines.push(text(preview.description, { color: colors.soft, fontSize: 12 }, 3))
+      about.appendChild(text(preview.description, { color: colors.soft, fontSize: 12 }, 2))
     }
-    return press(
-      view(
-        {
-          gap: 4,
-          padding: preview.title === null ? 4 : 10,
-          maxWidth: 300,
-          borderWidth: 1,
-          borderColor: colors.line,
-          borderRadius: 6,
-          backgroundColor: colors.panel,
-          cursor: 'pointer'
-        },
-        lines
-      ),
-      open
+    const row = view(
+      {
+        flexDirection: 'row',
+        gap: 10,
+        padding: 8,
+        width: '100%',
+        maxWidth: 300,
+        alignSelf: mine ? 'flex-end' : 'flex-start',
+        ...card
+      },
+      [about]
     )
+    if (preview.image !== null) row.insertBefore(picture(preview.image, 56, 56, 'cover'), about)
+    return press(row, open)
   }
 
   // A sound or a video: a card to tap, then the player in its place, in a
   // web view, as each platform plays any format its browser does.
-  _media(url: string, kind: Media): any {
+  _media(url: string, kind: Media, mine: boolean): any {
     const name = decodeURIComponent(
       url
         .replace(/[?#].*$/, '')
@@ -636,7 +651,9 @@ export default class Thread {
         {
           gap: 6,
           padding: 8,
-          width: 296,
+          width: '100%',
+          maxWidth: 300,
+          alignSelf: mine ? 'flex-end' : 'flex-start',
           borderWidth: 1,
           borderColor: colors.line,
           borderRadius: 6,
@@ -680,7 +697,7 @@ export default class Thread {
 
   _play(url: string, kind: Media): void {
     const player = new WebView()
-    player.style = { width: 278, height: kind === 'audio' ? 56 : 158, borderRadius: 4 }
+    player.style = { width: '100%', height: kind === 'audio' ? 56 : 158, borderRadius: 4 }
     player.html = page(url, kind)
     this._playing.set(url, player)
     this._shown = ''
@@ -836,6 +853,20 @@ const INPUT_SIZE = 15
 const INPUT_LINE = 21
 const INPUT_PAD = 11
 const MAX_LINES = 4
+
+// A picture in a box of a fixed size it never draws outside of. bare-native
+// doesn't clip a view's contents (as on the web), and on Android a picture
+// filling its box (cover) is drawn larger than the box, over everything
+// around it; the box clips it.
+function picture(file: string, width: number, height: number, fit: 'cover' | 'contain'): any {
+  const image = new Image()
+  image.style = { width, height, resizeMode: fit }
+  image.source = file
+  fitOnApple(image)
+  // Undecodable: an empty box.
+  image.on('error', () => {})
+  return view({ width, height, borderRadius: 4, overflow: 'hidden' }, [image])
+}
 
 // bare-native 0.3.8's image view on macOS and iOS doesn't record its own
 // size, so a picture filling it is drawn at no size, leaving a blank box.
