@@ -16,7 +16,7 @@ import Linker from './lib/linker.ts'
 import type { Around } from './lib/hub.ts'
 import Previews from './lib/previews.ts'
 import KeptPreviews from './lib/kept.ts'
-import Translator from './lib/translator.ts'
+import Translator, { bulgarian, forModel } from './lib/translator.ts'
 import { modelFiles } from './lib/bergamot.ts'
 import fetch from 'bare-fetch'
 import type { RadioState } from './lib/types.ts'
@@ -108,23 +108,33 @@ let askedNotifications: boolean = saved?.askedNotifications ?? false
 // (Firefox Translations) fetched once and run by QVAC's translation addon,
 // loaded only when turned on.
 let translate: boolean = saved?.translate ?? false
-const translator = new Translator(
-  (onprogress) => modelFiles('bg', 'en', path.join(DATA, 'models', 'bg-en'), { fetch, onprogress }),
-  async (files) => {
-    const { default: Nmt } = await import('@qvac/translation-nmtcpp')
-    const model = new Nmt({
-      files,
-      params: { srcLang: 'bg', dstLang: 'en' },
-      config: { modelType: Nmt.ModelTypes.Bergamot }
-    })
-    await model.load()
-    return model
-  }
-)
-translator.on('change', () => {
-  if (translator.state === 'failed') log.error('translate:', translator.error)
-  else log.info('translate: ' + translator.state)
-})
+// One model per direction, each downloaded when first wanted.
+function translatorFor(from: string, to: string, opts = {}) {
+  const translator = new Translator(
+    (onprogress) =>
+      modelFiles(from, to, path.join(DATA, 'models', from + '-' + to), { fetch, onprogress }),
+    async (files) => {
+      const { default: Nmt } = await import('@qvac/translation-nmtcpp')
+      const model = new Nmt({
+        files,
+        params: { srcLang: from, dstLang: to },
+        config: { modelType: Nmt.ModelTypes.Bergamot }
+      })
+      await model.load()
+      return model
+    },
+    opts
+  )
+  translator.on('change', () => {
+    const name = 'translate ' + from + '-' + to + ': '
+    if (translator.state === 'failed') log.error(name + translator.error)
+    else log.info(name + translator.state)
+  })
+  return translator
+}
+const translator = translatorFor('bg', 'en', { detect: bulgarian, prepare: forModel })
+// What you write, in Bulgarian, when you choose to send it so.
+const toBulgarian = translatorFor('en', 'bg')
 // Android only for now: on the Mac, QVAC's runtime picks one architecture
 // for both halves of the universal build, so it's left out of it.
 const translates = Bare.platform === 'android'
@@ -461,6 +471,7 @@ const ui = new Ui(
     // Previews are kept between sessions in a Hyperbee of their own, beside
     // the linking cores, with their pictures when small.
     translator: translates ? translator : undefined,
+    toBulgarian: translates ? toBulgarian : undefined,
     previews: new Previews(fetch, {
       kept: new KeptPreviews(linker.devices.store.get({ name: 'previews' })),
       async save(name: string, bytes: Uint8Array) {

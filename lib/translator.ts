@@ -9,14 +9,18 @@ export interface Model {
 
 export type TranslatorState = 'off' | 'downloading' | 'loading' | 'on' | 'failed'
 
-// Messages in Bulgarian, in English, on this device. Off until started; then
-// the model is fetched once (`files`, with progress) and loaded (`open`).
-// Each text is translated once and kept for the session.
+// Text in one language, in another, on this device, with one model. Off until
+// started; then the model is fetched once (`files`, with progress) and
+// loaded (`open`). Each text is translated once and kept for the session.
+// `detect`: what's translated without being asked; `prepare`: what the model
+// is given for a text.
 //
 // Events: change, when the state or progress changed; translated (text).
 export default class Translator extends EventEmitter {
   files: (onprogress: (done: number) => void) => Promise<ModelFiles>
   open: (files: ModelFiles) => Promise<Model>
+  detect: (text: string) => boolean
+  prepare: (text: string) => string
   state: TranslatorState
   // While downloading, the share done, 0 to 1; when failed, why.
   progress: number
@@ -29,11 +33,14 @@ export default class Translator extends EventEmitter {
 
   constructor(
     files: (onprogress: (done: number) => void) => Promise<ModelFiles>,
-    open: (files: ModelFiles) => Promise<Model>
+    open: (files: ModelFiles) => Promise<Model>,
+    opts: { detect?: (text: string) => boolean; prepare?: (text: string) => string } = {}
   ) {
     super()
     this.files = files
     this.open = open
+    this.detect = opts.detect ?? (() => false)
+    this.prepare = opts.prepare ?? ((text) => text)
     this.state = 'off'
     this.progress = 0
     this.error = null
@@ -73,17 +80,18 @@ export default class Translator extends EventEmitter {
     if (model !== null) await model.unload()
   }
 
-  // The English for a Bulgarian text: ready, or null while it's on its way
-  // (`translated` says when). Null too for anything else, or when off.
-  english(text: string): string | null {
+  // The translation of a text: ready, or null while it's on its way
+  // (`translated` says when), and null for one not asked for that `detect`
+  // doesn't pick, or when off.
+  translation(text: string): string | null {
     const known = this._known.get(text)
     if (known !== undefined) return known
-    if (bulgarian(text)) this.translate(text)
+    if (this.detect(text)) this.translate(text)
     return null
   }
 
-  // Translate this text whatever it looks like, when asked: the English
-  // comes from `english` once `translated` says so.
+  // Translate this text whatever it looks like: its translation comes from
+  // `translation` once `translated` says so.
   translate(text: string): void {
     if (this.state === 'off' || this._known.has(text) || this._queue.includes(text)) return
     this._queue.push(text)
@@ -96,15 +104,13 @@ export default class Translator extends EventEmitter {
     this._running = true
     const texts = this._queue.splice(0, 16)
     try {
-      // The model reads Cyrillic: Bulgarian typed in Latin letters is
-      // spelled in Cyrillic first.
-      const out = await this._model.runBatch(texts.map((t) => (latin(t) ? cyrillic(t) : t)))
+      const out = await this._model.runBatch(texts.map(this.prepare))
       texts.forEach((text, i) => {
         this._known.set(text, out[i].trim())
         this.emit('translated', text)
       })
     } catch {
-      // A text the model can't take stays in Bulgarian.
+      // A text the model can't take stays as written.
       for (const text of texts) this._known.set(text, text)
     }
     this._running = false
@@ -118,11 +124,18 @@ export default class Translator extends EventEmitter {
   }
 }
 
-// Mostly Cyrillic letters, so most likely Bulgarian on this mesh.
+// Some Bulgarian in it, most likely, on this mesh: a word in Cyrillic of two
+// letters or more, or two of any length. People mix in English terms
+// ("колко е hop to gw"), which the model leaves as they are.
 export function bulgarian(text: string): boolean {
-  const letters = text.match(/\p{L}/gu) ?? []
-  const cyrillic = letters.filter((c) => /\p{Script=Cyrillic}/u.test(c)).length
-  return cyrillic >= 2 && cyrillic * 2 > letters.length
+  const words = (text.match(/\p{L}+/gu) ?? []).filter((w) => /\p{Script=Cyrillic}/u.test(w))
+  return words.length >= 2 || words.some((w) => w.length >= 2)
+}
+
+// What the Bulgarian model is given: Bulgarian typed in Latin letters is
+// spelled in Cyrillic first, as the model reads Cyrillic.
+export function forModel(text: string): string {
+  return latin(text) && !bulgarian(text) ? cyrillic(text) : text
 }
 
 // Mostly Latin letters.

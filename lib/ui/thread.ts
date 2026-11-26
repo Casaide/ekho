@@ -108,6 +108,14 @@ export default class Thread {
   _playingIn: string | null
   // Messages shown as written though translated, by id.
   _original: Set<number>
+  // Sending what's typed in Bulgarian: the switch, the translation shown
+  // above the box, the send button, and the wait before translating.
+  _inBulgarian: boolean
+  _toBg: any
+  _preview: any
+  _sendBox: any
+  _sendLabel: any
+  _typing: ReturnType<typeof setTimeout> | null
 
   constructor(ui: Ui) {
     this.ui = ui
@@ -137,6 +145,12 @@ export default class Thread {
     this._playing = new Map()
     this._playingIn = null
     this._original = new Set()
+    this._inBulgarian = false
+    this._toBg = view({})
+    this._preview = text('', { color: colors.text, fontSize: 13, display: 'none' })
+    this._sendLabel = text('send', { color: colors.ground, fontSize: 14, fontWeight: 'bold' })
+    this._sendBox = view({}, [this._sendLabel])
+    this._typing = null
     // Lives across redraws, so a message arriving doesn't wipe what's typed.
     this._emoji = input('or type any emoji')
     this._emoji.returnKeyType = 'send'
@@ -168,6 +182,7 @@ export default class Thread {
       }
       this._renderCount()
       this._grow()
+      this._translateSoon()
     })
     this._input.on('layout', (frame: { width: number }) => {
       const perLine = Math.max(1, Math.floor((frame.width - 2 * INPUT_PAD) / (INPUT_SIZE * 0.6)))
@@ -217,9 +232,11 @@ export default class Thread {
         view({ flexDirection: 'row', alignItems: 'center', gap: 6 }, [
           this._route,
           view({ flex: 1 }),
+          this._toBg,
           this._count
         ]),
         this._replying,
+        this._preview,
         view(
           {
             flexDirection: 'row',
@@ -230,15 +247,7 @@ export default class Thread {
           [
             // A tap anywhere on the box, the `>` too, is a tap on the input.
             press(this._box, () => this._input.focus()),
-            button('send', () => this._send(), {
-              ...primary(),
-              fontSize: 14,
-              alignSelf: 'flex-end',
-              justifyContent: 'center',
-              minHeight: INPUT_LINE + 2 * INPUT_PAD + 2,
-              paddingHorizontal: 16,
-              borderRadius: 8
-            })
+            press(this._sendBox, () => this._send())
           ]
         )
       ])
@@ -259,7 +268,7 @@ export default class Thread {
     if (this._replyTo !== null && this._replyTo.contact !== contact.id) this._replyTo = null
     this._renderRoute(contact)
     this._renderReplying()
-    this._renderCount()
+    this.renderCompose()
     this._renderDetail(contact)
 
     // Another conversation: what played in the last one stops.
@@ -368,7 +377,7 @@ export default class Thread {
     const now = this.ui.messenger.now()
     this._detail.appendChild(row('when', dayLabel(msg.time, now) + ' ' + clock(msg.time)))
     this._detail.appendChild(row('from', mine ? 'you' : (msg.from ?? displayName(contact))))
-    const english = mine ? null : (this.ui.translator?.english(msg.text) ?? null)
+    const english = mine ? null : (this.ui.translator?.translation(msg.text) ?? null)
     if (english !== null && english !== msg.text) {
       this._detail.appendChild(row('original', msg.text))
     }
@@ -411,7 +420,7 @@ export default class Thread {
     // people mix English and Bulgarian, in either alphabet.
     const translator = this.ui.translator
     if (!mine && translator !== null && translator.state === 'on') {
-      const english = translator.english(msg.text)
+      const english = translator.translation(msg.text)
       if (english === null) {
         actions.push(
           button(
@@ -502,7 +511,7 @@ export default class Thread {
     })
     // Theirs in Bulgarian shows in English once translated; the original is
     // in its details, on hold.
-    const english = mine ? null : (this.ui.translator?.english(msg.text) ?? null)
+    const english = mine ? null : (this.ui.translator?.translation(msg.text) ?? null)
     const translated = english !== null && english !== msg.text && !this._original.has(msg.id)
     if (translated) head.push(text('translated', { color: colors.muted, fontSize: 11 }))
     const body = this._body(translated ? english : msg.text)
@@ -845,9 +854,83 @@ export default class Thread {
     return LIMIT.irc
   }
 
+  // The switch to send in Bulgarian, the Bulgarian above the box, and the
+  // send button, which turns amber and says so.
+  renderCompose(): void {
+    const tr = this.ui.toBulgarian
+    clear(this._toBg)
+    if (tr !== null) {
+      this._toBg.appendChild(
+        button('→ bg', () => this._switchBulgarian(), {
+          ...chip(this._inBulgarian ? colors.irc : colors.muted),
+          fontSize: 11,
+          paddingVertical: 3,
+          paddingHorizontal: 8
+        })
+      )
+    }
+    const on = tr !== null && this._inBulgarian
+    const value = this._input.value.trim()
+    let shown = ''
+    if (on && tr.state === 'downloading') {
+      shown = 'bg: getting the model, ' + Math.round(tr.progress * 100) + '%'
+    } else if (on && tr.state === 'failed') shown = 'bg: failed: ' + tr.error
+    else if (on && value !== '') shown = 'bg: ' + (tr.translation(value) ?? '…')
+    else if (on) shown = 'bg: type in English, it goes out in Bulgarian'
+    this._preview.text = shown
+    this._preview.style = {
+      color: shown.startsWith('bg: failed') ? colors.failed : colors.irc,
+      fontSize: 13,
+      display: on ? 'flex' : 'none'
+    }
+    const color = on ? colors.irc : colors.accent
+    this._sendLabel.text = on ? 'send bg' : 'send'
+    this._sendBox.style = {
+      backgroundColor: color,
+      borderColor: color,
+      borderWidth: 1,
+      alignSelf: 'flex-end',
+      justifyContent: 'center',
+      minHeight: INPUT_LINE + 2 * INPUT_PAD + 2,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      cursor: 'pointer'
+    }
+    this._renderCount()
+  }
+
+  _switchBulgarian(): void {
+    const tr = this.ui.toBulgarian!
+    this._inBulgarian = !this._inBulgarian
+    if (this._inBulgarian && (tr.state === 'off' || tr.state === 'failed')) tr.start()
+    this._translateSoon()
+    this.renderCompose()
+  }
+
+  // Once typing pauses, what's typed is translated for the preview.
+  _translateSoon(): void {
+    if (!this._inBulgarian) return
+    if (this._typing !== null) clearTimeout(this._typing)
+    this._typing = setTimeout(() => {
+      this._typing = null
+      const value = this._input.value.trim()
+      if (value !== '') this.ui.toBulgarian!.translate(value)
+      this.renderCompose()
+    }, 400)
+  }
+
+  // What goes out: what's typed, or its Bulgarian; null while that's on
+  // its way.
+  _outgoing(): string | null {
+    const value = this._input.value.trim()
+    if (!this._inBulgarian || this.ui.toBulgarian === null) return value
+    return this.ui.toBulgarian.translation(value)
+  }
+
   _renderCount(): void {
     const used = bytes(
-      (this._replyTo === null ? '' : this.ui.messenger.replyTo(this._replyTo)) + this._input.value
+      (this._replyTo === null ? '' : this.ui.messenger.replyTo(this._replyTo)) +
+        (this._outgoing() ?? this._input.value)
     )
     const limit = this._limit()
     this._count.text = used + '/' + limit
@@ -874,9 +957,10 @@ export default class Thread {
   }
 
   _send(): void {
-    const value = this._input.value.trim()
+    const value = this._outgoing()
     const contact = this.ui.selected
-    if (value === '' || contact === null) return
+    // In Bulgarian, nothing goes until its translation is shown.
+    if (value === null || value === '' || contact === null) return
     const prefix = this._replyTo === null ? '' : this.ui.messenger.replyTo(this._replyTo)
     // Too long to go out in one piece: the counter is already red.
     if (bytes(prefix + value) > this._limit()) return
@@ -885,7 +969,7 @@ export default class Thread {
     else this.ui.messenger.reply(this._replyTo, value)
     this._input.value = ''
     this._reply(null)
-    this._renderCount()
+    this.renderCompose()
   }
 }
 
