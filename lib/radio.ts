@@ -75,6 +75,20 @@ export default function connectRadio(
       reject(err)
     }
 
+    // Once connected, the end of the connection however it's reported: the
+    // client's close tells the link. Going out of range is reported as an
+    // error (Android: "GATT error 8", the link supervision timeout), not as
+    // a disconnect, so both end it.
+    const lost = (cause: Error) => {
+      if (!settled) return fail(cause)
+      note('lost: ' + cause.message)
+      try {
+        disconnect()
+      } catch {
+        // Already gone on the radio's side; the client's close still comes.
+      }
+    }
+
     const step = (fn: () => void) => {
       try {
         fn()
@@ -86,7 +100,7 @@ export default function connectRadio(
     step(() => {
       central = new Central()
 
-      central.on('error', fail)
+      central.on('error', lost)
 
       central.on('stateChange', (state: string) => {
         status('bluetooth ' + state)
@@ -122,13 +136,10 @@ export default function connectRadio(
         peripheral = connected
         status('connected, discovering services')
 
-        peripheral.on('error', fail)
-        // Before it's ready this is a failed attempt; after, the end of the
-        // connection, reported by the client's close.
-        peripheral.on('disconnect', () => {
-          if (settled && client !== null) return client.destroy()
-          fail(new Error('the radio disconnected'))
-        })
+        // Before it's ready these are a failed attempt; after, the end of the
+        // connection.
+        peripheral.on('error', lost)
+        peripheral.on('disconnect', () => lost(new Error('the radio disconnected')))
         peripheral.on('mtuChanged', (mtu: number) => note('packet size ' + mtu))
 
         let service: any = null
@@ -187,7 +198,7 @@ export default function connectRadio(
                 on: (event: 'close', fn: () => void) => client.on(event, fn)
               })
             })
-            client.on('error', fail)
+            client.on('error', lost)
 
             status('syncing with the radio')
 

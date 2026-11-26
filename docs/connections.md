@@ -46,6 +46,7 @@ What's wanted is saved (`wanted.radio`, `wanted.irc` in `state.json`). Connectin
 
 - The radio link stays up through a pause: Bluetooth outlives it, and the T1000-E queues packets for the phone until ekho reads them.
 - A disconnect after syncing destroys the bare-meshtastic client, whose `close` tells the link, which retries while the radio is wanted.
+- Walking out of range isn't reported as a disconnect. On Android, bare-bluetooth reports a drop with a non-zero GATT status as an `error`, with no `disconnect` event, and out of range is status 8, the link supervision timeout. That comes some seconds after the radio was last reachable. So once synced, any Bluetooth or client error also ends the connection, the same way. Before this, those errors were ignored after syncing, and ekho showed the radio as connected long after it had gone.
 - Bluetooth off, unsupported or not permitted is fatal, with a message saying what to do.
 - See AGENTS.md for what the bare-meshtastic BLE example leaves out (service by UUID, MTU 512, hang up on failure).
 
