@@ -366,6 +366,16 @@ export default class Thread {
     // still settling goes to the end too: restoring the offset it caught
     // halfway would scroll back up.
     const at = contact.id + ':' + thread.length
+    // Opening a conversation, or a message in: its latest of theirs are
+    // translated, apart from drawing; what comes back redraws once a batch.
+    if (at !== this._end) {
+      this.ui.translator?.want(
+        recent
+          .slice(-30)
+          .filter((m) => m.state === 'received')
+          .map((m) => m.text)
+      )
+    }
     if (at !== this._end || Date.now() < this._settling || this._stick) this.toEnd()
     else this._place(was)
     this._end = at

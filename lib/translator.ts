@@ -7,20 +7,37 @@ export interface Model {
   unload(): Promise<unknown>
 }
 
+// The most texts waiting, how many go to the model at once, and the pause
+// between batches, in milliseconds.
+const QUEUE = 60
+const BATCH = 8
+const PAUSE = 50
+
 export type TranslatorState = 'off' | 'downloading' | 'loading' | 'on' | 'failed'
 
 // Text in one language, in another, on this device, with one model. Off until
 // started; then the model is fetched once (`files`, with progress) and
-// loaded (`open`). Each text is translated once and kept for the session.
-// `detect`: what's translated without being asked; `prepare`: what the model
-// is given for a text.
+// loaded (`open`). Each text is translated once: kept for the session, and
+// beyond it when given `kept`.
 //
-// Events: change, when the state or progress changed; translated (text).
+// Translating runs on its own, never on the way to showing anything:
+// `translation` only reads what's known, `want` and `translate` ask. What's
+// asked goes newest first, in small batches with a pause between, and at
+// most QUEUE wait: older asks are dropped, as the newest are what's on
+// screen. `detect`: what `want` takes without being forced; `prepare`: what
+// the model is given for a text.
+//
+// Events: change, when the state or progress changed; translated (texts),
+// once per batch.
 export default class Translator extends EventEmitter {
   files: (onprogress: (done: number) => void) => Promise<ModelFiles>
   open: (files: ModelFiles) => Promise<Model>
   detect: (text: string) => boolean
   prepare: (text: string) => string
+  kept: {
+    get(text: string): Promise<string | null>
+    put(text: string, out: string): Promise<unknown>
+  } | null
   state: TranslatorState
   // While downloading, the share done, 0 to 1; when failed, why.
   progress: number
@@ -34,13 +51,18 @@ export default class Translator extends EventEmitter {
   constructor(
     files: (onprogress: (done: number) => void) => Promise<ModelFiles>,
     open: (files: ModelFiles) => Promise<Model>,
-    opts: { detect?: (text: string) => boolean; prepare?: (text: string) => string } = {}
+    opts: {
+      detect?: (text: string) => boolean
+      prepare?: (text: string) => string
+      kept?: Translator['kept']
+    } = {}
   ) {
     super()
     this.files = files
     this.open = open
     this.detect = opts.detect ?? (() => false)
     this.prepare = opts.prepare ?? ((text) => text)
+    this.kept = opts.kept ?? null
     this.state = 'off'
     this.progress = 0
     this.error = null
@@ -84,35 +106,56 @@ export default class Translator extends EventEmitter {
   // (`translated` says when), and null for one not asked for that `detect`
   // doesn't pick, or when off.
   translation(text: string): string | null {
-    const known = this._known.get(text)
-    if (known !== undefined) return known
-    if (this.detect(text)) this.translate(text)
-    return null
+    return this._known.get(text) ?? null
+  }
+
+  // Translate these, oldest first, if `detect` takes them: as they arrive,
+  // and the latest of a conversation as it opens.
+  want(texts: string[]): void {
+    for (const text of texts) {
+      if (!this.detect(text) || this._known.has(text) || this._queue.includes(text)) continue
+      this._queue.push(text)
+    }
+    if (this._queue.length > QUEUE) this._queue.splice(0, this._queue.length - QUEUE)
+    this._run()
   }
 
   // Translate this text whatever it looks like: its translation comes from
   // `translation` once `translated` says so.
   translate(text: string): void {
-    if (this.state === 'off' || this._known.has(text) || this._queue.includes(text)) return
+    if (this._known.has(text) || this._queue.includes(text)) return
     this._queue.push(text)
     this._run()
   }
 
   // One at a time, in the order asked: what's waiting goes as one batch.
+  // Newest first, a few at a time: kept ones from the bee, the rest from the
+  // model, then a pause so the app keeps up.
   async _run(): Promise<void> {
     if (this._running || this._model === null || this._queue.length === 0) return
     this._running = true
-    const texts = this._queue.splice(0, 16)
-    try {
-      const out = await this._model.runBatch(texts.map(this.prepare))
-      texts.forEach((text, i) => {
-        this._known.set(text, out[i].trim())
-        this.emit('translated', text)
-      })
-    } catch {
-      // A text the model can't take stays as written.
-      for (const text of texts) this._known.set(text, text)
+    const texts = this._queue.splice(-BATCH).reverse()
+    const fresh: string[] = []
+    for (const text of texts) {
+      const kept = this.kept === null ? null : await this.kept.get(text)
+      if (kept === null) fresh.push(text)
+      else this._known.set(text, kept)
     }
+    if (fresh.length > 0) {
+      try {
+        const out = await this._model.runBatch(fresh.map(this.prepare))
+        fresh.forEach((text, i) => {
+          const english = out[i].trim()
+          this._known.set(text, english)
+          this.kept?.put(text, english)
+        })
+      } catch {
+        // A text the model can't take stays as written.
+        for (const text of fresh) this._known.set(text, text)
+      }
+    }
+    this.emit('translated', texts)
+    await new Promise((resolve) => setTimeout(resolve, PAUSE))
     this._running = false
     this._run()
   }

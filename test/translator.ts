@@ -41,17 +41,18 @@ test('once on, a Bulgarian message comes back in English', async (t) => {
   const tr = translator(batches)
   const states: string[] = []
   tr.on('change', () => states.push(tr.state))
-  const done: string[] = []
-  tr.on('translated', (text: string) => done.push(text))
+  const done: string[][] = []
+  tr.on('translated', (texts: string[]) => done.push(texts))
 
-  t.equal(tr.translation('Обиждам лесно'), null, 'off: nothing')
+  tr.want(['Обиждам лесно'])
+  t.equal(tr.translation('Обиждам лесно'), null, 'not until the model is in')
   await tr.start()
   t.deepStrictEqual([...new Set(states)], ['downloading', 'loading', 'on'])
 
-  t.equal(tr.translation('Обиждам лесно'), null, 'on its way')
-  t.equal(tr.translation('hello there'), null, 'English is left alone')
+  tr.want(['Обиждам лесно', 'hello there'])
   await settle()
-  t.deepStrictEqual(done, ['Обиждам лесно'])
+  t.equal(tr.translation('hello there'), null, 'English is left alone')
+  t.deepStrictEqual(done, [['Обиждам лесно']])
   t.equal(tr.translation('Обиждам лесно'), 'en:Обиждам лесно')
   t.deepStrictEqual(batches, [['Обиждам лесно']], 'translated once')
 })
@@ -129,8 +130,9 @@ test('any text can be translated when asked, Latin Bulgarian spelled in Cyrillic
   const tr = translator(batches)
   await tr.start()
 
-  t.equal(tr.translation('eiiiii kvo gotvite ?'), null, 'not taken for Bulgarian by itself')
+  tr.want(['eiiiii kvo gotvite ?'])
   await settle()
+  t.equal(tr.translation('eiiiii kvo gotvite ?'), null, 'not taken for Bulgarian by itself')
   t.deepStrictEqual(batches, [])
 
   tr.translate('eiiiii kvo gotvite ?')
@@ -144,4 +146,50 @@ test('Latin Bulgarian in Cyrillic: letters, pairs and chat habits', (t) => {
   t.equal(cyrillic('shte doida v 6'), 'ще доида в 6')
   t.equal(cyrillic('4akai, 6efe'), 'чакаи, шефе')
   t.equal(cyrillic('Zhivotat e hubav'), 'Животат е хубав')
+})
+
+test('translations are kept, and the next session needs no model run', async (t) => {
+  const store = new Map<string, string>()
+  const kept = {
+    get: async (k: string) => store.get(k) ?? null,
+    put: async (k: string, v: string) => store.set(k, v)
+  }
+  const first: string[][] = []
+  const one = new Translator(
+    async () => files,
+    async () => ({
+      runBatch: async (texts: string[]) => (first.push(texts), texts.map((x) => 'en:' + x)),
+      unload: async () => {}
+    }),
+    { detect: bulgarian, kept }
+  )
+  await one.start()
+  one.want(['Обиждам лесно'])
+  await new Promise((r) => setTimeout(r, 100))
+
+  const second: string[][] = []
+  const two = new Translator(
+    async () => files,
+    async () => ({
+      runBatch: async (texts: string[]) => (second.push(texts), texts),
+      unload: async () => {}
+    }),
+    { detect: bulgarian, kept }
+  )
+  await two.start()
+  two.want(['Обиждам лесно'])
+  await new Promise((r) => setTimeout(r, 100))
+  t.equal(two.translation('Обиждам лесно'), 'en:Обиждам лесно')
+  t.deepStrictEqual(second, [], 'from what was kept')
+})
+
+test('the newest asked go first, and only so many wait', async (t) => {
+  const batches: string[][] = []
+  const tr = translator(batches)
+  const texts = Array.from({ length: 70 }, (_, i) => 'съобщение ' + i)
+  tr.want(texts)
+  await tr.start()
+  t.deepStrictEqual(batches[0], texts.slice(-8).reverse(), 'the newest first')
+  await new Promise((r) => setTimeout(r, 600))
+  t.equal(batches.flat().length, 60, 'the oldest ten dropped')
 })
