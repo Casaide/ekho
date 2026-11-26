@@ -74,6 +74,7 @@ Don't relitigate these without the user.
 
 ## Conventions
 
+- **No Claude session links** (`claude.ai/code/session_…`) in pull request descriptions or commit messages.
 - **Conventional Commits** for commit messages (`feat(irc): ...`, `fix(ci): ...`, `docs: ...`) and branch names (`feat/contacts-ui`, `fix/ble-reconnect`).
 - **Dependencies match npm.** Take versions from `npm view <name> version`, never from a clone or memory, and declare peer dependencies of what we use (bare-meshtastic needs `bare-logger`). The APK workflow prints each declared range next to the latest published version.
 - **Android back** comes from `bare-navigation-android` (Holepunch's): it needs minSdk 33 and `enableOnBackInvokedCallback` in the manifest, and it's Android only, so `app.ts` imports it only there and the macOS build defers it. `Ui.goBack()` decides; false lets Android leave the app.
