@@ -229,3 +229,19 @@ test('reports who is in each channel, and who comes and goes', (t) => {
     ['rename', { from: 'georgi', to: 'georgi_' }]
   ])
 })
+
+test('a probe passes on any answer, and drops a connection that gives none', async (t) => {
+  const { stream, irc } = client()
+  let destroyed: Error | null = null
+  ;(stream as any).destroy = (err: Error) => (destroyed = err)
+
+  const alive = irc.probe(50)
+  t.equal(stream.lines.at(-1), 'PING :ekho')
+  stream.serve(':irc.motaba.net PONG irc.motaba.net :ekho\r\n')
+  t.equal(await alive, true)
+  t.equal(destroyed, null)
+
+  t.equal(await irc.probe(20), false)
+  t.equal(destroyed!.message, 'the server stopped answering')
+  irc.quit()
+})

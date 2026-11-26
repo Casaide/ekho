@@ -23,7 +23,14 @@ Connection state lived in three places (the app, the UI and the Messenger), noth
 | `failed`     | Needs the user (wrong password, Bluetooth off or blocked). No retrying. |
 
 - `start()` wants it up; `stop()` doesn't, and closes it. A connection that opens after `stop()` is closed straight away.
-- `pause()` closes it but keeps wanting it; `resume()` reconnects. The app pauses IRC when Android suspends ekho, so it says goodbye properly instead of leaving a ghost, and resumes on return.
+- `pause()` closes it but keeps wanting it; `resume()` reconnects. ekho no longer pauses IRC when Android suspends it (see below); the methods stay for links that need them.
+
+## Android pauses: keep IRC connected
+
+motaba has no history (`CAP LS` offers only `sasl=PLAIN`, and `005` has no `CHATHISTORY`), so anything said while ekho isn't connected is lost for good. An earlier version quit IRC on every pause and logged back in on return; on a phone that's a gap every time the shade comes down or another app opens.
+
+Now IRC stays connected through a pause. The system keeps the socket and buffers what the server sends, so a pause shorter than the server's ping timeout (a couple of minutes) loses nothing. On return, `Irc.probe()` sends a PING: any line back, buffered ones included, means it's alive. No answer within 5 s destroys the socket, and the IRC link's first retry is immediate, so it's back in about a second, reclaiming the nick from the dead session if need be. QUIT is sent only on `exit`.
+
 - A connect function rejects with `FatalError` for what only the user can fix; anything else is retried.
 
 What's wanted is saved (`wanted.radio`, `wanted.irc` in `state.json`). Connecting or logging in sets it, disconnecting or logging out clears it, and on start ekho brings back what was wanted.
@@ -44,11 +51,11 @@ What's wanted is saved (`wanted.radio`, `wanted.irc` in `state.json`). Connectin
 
 ## Not done: staying alive in the background
 
-ekho stops while it's off screen, so nothing arrives until you come back. Staying alive needs an Android foreground service (a running notification), which bare-ndk doesn't offer: its `Activity` suspends Bare on every pause, and an app can't add a service of its own through bare-build. That's an upstream change to bare-ndk; until then, pausing cleanly and resuming quickly is the best ekho can do.
+ekho stops while it's off screen: buffered IRC lines and the radio's queue are read when you come back, but a long absence still loses IRC messages. Staying alive needs an Android foreground service (a running notification), which bare-ndk doesn't offer: its `Activity` suspends Bare on every pause, and an app can't add a service of its own through bare-build. That's an upstream change to bare-ndk; until then, pausing cleanly and resuming quickly is the best ekho can do.
 
 ## Testing
 
 - `test/link.ts`: every state change, with timers run by hand.
 - `test/irc.ts`: SASL, a wrong password, the fallback to NickServ, reclaiming, the silence check.
 - `test/ui.ts`: the setup section through each link state, on real bare-native.
-- The whole app was also driven against a scripted IRC server under Node: auto-login, a drop, a pause and resume, a wrong password.
+- The whole app was also driven against a scripted IRC server under Node: auto-login, a drop (reconnected at once), a pause it survives, a pause the server gave up on, a wrong password.

@@ -186,7 +186,9 @@ function openIrc(detail: (text: string) => void): Promise<Irc> {
   })
 }
 
-const ircLink = new Link('irc', openIrc)
+// The first retry is immediate: a drop is most often found on coming back to
+// the app, when the server has given up on us meanwhile.
+const ircLink = new Link('irc', openIrc, { retry: [0, 5_000, 15_000, 60_000] })
 ircLink.on('change', () => {
   log.info('irc: ' + ircLink.state + (ircLink.detail ? ' · ' + ircLink.detail : ''))
   if (ircLink.state !== 'on') irc = null
@@ -259,17 +261,21 @@ function want(link: 'radio' | 'irc', on: boolean) {
   save()
 }
 
-// Android pauses the app when it leaves the screen, and its sockets with it.
-// Say goodbye to IRC properly rather than leave a session that holds the nick,
-// and log back in on return. The radio's Bluetooth link outlives a pause, and
-// the radio keeps what arrives meanwhile.
-Bare.on('suspend', () => {
-  log.info('app: paused')
-  ircLink.pause()
-})
+// Android pauses the app when it leaves the screen. IRC stays connected
+// through it: the system keeps the connection and buffers what the server
+// sends, so a short pause loses nothing, and motaba has no history to fetch
+// it back from. On return a PING checks the server is still there; if it gave
+// up on us meanwhile, IRC reconnects at once, reclaiming the nick. The radio's
+// Bluetooth link outlives a pause too, and the radio queues what arrives.
+Bare.on('suspend', () => log.info('app: paused'))
 Bare.on('resume', () => {
   log.info('app: back')
-  ircLink.resume()
+  if (irc === null) return
+  irc
+    .probe()
+    .then((alive) =>
+      log.info('irc: ' + (alive ? 'still connected' : 'gone while paused, reconnecting'))
+    )
 })
 Bare.on('exit', () => irc?.quit('closed'))
 
