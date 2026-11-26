@@ -80,6 +80,8 @@ jobs:
       - name: Native addons
         run: sh scripts/build-addons.sh android
       - run: npm install
+      - name: QVAC for Android
+        run: sh scripts/qvac-hosts.sh android-arm64
       # A fixed, public debug key, so each build installs over the last one.
       # Temporary: replace with a private release key (see README) before
       # handing the app out widely.

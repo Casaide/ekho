@@ -119,6 +119,12 @@ A link sits on lines of its own in the message, broken by ekho to fit the width 
 
 A link to a sound or a video (by its extension: mp3, wav, ogg, opus, m4a, aac, flac; mp4, m4v, webm, mov) gets a card to play it in place instead, with no fetch until tapped. The player is a web view holding an `<audio>` or `<video>` element, so each platform plays what its browser does, with no audio code of ours. It keeps playing while messages arrive, stops on ■ or on leaving the conversation, and ↗ opens it in the browser. This is the first step toward voice notes: a link to a recording, wherever it's hosted.
 
+## Translation
+
+Bulgarian messages can show in English, on the device. It's off until turned on in the radio tab; then Mozilla's Bulgarian→English model (Firefox Translations, Bergamot, MPL-2.0) is fetched once the way Firefox gets it, from Remote Settings and its CDN (`lib/bergamot.ts`), into the app's data folder, and run by QVAC's translation addon (`@qvac/translation-nmtcpp`), loaded only then. Nothing is built into the app, and no message leaves the device. Android only for now: QVAC's runtime package picks its native library by the build machine's architecture, not each host's, so the universal macOS build defers the addon. Its GPU backends (Vulkan, OpenCL, RPC, about 88 MB) are removed before building (`scripts/qvac-hosts.sh`), since Bergamot runs on the CPU. QVAC's own TranslatePsy models are smaller and better but don't cover Bulgarian yet; one would load the same way.
+
+A received message that's mostly Cyrillic letters is translated (`lib/translator.ts`), once per session, and shows in English in place of the Bulgarian, marked "translated". The original is in its details, on hold.
+
 ## Mentions
 
 Each network writes a mention its own way, and the bridge passes them on as text. MeshCore writes `@[Root 👾]`. Meshtastic's Android app writes `@!0e8666a6`, the node's ID, so it survives a rename. IRC has none: a nick in the line is the convention. ekho shows both written forms as `@name` in bold (a node's ID by the node's name, when the radio knows it), and in another colour when the mention is us: our nick, our radio's names, or our node's ID (`lib/mentions.ts`). A channel line mentioning us by any of these notifies. Sending mentions, each in the form its path expects, is not built yet.

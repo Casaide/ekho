@@ -32,6 +32,7 @@ ekho is a messenger for people with a Meshtastic radio, such as the Seeed T1000-
 - **Channels too.** `#bulgaria` and the regional channels (`#sofia`, `#varna`, `#burgas` and more) are a tap away. Channels your radio also has are marked as reaching the mesh; the rest are internet only.
 - **See who's around.** The contacts tab shows everyone heard on the radio and everyone online in your channels, one entry per person.
 - **Links come alive.** Pages show a preview with their picture, and a link to a sound or video plays right in the conversation: send a voice note as a link to the recording.
+- **Bulgarian in English, if you like.** Turn on translation in the radio tab and Bulgarian messages show in English, translated on your phone. The model (Mozilla's, from Firefox Translations) downloads once; the original is a hold away.
 - **You decide on failures.** If a radio message isn't delivered, ekho never resends it behind your back. Tap it to try the radio again or send it over the internet instead.
 
 <p align="center">
