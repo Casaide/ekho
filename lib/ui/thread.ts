@@ -106,6 +106,8 @@ export default class Thread {
   // redraws so a message arriving doesn't stop one.
   _playing: Map<string, any>
   _playingIn: string | null
+  // Messages shown as written though translated, by id.
+  _original: Set<number>
 
   constructor(ui: Ui) {
     this.ui = ui
@@ -134,6 +136,7 @@ export default class Thread {
     this._timers = []
     this._playing = new Map()
     this._playingIn = null
+    this._original = new Set()
     // Lives across redraws, so a message arriving doesn't wipe what's typed.
     this._emoji = input('or type any emoji')
     this._emoji.returnKeyType = 'send'
@@ -404,6 +407,35 @@ export default class Thread {
       }
     }
     actions.push(button('↩️ reply', () => this._reply(msg), chip(colors.accent)))
+    // Any message of theirs can be translated, or shown as written again:
+    // people mix English and Bulgarian, in either alphabet.
+    const translator = this.ui.translator
+    if (!mine && translator !== null && translator.state === 'on') {
+      const english = translator.english(msg.text)
+      if (english === null) {
+        actions.push(
+          button(
+            'translate',
+            () => this._act(() => translator.translate(msg.text)),
+            chip(colors.text)
+          )
+        )
+      } else if (english !== msg.text) {
+        const original = this._original.has(msg.id)
+        actions.push(
+          button(
+            original ? 'show english' : 'show original',
+            () => {
+              if (original) this._original.delete(msg.id)
+              else this._original.add(msg.id)
+              this._shown = ''
+              this.render()
+            },
+            chip(colors.text)
+          )
+        )
+      }
+    }
     if (msg.state === 'received') {
       // Any emoji: the common ones a tap away, anything else typed. Sent as
       // a short text until bare-meshtastic carries Meshtastic's reactions.
@@ -471,7 +503,7 @@ export default class Thread {
     // Theirs in Bulgarian shows in English once translated; the original is
     // in its details, on hold.
     const english = mine ? null : (this.ui.translator?.english(msg.text) ?? null)
-    const translated = english !== null && english !== msg.text
+    const translated = english !== null && english !== msg.text && !this._original.has(msg.id)
     if (translated) head.push(text('translated', { color: colors.muted, fontSize: 11 }))
     const body = this._body(translated ? english : msg.text)
     // A message with a link is as wide as a message gets, rather than as

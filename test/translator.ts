@@ -1,5 +1,5 @@
 import tap from 'bare-tap'
-import Translator, { bulgarian } from '../lib/translator.ts'
+import Translator, { bulgarian, cyrillic } from '../lib/translator.ts'
 import { pickFiles } from '../lib/bergamot.ts'
 import { settle } from './helpers.ts'
 
@@ -118,4 +118,26 @@ test('the newest released model of a pair is picked, with its vocabulary', (t) =
   t.equal(pick.srcVocab.name, 'vocab.bgen.spm')
   t.equal(pick.dstVocab.name, 'vocab.bgen.spm')
   t.equal(pickFiles(records, 'bg', 'de'), null)
+})
+
+test('any text can be translated when asked, Latin Bulgarian spelled in Cyrillic first', async (t) => {
+  const batches: string[][] = []
+  const tr = translator(batches)
+  await tr.start()
+
+  t.equal(tr.english('eiiiii kvo gotvite ?'), null, 'not taken for Bulgarian by itself')
+  await settle()
+  t.deepStrictEqual(batches, [])
+
+  tr.translate('eiiiii kvo gotvite ?')
+  await settle()
+  t.deepStrictEqual(batches, [['еиииии кво готвите ?']])
+  t.equal(tr.english('eiiiii kvo gotvite ?'), 'en:еиииии кво готвите ?')
+})
+
+test('Latin Bulgarian in Cyrillic: letters, pairs and chat habits', (t) => {
+  t.equal(cyrillic('Zdravei, kak si?'), 'Здравеи, как си?')
+  t.equal(cyrillic('shte doida v 6'), 'ще доида в 6')
+  t.equal(cyrillic('4akai, 6efe'), 'чакаи, шефе')
+  t.equal(cyrillic('Zhivotat e hubav'), 'Животат е хубав')
 })
