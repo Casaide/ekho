@@ -1,0 +1,120 @@
+import EventEmitter from 'bare-events'
+import type { ModelFiles } from './bergamot.ts'
+
+// A loaded translation model: texts in, translations out, in order.
+export interface Model {
+  runBatch(texts: string[]): Promise<string[]>
+  unload(): Promise<unknown>
+}
+
+export type TranslatorState = 'off' | 'downloading' | 'loading' | 'on' | 'failed'
+
+// Messages in Bulgarian, in English, on this device. Off until started; then
+// the model is fetched once (`files`, with progress) and loaded (`open`).
+// Each text is translated once and kept for the session.
+//
+// Events: change, when the state or progress changed; translated (text).
+export default class Translator extends EventEmitter {
+  files: (onprogress: (done: number) => void) => Promise<ModelFiles>
+  open: (files: ModelFiles) => Promise<Model>
+  state: TranslatorState
+  // While downloading, the share done, 0 to 1; when failed, why.
+  progress: number
+  error: string | null
+
+  _model: Model | null
+  _known: Map<string, string>
+  _queue: string[]
+  _running: boolean
+
+  constructor(
+    files: (onprogress: (done: number) => void) => Promise<ModelFiles>,
+    open: (files: ModelFiles) => Promise<Model>
+  ) {
+    super()
+    this.files = files
+    this.open = open
+    this.state = 'off'
+    this.progress = 0
+    this.error = null
+    this._model = null
+    this._known = new Map()
+    this._queue = []
+    this._running = false
+  }
+
+  async start(): Promise<void> {
+    if (this.state !== 'off' && this.state !== 'failed') return
+    this._set('downloading')
+    try {
+      const files = await this.files((done) => {
+        this.progress = done
+        this.emit('change')
+      })
+      // Turned off meanwhile: left off.
+      if (this.state === 'off') return
+      this._set('loading')
+      const model = await this.open(files)
+      if (this.state === 'off') return void (await model.unload())
+      this._model = model
+      this._set('on')
+      this._run()
+    } catch (err) {
+      this.error = (err as Error).message
+      this._set('failed')
+    }
+  }
+
+  async stop(): Promise<void> {
+    const model = this._model
+    this._model = null
+    this._queue = []
+    this._set('off')
+    if (model !== null) await model.unload()
+  }
+
+  // The English for a Bulgarian text: ready, or null while it's on its way
+  // (`translated` says when). Null too for anything else, or when off.
+  english(text: string): string | null {
+    if (!bulgarian(text)) return null
+    const known = this._known.get(text)
+    if (known !== undefined) return known
+    if (this.state !== 'off' && !this._queue.includes(text)) {
+      this._queue.push(text)
+      this._run()
+    }
+    return null
+  }
+
+  // One at a time, in the order asked: what's waiting goes as one batch.
+  async _run(): Promise<void> {
+    if (this._running || this._model === null || this._queue.length === 0) return
+    this._running = true
+    const texts = this._queue.splice(0, 16)
+    try {
+      const out = await this._model.runBatch(texts)
+      texts.forEach((text, i) => {
+        this._known.set(text, out[i].trim())
+        this.emit('translated', text)
+      })
+    } catch {
+      // A text the model can't take stays in Bulgarian.
+      for (const text of texts) this._known.set(text, text)
+    }
+    this._running = false
+    this._run()
+  }
+
+  _set(state: TranslatorState): void {
+    this.state = state
+    if (state !== 'failed') this.error = null
+    this.emit('change')
+  }
+}
+
+// Mostly Cyrillic letters, so most likely Bulgarian on this mesh.
+export function bulgarian(text: string): boolean {
+  const letters = text.match(/\p{L}/gu) ?? []
+  const cyrillic = letters.filter((c) => /\p{Script=Cyrillic}/u.test(c)).length
+  return cyrillic >= 2 && cyrillic * 2 > letters.length
+}

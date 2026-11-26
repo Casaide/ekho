@@ -128,6 +128,33 @@ export default class RadioScreen {
     this.ui.linkCard.render()
     content.appendChild(this.ui.linkCard.root)
 
+    // Bulgarian messages in English, on this device: tap to turn on, which
+    // fetches Mozilla's model once (about 30 MB), or off.
+    const translator = this.ui.translator
+    if (translator !== null) {
+      content.appendChild(label('translation'))
+      const states: Record<string, string> = {
+        off: 'off',
+        downloading: Math.round(translator.progress * 100) + '%',
+        loading: 'loading',
+        on: 'on',
+        failed: 'failed'
+      }
+      const detail =
+        translator.state === 'failed'
+          ? 'failed: ' + translator.error + ' · tap to retry'
+          : translator.state === 'off'
+            ? 'bulgarian → english · downloads ~30 MB once'
+            : translator.state === 'downloading'
+              ? 'bulgarian → english · downloading the model'
+              : 'bulgarian → english · on this device'
+      content.appendChild(
+        path('bg→en', detail, states[translator.state], colors.accent, () =>
+          this.ui.actions.toggleTranslate()
+        )
+      )
+    }
+
     // The radio's channels and the IRC channel the bridge pairs with each.
     content.appendChild(label('channels on the radio'))
     if (info.channels.length === 0) {

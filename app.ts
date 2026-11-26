@@ -16,6 +16,8 @@ import Linker from './lib/linker.ts'
 import type { Around } from './lib/hub.ts'
 import Previews from './lib/previews.ts'
 import KeptPreviews from './lib/kept.ts'
+import Translator from './lib/translator.ts'
+import { modelFiles } from './lib/bergamot.ts'
 import fetch from 'bare-fetch'
 import type { RadioState } from './lib/types.ts'
 import showCrash from './lib/crash.ts'
@@ -102,6 +104,28 @@ const presence = new Presence(messenger.heard)
 let radioNames: string[] = []
 // Asked once for permission to notify; Android won't show the dialog often.
 let askedNotifications: boolean = saved?.askedNotifications ?? false
+// Bulgarian messages in English, on this device, with Mozilla's model
+// (Firefox Translations) fetched once and run by QVAC's translation addon,
+// loaded only when turned on.
+let translate: boolean = saved?.translate ?? false
+const translator = new Translator(
+  (onprogress) => modelFiles('bg', 'en', path.join(DATA, 'models', 'bg-en'), { fetch, onprogress }),
+  async (files) => {
+    const { default: Nmt } = await import('@qvac/translation-nmtcpp')
+    const model = new Nmt({
+      files,
+      params: { srcLang: 'bg', dstLang: 'en' },
+      config: { modelType: Nmt.ModelTypes.Bergamot }
+    })
+    await model.load()
+    return model
+  }
+)
+translator.on('change', () => {
+  if (translator.state === 'failed') log.error('translate:', translator.error)
+  else log.info('translate: ' + translator.state)
+})
+if (translate) translator.start()
 // Ask for it: set where notifications exist, on Android.
 let askToNotify = () => {}
 // Open a link in the browser: set where an addon for it exists.
@@ -130,6 +154,7 @@ function save() {
         channels,
         open,
         askedNotifications,
+        translate,
         link: linker.devices.saved
       })
     } catch (err) {
@@ -337,6 +362,13 @@ const ui = new Ui(
       radioLink.stop()
     },
 
+    toggleTranslate() {
+      translate = translator.state === 'off' || translator.state === 'failed'
+      if (translate) translator.start()
+      else translator.stop()
+      save()
+    },
+
     toggleChannel(name: string) {
       // Linked: the phone joins or leaves, and its feed says so.
       if (linker.linked) {
@@ -425,6 +457,7 @@ const ui = new Ui(
     // Preview images go in a cache folder: the image view reads files.
     // Previews are kept between sessions in a Hyperbee of their own, beside
     // the linking cores, with their pictures when small.
+    translator,
     previews: new Previews(fetch, {
       kept: new KeptPreviews(linker.devices.store.get({ name: 'previews' })),
       async save(name: string, bytes: Uint8Array) {

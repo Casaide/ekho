@@ -365,6 +365,9 @@ export default class Thread {
     const now = this.ui.messenger.now()
     this._detail.appendChild(row('when', dayLabel(msg.time, now) + ' ' + clock(msg.time)))
     this._detail.appendChild(row('from', mine ? 'you' : (msg.from ?? displayName(contact))))
+    const english = mine ? null : (this.ui.translator?.english(msg.text) ?? null)
+    if (english !== null && english !== msg.text)
+      this._detail.appendChild(row('original', msg.text))
     this._detail.appendChild(
       row(
         'path',
@@ -464,7 +467,12 @@ export default class Thread {
       width: 2,
       backgroundColor: failed ? colors.failed : mine ? colors.accent : colors.edge
     })
-    const body = this._body(msg.text)
+    // Theirs in Bulgarian shows in English once translated; the original is
+    // in its details, on hold.
+    const english = mine ? null : (this.ui.translator?.english(msg.text) ?? null)
+    const translated = english !== null && english !== msg.text
+    if (translated) head.push(text('translated', { color: colors.muted, fontSize: 11 }))
+    const body = this._body(translated ? english : msg.text)
     // A message with a link is as wide as a message gets, rather than as
     // wide as its widest line: Android rounds a box fitted to a line down to
     // whole pixels, and the line then wraps once more than measured, drawing
@@ -714,10 +722,11 @@ export default class Thread {
   // A preview came in: show it. Its card is taller than the link it
   // replaces, so if it's on one of the last messages, the list goes to the
   // end again rather than leaving the newest under the box.
-  invalidate(url: string): void {
+  // Null: a translation came in, which changes no card.
+  invalidate(url: string | null): void {
     this._shown = ''
     const contact = this.ui.selected
-    if (contact === null) return
+    if (contact === null || url === null) return
     const recent = this.ui.messenger.thread(contact).slice(-3)
     if (recent.some((m) => links(m.text).includes(url))) this._settling = Date.now() + 400
   }
