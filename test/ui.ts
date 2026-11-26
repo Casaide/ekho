@@ -392,7 +392,7 @@ test('any emoji reacts to a received message, and the conversation can say which
   const [received] = messenger.thread(ivan)
   ui._thread._toggle(received)
   ui._thread._act(() => messenger.react(received, '🔥'))
-  t.equal(radio.sent.at(-1)!.text, '↩️ "hi" 🔥')
+  t.equal(radio.sent.at(-1)!.text, '↩️ "ivan: hi": 🔥')
 })
 
 test('linking: the phone shows a code, another device types one in', (t) => {

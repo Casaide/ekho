@@ -2,7 +2,6 @@ import native from 'bare-native'
 import type Ui from './index.ts'
 import type { Contact, Message } from '../types.ts'
 import { displayName } from '../contacts.ts'
-import { replyTo } from '../messenger.ts'
 import {
   colors,
   view,
@@ -476,7 +475,7 @@ export default class Thread {
     this._replying.style = { flexDirection: 'row', alignItems: 'center', gap: 8 }
     this._replying.appendChild(
       text(
-        '↩️ replying to ' + replyTo(msg).slice(3).trim(),
+        '↩️ replying to ' + this.ui.messenger.replyTo(msg).slice(3, -2),
         {
           color: colors.soft,
           fontSize: 12,
@@ -530,7 +529,9 @@ export default class Thread {
   }
 
   _renderCount(): void {
-    const used = bytes((this._replyTo === null ? '' : replyTo(this._replyTo)) + this._input.value)
+    const used = bytes(
+      (this._replyTo === null ? '' : this.ui.messenger.replyTo(this._replyTo)) + this._input.value
+    )
     const limit = this._limit()
     this._count.text = used + '/' + limit
     this._count.style = { color: used > limit ? colors.failed : colors.muted, fontSize: 11 }
@@ -540,7 +541,7 @@ export default class Thread {
     const value = this._input.value.trim()
     const contact = this.ui.selected
     if (value === '' || contact === null) return
-    const prefix = this._replyTo === null ? '' : replyTo(this._replyTo)
+    const prefix = this._replyTo === null ? '' : this.ui.messenger.replyTo(this._replyTo)
     // Too long to go out in one piece: the counter is already red.
     if (bytes(prefix + value) > this._limit()) return
 

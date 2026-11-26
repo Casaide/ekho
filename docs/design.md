@@ -60,15 +60,15 @@ That's the whole rule. A failed LoRa message is never moved to IRC automatically
 
 **What each path carries:**
 
-| Feature                     | LoRa (Meshtastic)                                   | IRC                                                  |
-| --------------------------- | --------------------------------------------------- | ---------------------------------------------------- |
-| Direct and channel messages | Yes                                                 | Yes                                                  |
-| Reactions and replies       | Yes                                                 | Sent as a new text message: `↩️ "two words…" answer` |
-| Replies                     | Yes                                                 | Quoted as text                                       |
-| Delivery acknowledgement    | Yes, from the mesh                                  | No; sent only                                        |
-| Encryption                  | Channel key, or per-contact key for direct messages | TLS to the server only                               |
-| Position and telemetry      | Yes                                                 | No                                                   |
-| Message length              | About 200 bytes                                     | About 400 bytes per line                             |
+| Feature                     | LoRa (Meshtastic)                                   | IRC                                                         |
+| --------------------------- | --------------------------------------------------- | ----------------------------------------------------------- |
+| Direct and channel messages | Yes                                                 | Yes                                                         |
+| Reactions and replies       | Yes                                                 | Sent as a new text message: `↩️ "name: two words…": answer` |
+| Replies                     | Yes                                                 | Quoted as text                                              |
+| Delivery acknowledgement    | Yes, from the mesh                                  | No; sent only                                               |
+| Encryption                  | Channel key, or per-contact key for direct messages | TLS to the server only                                      |
+| Position and telemetry      | Yes                                                 | No                                                          |
+| Message length              | About 200 bytes                                     | About 400 bytes per line                                    |
 
 **Delivery states on LoRa:**
 

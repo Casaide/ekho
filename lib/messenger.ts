@@ -207,9 +207,22 @@ export default class Messenger extends EventEmitter {
   // Replies and reactions travel as a short text message for now. Meshtastic
   // has native ones, which need bare-meshtastic support; IRC never will. As
   // mirco (motaba) suggested, they read the way motaba's own app writes them:
-  // ↩️, then the first two words of what's answered, then the answer.
+  // ↩️, then who said it and the first two words, then the answer:
+  // `↩️ "mirco: and the…": 👍`.
   reply(msg: Message, text: string): Message {
-    return this.send(this.contacts.get(msg.contact)!, replyTo(msg) + text)
+    return this.send(this.contacts.get(msg.contact)!, this.replyTo(msg) + text)
+  }
+
+  // What goes before a reply's text. The name is the one others see: the
+  // sender's nick in a channel, theirs in a direct conversation, ours for our
+  // own messages.
+  replyTo(msg: Message): string {
+    const contact = this.contacts.get(msg.contact)!
+    const name =
+      msg.state !== 'received'
+        ? (this.irc?.nick ?? 'me')
+        : (msg.from ?? contact.nicks[0] ?? contact.alias ?? contact.name)
+    return '↩️ "' + name + ': ' + quote(msg.text) + '": '
   }
 
   react(msg: Message, emoji: string): Message {
@@ -554,11 +567,6 @@ function listen(emitter: EventEmitter, handlers: Record<string, (...args: any[])
   return () => {
     for (const [name, fn] of Object.entries(handlers)) emitter.off(name, fn)
   }
-}
-
-// What goes before a reply's text: `↩️ "take the…" `.
-export function replyTo(msg: Message): string {
-  return '↩️ "' + quote(msg.text) + '" '
 }
 
 // What a reply quotes: two words, marked as cut if there were more.

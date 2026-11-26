@@ -44,7 +44,7 @@ Don't relitigate these without the user.
 2. **Never send both ways at once.** The bridge already mirrors one path onto the other, so both would arrive twice on stock clients.
 3. **No automatic fallback on failure.** A failed LoRa message shows "retry on lora" and "send via irc"; the user decides.
 4. **No dedupe.** The user has not seen duplicates in practice; Meshtastic devices dedupe by packet ID themselves. The one exception: while LoRa is the route, the bridge's IRC copies of Meshtastic channel lines (`Name|mt`, in a channel the radio also has) are dropped, since the radio hears those itself. Everything else on IRC is kept: plain IRC users, MeshCore and Bitchat users, and IRC-only channels never reach the radio (an earlier, broader rule hid them all).
-5. **Reactions and replies over IRC go as a new text message,** written as motaba's own app writes them: `↩️ "take the…" 👍`, the first two words of what's answered, then the answer (mirco's suggestion). No other option exists on IRC.
+5. **Reactions and replies over IRC go as a new text message,** written as mirco (motaba) suggested: `↩️ "mirco: and the…": 👍`, who said it and the first two words of what's answered, then the answer. No other option exists on IRC.
 6. **The T1000-E pairs with one device at a time,** so ekho replaces the Meshtastic app on the phone.
 7. **"Heard" means any packet** (message, position, telemetry), not node info, which radios broadcast only every 3 hours by default.
 8. **The motaba bridge doesn't know a nick and a node are the same person.** ekho no longer tags IRC messages with our node ID: it confused people and proved nothing, as anyone can type it. Real protection needs motaba to verify a nick-to-node link (code sent over LoRa, confirmed on IRC).
