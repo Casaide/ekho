@@ -100,6 +100,14 @@ export default class Thread {
   // when a scroll to the end is still settling.
   _end: string
   _settling: number
+  // Kept at the end while the reader is there: through late layout, an
+  // app opening on the conversation, previews and translations coming in.
+  // Lost when they scroll up, back when they scroll down to it.
+  _stick: boolean
+  _contentHeight: number
+  _viewHeight: number
+  // Until when scroll events are ours, from placing it, not the reader's.
+  _quiet: number
   _timers: ReturnType<typeof setTimeout>[]
   _emoji: any
   // Sounds and videos playing, by link, in this conversation: kept across
@@ -125,7 +133,9 @@ export default class Thread {
     this._sub = text('', { color: colors.muted, fontSize: 11 }, 1)
     this._list = scroll({ padding: 16, gap: 14 })
     this._width = 390
-    this._list.on('layout', (frame: { width: number }) => {
+    this._list.on('layout', (frame: { width: number; height: number }) => {
+      this._viewHeight = frame.height
+      if (this._stick) this._toBottom()
       if (Math.abs(frame.width - this._width) < 1) return
       this._width = frame.width
       this._shown = ''
@@ -141,6 +151,18 @@ export default class Thread {
     this._shown = ''
     this._end = ''
     this._settling = 0
+    this._stick = true
+    this._contentHeight = 0
+    this._viewHeight = 0
+    this._quiet = 0
+    this._list.content.on('layout', (frame: { height: number }) => {
+      this._contentHeight = frame.height
+      if (this._stick) this._toBottom()
+    })
+    this._list.on('scroll', (offset: { y: number }) => {
+      if (Date.now() < this._quiet) return
+      this._stick = offset.y >= this._contentHeight - this._viewHeight - 40
+    })
     this._timers = []
     this._playing = new Map()
     this._playingIn = null
@@ -327,7 +349,7 @@ export default class Thread {
     // still settling goes to the end too: restoring the offset it caught
     // halfway would scroll back up.
     const at = contact.id + ':' + thread.length
-    if (at !== this._end || Date.now() < this._settling) this.toEnd()
+    if (at !== this._end || Date.now() < this._settling || this._stick) this.toEnd()
     else this._place(was)
     this._end = at
   }
@@ -336,8 +358,15 @@ export default class Thread {
   // list shrinks: the offset stays put, which would leave older messages in
   // view.
   toEnd(): void {
+    this._stick = true
     this._settling = Date.now() + 400
     this._place(Number.MAX_SAFE_INTEGER)
+  }
+
+  // To the end now, as the content is laid out.
+  _toBottom(): void {
+    this._quiet = Date.now() + 300
+    this._list.contentOffset = { y: Number.MAX_SAFE_INTEGER }
   }
 
   // The offset is clamped to the content as last laid out, which may not
@@ -345,7 +374,10 @@ export default class Thread {
   // placing still pending is dropped.
   _place(y: number): void {
     for (const timer of this._timers) clearTimeout(timer)
-    const place = () => (this._list.contentOffset = { y })
+    const place = () => {
+      this._quiet = Date.now() + 300
+      this._list.contentOffset = { y }
+    }
     place()
     this._timers = [setTimeout(place, 50), setTimeout(place, 250)]
   }
