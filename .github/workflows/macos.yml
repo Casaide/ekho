@@ -1,0 +1,24 @@
+name: macOS
+# Builds the macOS app on pull requests, so a break shows before merging.
+# Releases build it again with the release version (release.yml).
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-latest
+    name: Build macOS app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          package-manager-cache: false
+          node-version: 22
+      - run: npm install
+      - run: scripts/build-macos.sh

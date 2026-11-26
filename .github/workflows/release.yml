@@ -8,8 +8,7 @@ on:
     branches:
       - main
   workflow_dispatch:
-permissions:
-  contents: write
+permissions: {}
 concurrency:
   group: release
   cancel-in-progress: false
@@ -17,6 +16,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     name: Release with APK
+    # Creates the release and its tag.
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     env:
       KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
       KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -36,6 +40,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - name: Next version
+        id: version
         run: |
           last=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
           if [ -z "$last" ]; then
@@ -55,6 +60,7 @@ jobs:
           fi
           echo "Releasing v$next (last release: ${last:-none})"
           echo "VERSION=$next" >> "$GITHUB_ENV"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
       - name: Android SDK platform and build tools
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
       - run: npm install
@@ -94,3 +100,29 @@ jobs:
       - name: Remove the key
         if: always()
         run: rm -f release.keystore
+  macos:
+    # The macOS app, added to the release the job above made.
+    needs: release
+    runs-on: macos-latest
+    name: Add the macOS app
+    # Uploads to the release.
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          package-manager-cache: false
+          node-version: 22
+      - run: npm install
+      - run: npm pkg set version="$VERSION"
+      - run: scripts/build-macos.sh
+      - name: Upload
+        run: |
+          mv build/ekho-macos.zip "build/ekho-v$VERSION-macos.zip"
+          gh release upload "v$VERSION" "build/ekho-v$VERSION-macos.zip" --repo "$GITHUB_REPOSITORY"
