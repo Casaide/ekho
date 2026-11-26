@@ -483,12 +483,15 @@ export default class Thread {
     // it is shows by the side, so only theirs carry a name.
     const head = [text(clock(msg.time), { color: colors.muted, fontSize: 11 })]
     if (!mine) {
+      const name = text(msg.from ?? displayName(contact), {
+        color: colors.text,
+        fontSize: 11,
+        fontWeight: 'bold'
+      })
+      // In a channel, their name opens them: their conversation and info,
+      // where two of them can be joined into one person.
       head.push(
-        text(msg.from ?? displayName(contact), {
-          color: colors.text,
-          fontSize: 11,
-          fontWeight: 'bold'
-        })
+        contact.channel ? press(view({ cursor: 'pointer' }, [name]), () => this._sender(msg)) : name
       )
     }
     head.push(text('[' + this._path(msg) + ']', { color: pathColor, fontSize: 11 }))
@@ -521,16 +524,20 @@ export default class Thread {
     // past the box. Its link's lines (`lines`) leave a character spare.
     const linked = links(msg.text).length > 0
     if (linked) body.style = { ...body.style, flex: 1, textAlign: mine ? 'right' : 'left' }
+    // Above the message, not in it, so a tap on the name doesn't also tap
+    // the message.
+    const top = view(
+      {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 6,
+        justifyContent: mine ? 'flex-end' : 'flex-start'
+      },
+      head
+    )
     const children = [
-      view(
-        {
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: 8,
-          justifyContent: mine ? 'flex-end' : 'flex-start'
-        },
-        head
-      ),
       view(
         { flexDirection: 'row', gap: 10, justifyContent: mine ? 'flex-end' : 'flex-start' },
         mine ? [body, bar] : [bar, body]
@@ -574,11 +581,27 @@ export default class Thread {
     // it, so a tap on one doesn't also open the message's details.
     const width = linked ? { width: '85%' } : { maxWidth: '85%' }
     return view({ gap: 6, alignSelf: mine ? 'flex-end' : 'flex-start', ...width }, [
+      top,
       bubble,
       ...links(msg.text)
         .slice(0, 2)
         .map((url) => this._link(url, mine))
     ])
+  }
+
+  // Who sent a channel message, as a contact, made one if need be: by nick
+  // on IRC, by node on LoRa. Opened with its info.
+  _sender(msg: Message): void {
+    const { messenger } = this.ui
+    const contact =
+      msg.via === 'irc'
+        ? (messenger.contacts.byNick(msg.from!) ?? messenger.addContact({ nicks: [msg.from!] }))
+        : (messenger.contacts.byNode(msg.address!) ??
+          messenger.addContact({ name: msg.from!, nodes: [msg.address!] }))
+    this.ui.select(contact)
+    if (this.ui.compact) return this.ui.open('contact')
+    this.ui.info = true
+    this.ui.render()
   }
 
   // A message's text, its links and mentions marked. A link goes on lines
