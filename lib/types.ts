@@ -93,3 +93,5 @@ export type Command =
   | { type: 'irc'; ref: number }
   // The whole state again, for a device that may have missed some of it.
   | { type: 'state' }
+  // Join or leave an IRC channel.
+  | { type: 'channel'; name: string; join: boolean }

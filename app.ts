@@ -13,6 +13,7 @@ import Link, { FatalError } from './lib/link.ts'
 import Presence from './lib/presence.ts'
 import Notifier from './lib/notifier.ts'
 import Linker from './lib/linker.ts'
+import type { Around } from './lib/hub.ts'
 import Previews from './lib/previews.ts'
 import fetch from 'bare-fetch'
 import type { RadioState } from './lib/types.ts'
@@ -80,6 +81,8 @@ let onboarded: boolean = saved?.onboarded ?? false
 // Bridged channels joined beyond IRC_CHANNEL, such as regional ones.
 let channels: string[] = saved?.channels ?? []
 let serverChannels: { name: string; users: number; topic: string }[] | null = null
+// The radio's channels, as it last said.
+let radioChannels: { index: number; name: string | null; role: number }[] = []
 // Linked to a phone, the channels are the phone's, as its feed last said:
 // all the ones saved are kept, not only those this device joined itself.
 const linkedAtStart = saved?.link?.version === 2 && saved.link.hub !== null
@@ -186,6 +189,7 @@ function openIrc(detail: (text: string) => void): Promise<Irc> {
     serverChannels = list.sort((a, b) => b.users - a.users)
     log.info('irc: ' + list.length + ' channels on the server')
     ui.setChannels(serverChannels, channels, IRC_CHANNEL)
+    tellLinked()
   })
   current.on('close', () => log.warn('irc: connection closed'))
 
@@ -248,8 +252,8 @@ function openRadio(detail: (text: string) => void): Promise<RadioConnection> {
 
     // What the radio knows: its channels, paired with IRC ones by name;
     // the nodes it has heard of, by name, for contacts; and itself.
-    const channels = [...state.channels.values()]
-    messenger.setRadioChannels(channels)
+    radioChannels = [...state.channels.values()]
+    messenger.setRadioChannels(radioChannels)
     presence.self.node = client.id
     for (const node of state.nodes.values()) presence.node(nodeOf(node))
     client.on('node', (node: { num: number; user: any }) => presence.node(nodeOf(node)))
@@ -261,11 +265,11 @@ function openRadio(detail: (text: string) => void): Promise<RadioConnection> {
       shortName: self?.shortName ?? null,
       region: state.config?.region ?? null,
       preset: state.config?.preset ?? null,
-      channels
+      channels: radioChannels
     })
     log.info(
       'radio: channels ' +
-        channels
+        radioChannels
           .filter((c) => c.role !== 0)
           .map((c) => c.index + ':' + (c.name || 'primary'))
           .join(', ')
@@ -333,6 +337,11 @@ const ui = new Ui(
     },
 
     toggleChannel(name: string) {
+      // Linked: the phone joins or leaves, and its feed says so.
+      if (linker.linked) {
+        messenger.relay!({ type: 'channel', name, join: messenger.contacts.get(name) === null })
+        return
+      }
       if (channels.includes(name)) {
         channels = channels.filter((c) => c !== name)
         irc?.part(name)
@@ -454,6 +463,39 @@ if (!linker.linked) startLinks()
 linker.on('change', () => {
   save()
   ui.setLinking(linker.state())
+  tellLinked()
+})
+
+// As the phone: what it sees around it, for a linked Mac to show the same
+// channels, people and nodes. Heard times to the minute, so a radio busy
+// with telemetry doesn't change it every few seconds.
+function tellLinked() {
+  if (linker.hub === null) return
+  const heard: Record<string, number> = {}
+  for (const [node, at] of Object.entries(messenger.heard.toJSON())) {
+    heard[node] = at - (at % 60_000)
+  }
+  linker.hub.around({ radioChannels, server: serverChannels, ...presence.toJSON(), heard })
+}
+presence.on('change', tellLinked)
+messenger.on('contacts', tellLinked)
+setInterval(tellLinked, 60_000)
+
+// As the Mac: the same, from the phone.
+linker.on('around', (around: Around) => {
+  presence.load(around)
+  for (const [node, at] of Object.entries(around.heard)) messenger.heard.mark(node, at)
+  serverChannels = around.server
+  const joined = messenger.contacts
+    .all()
+    .filter((c) => c.channel && c.id !== IRC_CHANNEL)
+    .map((c) => c.id)
+  ui.setChannels(serverChannels, joined, IRC_CHANNEL)
+})
+// As the phone: a linked Mac joined or left a channel.
+linker.on('channel', (name: string, join: boolean) => {
+  if (name.toLowerCase() === IRC_CHANNEL || channels.includes(name) === join) return
+  ui.actions.toggleChannel(name)
 })
 // Linked: the radio and IRC are the hub's, and our own would fight it for
 // them (one connection per nick on motaba). Unlinked: ours come back.
@@ -463,6 +505,7 @@ linker.on('role', (role: string) => {
     radioLink.stop()
     ircLink.stop()
   } else {
+    presence.clearIrc()
     startLinks()
   }
 })

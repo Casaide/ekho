@@ -14,8 +14,13 @@ export default class Heard {
     this._last = new Map()
   }
 
-  mark(node: string): void {
-    this._last.set(node, this.now())
+  mark(node: string, at = this.now()): void {
+    this._last.set(node, at)
+  }
+
+  // When each node was last heard, as times.
+  toJSON(): Record<string, number> {
+    return Object.fromEntries(this._last)
   }
 
   // Milliseconds since `node` was heard, or `Infinity` if never.

@@ -112,3 +112,22 @@ test('list only those on one transport, and sort by last seen or name', (t) => {
   t.deepStrictEqual(names(people.filter((p) => reachedBy(p, 'irc'))), ['georgi'])
   t.equal(networkOf('Asen|mt'), 'meshtastic')
 })
+
+test('a linked device loads who the phone sees, as the phone sees them', (t) => {
+  const time = clock()
+  const heard = new Heard({ now: time.now })
+  const phone = new Presence(heard)
+  phone.self = { node: '!0e8666a6', nick: 'dom' }
+  phone.node({ id: '!0e8666a6', longName: 'Dom', shortName: 'DOM' })
+  phone.node({ id: '!a7c3e91f', longName: 'Ivan Petrov', shortName: 'IP' })
+  heard.mark('!a7c3e91f')
+  phone.names('#bulgaria', ['dom', 'Dom|mt', 'Ivan_Petrov|mt', 'georgi'])
+
+  const macHeard = new Heard({ now: time.now })
+  for (const [node, at] of Object.entries(heard.toJSON())) macHeard.mark(node, at)
+  const mac = new Presence(macHeard)
+  mac.load(JSON.parse(JSON.stringify(phone.toJSON())))
+
+  t.deepStrictEqual(mac.people(), phone.people())
+  t.equal(mac.inChannel('#bulgaria').length, 2)
+})
