@@ -3,6 +3,7 @@ import native from 'bare-native'
 import Messenger from '../lib/messenger.ts'
 import Irc from '../lib/irc.ts'
 import Ui from '../lib/ui/index.ts'
+import { addPerson } from '../lib/ui/people.ts'
 import showCrash from '../lib/crash.ts'
 import Link, { FatalError } from '../lib/link.ts'
 import EventEmitter from 'bare-events'
@@ -241,7 +242,7 @@ test('contacts shows who is around on every transport, and tapping makes a conta
     people.map((p) => p.name),
     ['georgi', 'Ivan Petrov']
   )
-  ui.select(ui._people._add(people[1]))
+  ui.select(addPerson(ui, people[1]))
   const ivan = messenger.contacts.byNode('!a7c3e91f')!
   t.deepStrictEqual(ivan.nicks, ['Ivan_Petrov|mt'])
   t.equal(ui.page, 'thread')
