@@ -27,7 +27,15 @@ Upstream, in bare-meshtastic (see `docs/design.md` for detail):
 - [ ] An event when a packet is sent over the air
 - [ ] Whether a packet was encrypted per contact
 
-## Phase 2: big files between ekho users (mailbox pattern, MVP)
+## Phase 2a: your devices share one history (design in docs/design.md)
+
+- [ ] A Hyperbee 2 per device, encrypted; messages, contacts and read markers written as they change
+- [ ] Pair a device by QR: a shared secret, and a discovery topic derived from it
+- [ ] A new device opens a paired bee and `move`s it onto its own core
+- [ ] Merge by `createDiffStream`: messages as a union, the rest newest-wins, tombstones for removals
+- [ ] Later: a blind peer holding the encrypted cores, for devices that are never online together
+
+## Phase 2b: big files between ekho users (mailbox pattern, MVP)
 
 - [ ] Mailbox secret per install; address derived from it
 - [ ] Share the address in a private-port LoRa direct message (accepted only if encrypted per contact), or by QR code
