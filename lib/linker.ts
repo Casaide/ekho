@@ -1,0 +1,143 @@
+import EventEmitter from 'bare-events'
+import Devices from './devices.ts'
+import type { Device, Saved } from './devices.ts'
+import Hub from './hub.ts'
+import Mirror from './mirror.ts'
+import type Messenger from './messenger.ts'
+import type { LinkState } from './ui/linking.ts'
+
+// Linking devices, as the app uses it: the P2P side (Devices), with this
+// device either the hub, writing its feed and doing what linked devices ask,
+// or linked, mirroring a hub's feed.
+//
+// Events: change, when the state shown or what's saved changed; role (role),
+// when this device becomes linked or stops being.
+export default class Linker extends EventEmitter {
+  messenger: Messenger
+  devices: Devices
+  name: string
+  hub: Hub | null
+  mirror: Mirror | null
+  code: string | null
+  joining: boolean
+  error: string | null
+
+  constructor(
+    messenger: Messenger,
+    dir: string,
+    saved: Saved | null,
+    opts: { name?: string; bootstrap?: unknown[] } = {}
+  ) {
+    super()
+    this.messenger = messenger
+    this.devices = new Devices(dir, saved, { bootstrap: opts.bootstrap })
+    this.name = opts.name ?? 'device'
+    this.hub = null
+    this.mirror = null
+    this.code = null
+    this.joining = false
+    this.error = null
+
+    this.devices.on('change', () => this.emit('change'))
+    this.devices.on('closed', () => {
+      this.code = null
+      this.emit('change')
+    })
+    this.devices.on('linked', (device: Device) => this._follow(device))
+  }
+
+  get linked(): boolean {
+    return this.devices.saved.hub !== null
+  }
+
+  state(): LinkState {
+    return {
+      role: this.linked ? 'linked' : this.devices.saved.devices.length > 0 ? 'hub' : 'alone',
+      code: this.code,
+      devices: this.devices.saved.devices.map((d) => d.name),
+      joining: this.joining,
+      error: this.error
+    }
+  }
+
+  async ready(): Promise<void> {
+    await this.devices.ready()
+    if (this.linked) await this._mirror()
+    else await this._hub()
+  }
+
+  open(): void {
+    this.error = null
+    this.code = this.devices.open()
+    this.emit('change')
+  }
+
+  close(): void {
+    this.devices.close()
+  }
+
+  async join(code: string): Promise<void> {
+    this.joining = true
+    this.error = null
+    this.emit('change')
+    try {
+      await this.devices.join(code, this.name)
+      this.hub?.close()
+      this.hub = null
+      await this._mirror()
+      this.emit('role', 'linked')
+    } catch (err) {
+      this.error = 'could not link: ' + (err as Error).message
+    }
+    this.joining = false
+    this.emit('change')
+  }
+
+  async unlink(): Promise<void> {
+    this.mirror?.close()
+    this.mirror = null
+    this.devices.unlink()
+    await this._hub()
+    this.emit('role', 'alone')
+  }
+
+  forget(name: string): void {
+    const device = this.devices.saved.devices.find((d) => d.name === name)
+    if (device !== undefined) this.devices.forget(device)
+  }
+
+  destroy(): Promise<void> {
+    return this.devices.destroy()
+  }
+
+  async _hub(): Promise<void> {
+    const hub = new Hub(this.messenger, this.devices.feed)
+    this.hub = hub
+    hub.on('done', (key: string, done: number) => {
+      const device = this.devices.saved.devices.find((d) => d.swarm === key)
+      if (device === undefined) return
+      device.done = done
+      this.emit('change')
+    })
+    await hub.ready()
+    for (const device of this.devices.saved.devices) await this._follow(device)
+  }
+
+  async _follow(device: Device): Promise<void> {
+    const outbox = await this.devices.outboxOf(device)
+    this.hub?.follow(outbox, device.swarm, device.done)
+  }
+
+  async _mirror(): Promise<void> {
+    const link = this.devices.saved.hub!
+    const mirror = new Mirror(this.messenger, this.devices.hubFeed!, this.devices.outbox, {
+      applied: link.applied
+    })
+    this.mirror = mirror
+    mirror.on('applied', (applied: number) => {
+      link.applied = applied
+      this.emit('change')
+    })
+    await mirror.update()
+  }
+}

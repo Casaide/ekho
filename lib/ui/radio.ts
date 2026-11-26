@@ -35,7 +35,9 @@ export default class RadioScreen {
     const info = this.ui.radioInfo
     const content = this._body.content
 
+    // Built once and kept: out before the rest is cleared away.
     detach(this.ui.device.root)
+    detach(this.ui.linkCard.root)
     clear(content)
 
     content.appendChild(this.ui.device.root)
@@ -100,6 +102,9 @@ export default class RadioScreen {
         () => this.ui.open('setup')
       )
     )
+
+    this.ui.linkCard.render()
+    content.appendChild(this.ui.linkCard.root)
 
     // The radio's channels and the IRC channel the bridge pairs with each.
     content.appendChild(label('channels on the radio'))

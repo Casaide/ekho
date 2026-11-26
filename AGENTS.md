@@ -9,7 +9,7 @@ A phone and desktop messenger for the Bulgarian Meshtastic community. You messag
 - **LoRa first.** The app talks to the user's Seeed T1000-E (stock Meshtastic firmware) over Bluetooth, or USB on desktop. The T1000-E holds the user's root identity: node ID and keys.
 - **IRC fallback.** When no LoRa node has been heard recently, messages go over IRC on `irc.motaba.net:6697` (TLS). The motaba bridge relays IRC into the mesh and mesh traffic onto IRC, both ways, including direct messages to a single node.
 - **Drop-in.** Nobody else needs the app. Recipients keep stock Meshtastic apps or IRC clients.
-- **No MQTT, no hub, no P2P in v1.** A rooftop hub, MeshCore, Nostr and Holepunch hub-to-hub links are later.
+- **No MQTT and no rooftop hub in v1. P2P so far:** a Mac links to the phone by a code and mirrors it, sending through it (`lib/hub.ts`, `lib/mirror.ts`). A rooftop hub, MeshCore, Nostr and Holepunch hub-to-hub links are later.
 
 ## Read these first
 
@@ -52,23 +52,25 @@ Don't relitigate these without the user.
 
 ## Layout
 
-| Path                             | What it is                                                                                                                                               |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib/messenger.ts`               | The core: threads, routing, sending, ack matching, retry and send via IRC. Radio and IRC are attached with `setRadio` and `setIrc` as they connect.      |
-| `lib/irc.ts`                     | Minimal IRC client over any duplex stream: SASL or NickServ login, reclaiming a ghosted nick, PING and a silence check, LIST, join, part, privmsg.       |
-| `lib/link.ts`                    | One connection kept up while wanted: a single state (off, connecting, on, waiting, failed), retries, pause and resume. See `docs/connections.md`.        |
-| `lib/heard.ts`                   | Last-heard time per node, and the window.                                                                                                                |
-| `lib/contacts.ts`                | People linking a node ID and an IRC nick; a channel contact for the mesh channel.                                                                        |
-| `lib/types.ts`                   | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses.                                                                 |
-| `lib/radio.ts`                   | Bluetooth connect: bare-bluetooth plus bare-meshtastic `Mailbox` and `Client`. Device code, untested here.                                               |
-| `lib/ui/`, `lib/theme.ts`        | bare-native UI after the mockups (`docs/mockups/`): `index.ts` (navigation, tabs or panes), `kit.ts` (shared pieces), one module per screen.             |
-| `lib/notifier.ts`                | What to notify while off screen: messages to you, and channel lines naming you.                                                                          |
-| `lib/presence.ts`                | Who's around: radio nodes heard and IRC nicks in our channels, one entry per person (bridged `name\|mt` nicks matched to radio nodes).                   |
-| `packages/`                      | Our own native addons (C++ and Java, built like bare-navigation-android): notifications and a foreground service. Compiled by `scripts/build-addons.sh`. |
-| `app.ts`                         | Entry: wires Messenger, UI, radio and TLS IRC.                                                                                                           |
-| `test/*.ts`, `test.ts`           | bare-tap tests with fake radio and fake IRC stream.                                                                                                      |
-| `docs/design.md`, `docs/plan.md` | The design and the phased plan. Update them when a decision changes.                                                                                     |
-| `.claude/skills/`                | `ekho` (the working loop) and `js-house-style` (the Holepunch style guide).                                                                              |
+| Path                                             | What it is                                                                                                                                               |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/messenger.ts`                               | The core: threads, routing, sending, ack matching, retry and send via IRC. Radio and IRC are attached with `setRadio` and `setIrc` as they connect.      |
+| `lib/irc.ts`                                     | Minimal IRC client over any duplex stream: SASL or NickServ login, reclaiming a ghosted nick, PING and a silence check, LIST, join, part, privmsg.       |
+| `lib/link.ts`                                    | One connection kept up while wanted: a single state (off, connecting, on, waiting, failed), retries, pause and resume. See `docs/connections.md`.        |
+| `lib/heard.ts`                                   | Last-heard time per node, and the window.                                                                                                                |
+| `lib/contacts.ts`                                | People linking a node ID and an IRC nick; a channel contact for the mesh channel.                                                                        |
+| `lib/types.ts`                                   | Shared types, including `Radio`, the slice of a bare-meshtastic `Client` that ekho uses.                                                                 |
+| `lib/radio.ts`                                   | Bluetooth connect: bare-bluetooth plus bare-meshtastic `Mailbox` and `Client`. Device code, untested here.                                               |
+| `lib/ui/`, `lib/theme.ts`                        | bare-native UI after the mockups (`docs/mockups/`): `index.ts` (navigation, tabs or panes), `kit.ts` (shared pieces), one module per screen.             |
+| `lib/notifier.ts`                                | What to notify while off screen: messages to you, and channel lines naming you.                                                                          |
+| `lib/hub.ts`, `lib/mirror.ts`                    | Linking devices: the phone's feed of everything its Messenger does, and a linked device applying it and sending through the phone's outbox reader.       |
+| `lib/devices.ts`, `lib/linker.ts`, `lib/code.ts` | The P2P side: Corestore, Hyperswarm, blind-pairing by a ten-character code; and the app's use of it. See docs/design.md.                                 |
+| `lib/presence.ts`                                | Who's around: radio nodes heard and IRC nicks in our channels, one entry per person (bridged `name\|mt` nicks matched to radio nodes).                   |
+| `packages/`                                      | Our own native addons (C++ and Java, built like bare-navigation-android): notifications and a foreground service. Compiled by `scripts/build-addons.sh`. |
+| `app.ts`                                         | Entry: wires Messenger, UI, radio and TLS IRC.                                                                                                           |
+| `test/*.ts`, `test.ts`                           | bare-tap tests with fake radio and fake IRC stream.                                                                                                      |
+| `docs/design.md`, `docs/plan.md`                 | The design and the phased plan. Update them when a decision changes.                                                                                     |
+| `.claude/skills/`                                | `ekho` (the working loop) and `js-house-style` (the Holepunch style guide).                                                                              |
 
 ## Conventions
 

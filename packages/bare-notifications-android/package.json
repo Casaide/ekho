@@ -28,12 +28,12 @@
   "author": "Dominic Cassidy",
   "license": "Apache-2.0",
   "dependencies": {
-    "bare-events": "^2.5.4"
+    "bare-events": "^2.9.2"
   },
   "devDependencies": {
-    "cmake-android": "^0.1.4",
-    "cmake-bare": "^1.8.0",
-    "cmake-fetch": "^1.5.1",
-    "cmake-java": "^0.1.2"
+    "cmake-android": "^0.1.9",
+    "cmake-bare": "^1.19.1",
+    "cmake-fetch": "^1.6.0",
+    "cmake-java": "^0.1.3"
   }
 }

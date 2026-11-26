@@ -21,6 +21,11 @@ function actions(own = {}) {
     logOutIrc() {},
     finishOnboarding() {},
     toggleChannel() {},
+    openLink() {},
+    closeLink() {},
+    joinLink() {},
+    unlink() {},
+    forgetDevice() {},
     ...own
   }
 }
@@ -388,4 +393,36 @@ test('any emoji reacts to a received message, and the conversation can say which
   ui._thread._toggle(received)
   ui._thread._act(() => messenger.react(received, '🔥'))
   t.equal(radio.sent.at(-1)!.text, '🔥 re: "hi"')
+})
+
+test('linking: the phone shows a code, another device types one in', (t) => {
+  const messenger = new Messenger({ ircChannel: '#bulgaria' })
+  const asked: string[] = []
+  const ui = new Ui(
+    messenger,
+    actions({
+      openLink: () => asked.push('open'),
+      joinLink: (code: string) => asked.push('join ' + code)
+    }),
+    { compact: true }
+  )
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  ui.open('radio')
+
+  ui.setLinking({ ...ui.linking, role: 'hub', code: 'abcde-fghjk', devices: ['mac'] })
+  ui.render()
+  ui.setLinking({ ...ui.linking, role: 'alone', code: null, devices: [] })
+  ui.render()
+
+  ui.linkCard._code.value = 'ABCDE FGHJK'
+  ui.linkCard._join()
+  t.deepStrictEqual(asked, ['join abcdefghjk'])
+
+  ui.linkCard._code.value = 'nope'
+  ui.linkCard._join()
+  t.equal(ui.linking.error, 'a code is ten letters and numbers')
+
+  ui.setLinking({ ...ui.linking, role: 'linked', error: null })
+  ui.render()
 })
