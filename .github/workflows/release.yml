@@ -8,8 +8,7 @@ on:
     branches:
       - main
   workflow_dispatch:
-permissions:
-  contents: write
+permissions: {}
 concurrency:
   group: release
   cancel-in-progress: false
@@ -17,6 +16,9 @@ jobs:
   release:
     runs-on: ubuntu-latest
     name: Release with APK
+    # Creates the release and its tag.
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     env:
@@ -103,6 +105,9 @@ jobs:
     needs: release
     runs-on: macos-latest
     name: Add the macOS app
+    # Uploads to the release.
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.release.outputs.version }}
