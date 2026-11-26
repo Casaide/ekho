@@ -57,6 +57,9 @@ export class DeviceCard {
 
   render(): void {
     const { radio, messenger } = this.ui
+    const proxied = this.ui.proxied()
+    if (proxied !== null) return this._renderProxied(proxied)
+
     const info = this.ui.radioInfo
     const on = radio.state === 'on'
 
@@ -96,6 +99,31 @@ export class DeviceCard {
           ? button('cancel', () => this.ui.actions.disconnectRadio(), chip(colors.muted))
           : button('connect t1000-e', () => this.ui.actions.connectRadio(), chip(colors.accent))
     )
+  }
+
+  // Linked to a phone: its radio, IRC and nodes heard, and nothing to press.
+  _renderProxied(proxied: { on: boolean; state: string }): void {
+    const status = this.ui.messenger.status()
+    clear(this._dot)
+    this._dot.appendChild(dot(proxied.on))
+    this._title.text = 'via your phone'
+    this._wheel.animating = false
+    this._wheel.style = { ...this._wheel.style, display: 'none' }
+    this._state.text = proxied.state
+
+    clear(this._details)
+    const row = (name: string, value: string) =>
+      view({ flexDirection: 'row' }, [
+        text(name, { color: colors.muted, fontSize: 12, width: 110 }),
+        text(value, { color: colors.text, fontSize: 12, flex: 1 })
+      ])
+    if (this.ui.linking.online) {
+      this._details.appendChild(row('radio', status.radio ? 'connected' : 'not connected'))
+      this._details.appendChild(row('irc', status.irc ? 'connected' : 'not connected'))
+      this._details.appendChild(row('nodes heard', status.heard + ' · last 15m'))
+      this._details.appendChild(row('route', status.route))
+    }
+    clear(this._buttons)
   }
 }
 

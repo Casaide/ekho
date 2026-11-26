@@ -467,20 +467,25 @@ if (Bare.platform === 'android') {
   })
 }
 
-// While ekho is off screen on Android: a foreground service keeps it running,
-// so the radio and IRC stay connected and messages still arrive, and a
-// notification says when one is for you. Both are our own addons
-// (packages/), built for Android only; the macOS build defers them.
-if (Bare.platform === 'android') {
-  const { default: notifications } = await import('bare-notifications-android')
-  const service = await import('bare-foreground-service-android')
+// A notification when a message is for you and ekho isn't in front, on
+// Android and macOS. Each platform's is our own addon (packages/), built for
+// it alone; the other platforms' builds defer it.
+const notifications =
+  Bare.platform === 'android'
+    ? (await import('bare-notifications-android')).default
+    : Bare.platform === 'darwin'
+      ? (await import('bare-notifications-darwin')).default
+      : null
+const notifier =
+  notifications === null
+    ? null
+    : new Notifier(messenger, notifications, { names: () => [settings.nick, ...radioNames] })
 
-  const notifier = new Notifier(messenger, notifications, {
-    names: () => [settings.nick, ...radioNames]
-  })
+if (notifications !== null && notifier !== null) {
   notifications.on('open', (id: number) => {
     const contact = notifier.contact(id)
     if (contact !== null) ui.select(contact)
+    window.show()
   })
 
   askToNotify = () => {
@@ -492,6 +497,19 @@ if (Bare.platform === 'android') {
       .then((granted: boolean) => log.info('app: notifications ' + (granted ? 'on' : 'off')))
   }
   if (onboarded) askToNotify()
+}
+
+// On a Mac, ekho is in front while its window is the key window.
+if (Bare.platform === 'darwin' && notifier !== null) {
+  window.native.on('didBecomeKey', () => (notifier.foreground = true))
+  window.native.on('didResignKey', () => (notifier.foreground = false))
+}
+
+// While ekho is off screen on Android, a foreground service keeps it running,
+// so the radio and IRC stay connected and messages still arrive. Our own
+// addon too, built for Android only.
+if (Bare.platform === 'android') {
+  const service = await import('bare-foreground-service-android')
 
   // What the service's notification says, or null to stop it: running only
   // while a link is wanted.
@@ -526,11 +544,11 @@ if (Bare.platform === 'android') {
 
   Bare.on('suspend', () => {
     onScreen = false
-    notifier.foreground = false
+    if (notifier !== null) notifier.foreground = false
   })
   Bare.on('resume', () => {
     onScreen = true
-    notifier.foreground = true
+    if (notifier !== null) notifier.foreground = true
     keepRunning()
   })
   Bare.on('exit', () => service.stop())

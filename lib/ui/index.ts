@@ -170,7 +170,14 @@ export default class Ui extends EventEmitter {
     this.device = new DeviceCard(this)
     this.form = new IrcForm(this, { nick: opts.nick, password: opts.password })
     this.linkCard = new LinkCard(this)
-    this.linking = { role: 'alone', code: null, devices: [], joining: false, error: null }
+    this.linking = {
+      role: 'alone',
+      code: null,
+      devices: [],
+      joining: false,
+      online: false,
+      error: null
+    }
 
     this._history = []
     this._chats = new Chats(this)
@@ -362,6 +369,20 @@ export default class Ui extends EventEmitter {
   }
 
   // Data from the app.
+
+  // Linked to a phone: how its radio and IRC stand, as its feed last said,
+  // for the cards that would show this device's own. Null otherwise.
+  proxied(): { on: boolean; state: string } | null {
+    if (this.linking.role !== 'linked') return null
+    const status = this.messenger.remote
+    if (!this.linking.online) return { on: false, state: 'phone offline' }
+    if (status === null) return { on: false, state: 'syncing' }
+    const paths = [status.radio ? 'radio' : '', status.irc ? 'irc' : ''].filter(Boolean)
+    return {
+      on: paths.length > 0,
+      state: paths.length > 0 ? paths.join(' + ') : 'no radio or irc'
+    }
+  }
 
   setLinking(state: LinkState): void {
     this.linking = state

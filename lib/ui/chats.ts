@@ -65,11 +65,20 @@ export default class Chats {
   }
 
   // `● t1000-e · ble        nodes heard 5`; opens the radio screen.
+  // Linked to the phone, it's the phone's: `● via your phone · radio`.
   _renderRadio(): void {
     const { radio, messenger } = this.ui
     clear(this._radio)
-    const on = radio.state === 'on'
-    const state = on ? 'connected' : radio.state === 'off' ? 'not connected' : radio.state
+    const proxied = this.ui.proxied()
+    const on = proxied === null ? radio.state === 'on' : proxied.on
+    const state =
+      proxied !== null
+        ? proxied.state
+        : on
+          ? 'connected'
+          : radio.state === 'off'
+            ? 'not connected'
+            : radio.state
     this._radio.appendChild(
       press(
         view(
@@ -87,9 +96,13 @@ export default class Chats {
           },
           [
             dot(on),
-            text('t1000-e · ' + state, { color: colors.text, fontSize: 12, flex: 1 }),
+            text((proxied === null ? 't1000-e · ' : 'via your phone · ') + state, {
+              color: colors.text,
+              fontSize: 12,
+              flex: 1
+            }),
             text('nodes heard ', { color: colors.muted, fontSize: 12 }),
-            text(String(messenger.heard.count()), { color: colors.accent, fontSize: 12 })
+            text(String(messenger.status().heard), { color: colors.accent, fontSize: 12 })
           ]
         ),
         () => this.ui.open('radio')

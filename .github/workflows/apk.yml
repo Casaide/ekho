@@ -29,7 +29,7 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
       # Our own addons (packages/), compiled here: they aren't on npm.
       - name: Native addons
-        run: sh scripts/build-addons.sh
+        run: sh scripts/build-addons.sh android
       - name: Dependencies against npm
         run: node -e "const p=require('./package.json');for(const [n,r] of Object.entries({...p.dependencies,...p.devDependencies}))console.log(n,r)" | while read n r; do case $r in file:*) continue;; esac; echo "$n $r latest $(npm view $n version)"; done
       - run: npm install
@@ -48,6 +48,7 @@ jobs:
           --android-manifest android/AndroidManifest.xml
           --resources android/res
           --minimum-version 33
+          --defer bare-notifications-darwin
           --out build
       - name: What's inside
         # Native libraries and Java code packed into the APK, to check that

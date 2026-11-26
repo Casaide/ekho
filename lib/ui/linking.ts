@@ -25,6 +25,8 @@ export interface LinkState {
   devices: string[]
   // Typing a code in: sent and waiting.
   joining: boolean
+  // As a linked device: connected to the phone right now.
+  online: boolean
   error: string | null
 }
 

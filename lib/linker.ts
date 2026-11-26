@@ -20,6 +20,8 @@ export default class Linker extends EventEmitter {
   mirror: Mirror | null
   code: string | null
   joining: boolean
+  // As a linked device: connected to the phone right now.
+  online: boolean
   error: string | null
   _sleep: Promise<void>
 
@@ -37,6 +39,7 @@ export default class Linker extends EventEmitter {
     this.mirror = null
     this.code = null
     this.joining = false
+    this.online = false
     this.error = null
     this._sleep = Promise.resolve()
 
@@ -58,6 +61,7 @@ export default class Linker extends EventEmitter {
       code: this.code,
       devices: this.devices.saved.devices.map((d) => d.name),
       joining: this.joining,
+      online: this.online,
       error: this.error
     }
   }
@@ -96,6 +100,7 @@ export default class Linker extends EventEmitter {
   }
 
   async unlink(): Promise<void> {
+    this.online = false
     this.mirror?.close()
     this.mirror = null
     this.devices.unlink()
@@ -143,6 +148,14 @@ export default class Linker extends EventEmitter {
 
   async _mirror(): Promise<void> {
     const link = this.devices.saved.hub!
+    // Whether the phone is reachable: it's the only peer with its feed.
+    const feed: any = this.devices.hubFeed
+    const peers = () => {
+      this.online = feed.peers.length > 0
+      this.emit('change')
+    }
+    feed.on('peer-add', peers)
+    feed.on('peer-remove', peers)
     const mirror = new Mirror(this.messenger, this.devices.hubFeed!, this.devices.outbox, {
       applied: link.applied
     })
