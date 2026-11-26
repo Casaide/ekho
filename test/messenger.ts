@@ -426,3 +426,34 @@ test('a direct message to a node the radio doesn’t know fails at once, for IRC
   messenger.sendViaIrc(msg)
   t.deepStrictEqual(stream.lines, ['PRIVMSG ivanp :are you up?'])
 })
+
+test('the bridge’s radio repeating IRC onto the mesh is skipped while on IRC', (t) => {
+  const { radio, stream, messenger } = setup()
+  const line = {
+    from: '!0000b41d',
+    name: 'irc',
+    text: 'it is worse there',
+    snr: 5,
+    rssi: -90,
+    hops: 1,
+    direct: false
+  }
+
+  stream.serve(':BLAGOY!u@h PRIVMSG #sofiamesh :it is worse there\r\n')
+  radio.emit('message', line)
+  t.deepStrictEqual(
+    messenger.thread(messenger.channel).map((m) => m.from),
+    ['BLAGOY'],
+    'once, with who said it'
+  )
+
+  const alone = new Messenger({ ircChannel: '#sofiamesh' })
+  const own = new FakeRadio()
+  alone.setRadio(own as never)
+  own.emit('message', line)
+  t.deepStrictEqual(
+    alone.thread(alone.channel).map((m) => m.text),
+    ['it is worse there'],
+    'without IRC, the radio’s copy is how the line arrives'
+  )
+})

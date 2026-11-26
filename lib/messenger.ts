@@ -44,6 +44,10 @@ export interface Status {
   route: Via
 }
 
+// The long name of the motaba bridge's radio, which repeats IRC lines onto
+// the mesh.
+const BRIDGE = 'irc'
+
 // The core of ekho: one thread per person, LoRa first, IRC when no LoRa node
 // has been heard. The radio is a bare-meshtastic Client and the IRC side an
 // Irc; either is attached when it connects.
@@ -479,6 +483,12 @@ export default class Messenger extends EventEmitter {
 
   _onradio(m: RadioMessage): void {
     this.heard.mark(m.from)
+
+    // The bridge's own radio repeats IRC lines onto the mesh, from a node
+    // named "irc". While we're on IRC we have each line already, with who
+    // said it, so the radio's copy is skipped; without IRC it's the only way
+    // to see them, and kept.
+    if (!m.direct && m.name.toLowerCase() === BRIDGE && this.irc !== null && this.irc.ready) return
 
     const contact = m.direct
       ? (this.contacts.byNode(m.from) ?? this.contacts.add({ name: m.name, node: m.from }))
