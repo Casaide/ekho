@@ -220,6 +220,8 @@ export default class Ui extends EventEmitter {
         ...this.root.style,
         paddingBottom: height > 0 ? height : 'env(safe-area-inset-bottom)'
       }
+      // Typing a reply: the conversation moves up with the keyboard.
+      if (height > 0 && this.page === 'thread') this._thread.toEnd()
     })
 
     // Events come in bursts (a busy channel, people joining and leaving the
