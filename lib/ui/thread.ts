@@ -737,13 +737,16 @@ export default class Thread {
   _link(url: string, mine: boolean): any {
     const kind = media(url)
     if (kind !== null) return this._media(url, kind, mine)
-    const preview = this.ui.previews?.get(url) ?? null
+    const previews = this.ui.previews
+    const preview = previews?.get(url) ?? null
     const open = () => this.ui.actions.openUrl(url)
-    if (preview === null) {
+    const side = mine ? 'flex-end' : 'flex-start'
+    // Tried, with nothing to show (or no previews at all): just where it goes.
+    if (preview === null && (previews === null || previews.tried(url))) {
       return button('↗ ' + host(url), open, {
         ...chip(colors.accent),
         fontSize: 11,
-        alignSelf: mine ? 'flex-end' : 'flex-start'
+        alignSelf: side
       })
     }
     const card = {
@@ -751,28 +754,33 @@ export default class Thread {
       borderColor: colors.line,
       borderRadius: 6,
       backgroundColor: colors.panel,
-      cursor: 'pointer'
+      cursor: 'pointer',
+      overflow: 'hidden'
     }
 
+    // While it's fetched, a card the size it will be, so the conversation
+    // doesn't jump when it arrives: a picture's box for a link to a picture,
+    // a page's row otherwise.
+    const picturing =
+      preview === null ? /\.(png|jpe?g|gif|webp)([?#].*)?$/i.test(url) : preview.title === null
+
     // A link to a picture: the picture, whole, in a box of its own.
-    if (preview.title === null) {
-      return press(
-        view({ ...card, padding: 4, alignSelf: mine ? 'flex-end' : 'flex-start' }, [
-          picture(preview.image!, 232, 174, 'contain')
-        ]),
-        open
-      )
+    if (picturing) {
+      const inside =
+        preview === null
+          ? view({ width: 232, height: 174 })
+          : picture(preview.image!, 232, 174, 'contain')
+      return press(view({ ...card, padding: 4, alignSelf: side }, [inside]), open)
     }
 
     // A page: a small square of its picture beside where it's from, its
-    // title and the start of its description, the same size whatever the
-    // page's picture is.
+    // title and the start of its description, always the same height.
     const about = view({ flex: 1, gap: 3 }, [
-      text(preview.site, { color: colors.muted, fontSize: 11 }, 1),
-      text(preview.title, { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2)
+      text(preview?.site ?? host(url), { color: colors.muted, fontSize: 11 }, 1),
+      text(preview?.title ?? '…', { color: colors.text, fontSize: 13, fontWeight: 'bold' }, 2)
     ])
-    if (preview.description !== null) {
-      about.appendChild(text(preview.description, { color: colors.soft, fontSize: 12 }, 2))
+    if (preview?.description) {
+      about.appendChild(text(preview.description, { color: colors.soft, fontSize: 12 }, 1))
     }
     const row = view(
       {
@@ -781,12 +789,13 @@ export default class Thread {
         padding: 8,
         width: '100%',
         maxWidth: 300,
-        alignSelf: mine ? 'flex-end' : 'flex-start',
+        height: CARD,
+        alignSelf: side,
         ...card
       },
       [about]
     )
-    if (preview.image !== null) row.insertBefore(picture(preview.image, 56, 56, 'cover'), about)
+    if (preview?.image) row.insertBefore(picture(preview.image, 56, 56, 'cover'), about)
     return press(row, open)
   }
 
@@ -880,7 +889,11 @@ export default class Thread {
   _key(contact: Contact, msg: Message): string {
     const cards = links(msg.text)
       .slice(0, 2)
-      .map((url) => (this.ui.previews?.get(url) ? 'p' : '-') + (this._playing.has(url) ? 'v' : ''))
+      .map(
+        (url) =>
+          (this.ui.previews?.get(url) ? 'p' : this.ui.previews?.tried(url) ? 'x' : '-') +
+          (this._playing.has(url) ? 'v' : '')
+      )
     const english = msg.state === 'received' ? this.ui.translator?.translation(msg.text) : null
     return [
       contact.id,
@@ -1112,6 +1125,9 @@ export default class Thread {
 
 // The message input: its font size, the height of one of its lines, its
 // padding, and the most lines it grows to before scrolling.
+// A page's preview card's height: its place is kept while it's fetched.
+const CARD = 86
+
 // The most messages a conversation shows.
 const SHOWN = 200
 

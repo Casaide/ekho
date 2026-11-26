@@ -148,8 +148,14 @@ export function setSwipeBack(fn: () => void): void {
 // screen, and destroying the view being touched while it handles the touch
 // can crash the app.
 //
-// `onhold`, if given, runs when a finger rests on it, instead of the tap.
-export function press(node: any, onpress: () => void, onhold?: () => void): any {
+// `onhold`, if given, runs when a finger rests on it, instead of the tap;
+// `onswipe`, when it's swiped to the left.
+export function press(
+  node: any,
+  onpress: () => void,
+  onhold?: () => void,
+  onswipe?: () => void
+): any {
   const dim = (opacity: number) => (node.style = { ...node.style, opacity })
   gesture(node, {
     down: () => dim(0.5),
@@ -163,6 +169,12 @@ export function press(node: any, onpress: () => void, onhold?: () => void): any 
       (() => {
         dim(1)
         setTimeout(onhold, 0)
+      }),
+    left:
+      onswipe &&
+      (() => {
+        dim(1)
+        setTimeout(onswipe, 0)
       })
   })
   return node
@@ -177,7 +189,13 @@ export function swipeable(node: any): any {
 
 function gesture(
   node: any,
-  on: { down?: () => void; cancel?: () => void; tap?: () => void; hold?: () => void }
+  on: {
+    down?: () => void
+    cancel?: () => void
+    tap?: () => void
+    hold?: () => void
+    left?: () => void
+  }
 ): void {
   let start: { x: number; y: number } | null = null
   let moved = false
@@ -221,6 +239,10 @@ function gesture(
     if (dx > SWIPE && Math.abs(dy) < dx / 2) {
       on.cancel?.()
       setTimeout(swipeBack, 0)
+      return
+    }
+    if (on.left && -dx > SWIPE && Math.abs(dy) < -dx / 2) {
+      on.left()
       return
     }
     if (!moved) on.tap?.()

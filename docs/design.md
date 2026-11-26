@@ -118,6 +118,8 @@ Previews are fetched once and kept (`lib/previews.ts`): in memory for the sessio
 
 Two sites preview from elsewhere than the page: a picture on GitHub (`github.com/…/blob/….png`) from its raw file, so it shows as the picture rather than GitHub's card for the repository; and a YouTube video from its oEmbed (title, channel, thumbnail), since in the EU its page is a cookie consent page.
 
+A preview card keeps its place while it's fetched: a page's card is always the same height, and a picture's box the same size, shown empty until they arrive, so the conversation doesn't jump. A link with nothing to show shrinks to a chip.
+
 A link sits on lines of its own in the message, broken by ekho to fit the width (after a `/`, `.` or the like when one is near). Android wrapped a long link differently from how bare-native measured it, so the text ran a line past its box into the card below. A tap on a message with a link opens the link; holding it opens its details and actions.
 
 A link to a sound or a video (by its extension: mp3, wav, ogg, opus, m4a, aac, flac; mp4, m4v, webm, mov) gets a card to play it in place instead, with no fetch until tapped. The player is a web view holding an `<audio>` or `<video>` element, so each platform plays what its browser does, with no audio code of ours. It keeps playing while messages arrive, stops on ■ or on leaving the conversation, and ↗ opens it in the browser. This is the first step toward voice notes: a link to a recording, wherever it's hosted.

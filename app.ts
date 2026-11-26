@@ -177,6 +177,7 @@ function save() {
         open,
         askedNotifications,
         translate,
+        cleared: ui.cleared,
         link: linker.devices.saved
       })
     } catch (err) {
@@ -479,6 +480,7 @@ const ui = new Ui(
     // Preview images go in a cache folder: the image view reads files.
     // Previews are kept between sessions in a Hyperbee of their own, beside
     // the linking cores, with their pictures when small.
+    cleared: saved?.cleared ?? {},
     translator: translates ? translator : undefined,
     toBulgarian: translates ? toBulgarian : undefined,
     previews: new Previews(fetch, {
@@ -509,6 +511,7 @@ window.on('resize', () => ui.setWidth(window.size.width))
 
 // Reopen the conversation that was open last time.
 ui.on('select', save)
+ui.on('clear', save)
 const reopen = onboarded && saved?.open ? messenger.contacts.get(saved.open) : null
 if (reopen) ui.select(reopen)
 
