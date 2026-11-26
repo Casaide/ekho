@@ -46,6 +46,10 @@ jobs:
           --resources android/res
           --minimum-version 33
           --out build
+      - name: What's inside
+        # Native libraries and Java code packed into the APK, to check that
+        # addons such as bare-navigation-android made it in.
+        run: unzip -l build/*.apk | grep -E '\.so$|\.dex$'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ekho-apk
