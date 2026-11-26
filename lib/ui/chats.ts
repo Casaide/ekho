@@ -26,13 +26,24 @@ export default class Chats {
   _radio: any
   _search: any
   _list: any
+  _key: string
+  _typing: ReturnType<typeof setTimeout> | null
 
   constructor(ui: Ui) {
     this.ui = ui
 
     this._radio = view({})
     this._search = input('/ filter')
-    this._search.on('change', () => this.render())
+    // Filter once typing pauses, not on every key.
+    this._typing = null
+    this._search.on('change', () => {
+      if (this._typing !== null) clearTimeout(this._typing)
+      this._typing = setTimeout(() => {
+        this._typing = null
+        this.render()
+      }, 250)
+    })
+    this._key = ''
     this._list = scroll({ paddingTop: 6 })
 
     this.root = view({ flex: 1 }, [
@@ -95,6 +106,20 @@ export default class Chats {
       .all()
       .filter((c) => filter === '' || displayName(c).toLowerCase().includes(filter))
       .sort((a, b) => last(b) - last(a))
+
+    // Rebuild only when a row would look different.
+    const key = [
+      filter,
+      this.ui.selected?.id ?? '',
+      messenger.route(),
+      Math.floor(messenger.now() / 60_000),
+      ...contacts.map((c) => {
+        const msg = messenger.thread(c).at(-1)
+        return c.id + displayName(c) + (msg ? msg.id + msg.state : '') + messenger.unread(c)
+      })
+    ].join('|')
+    if (key === this._key) return
+    this._key = key
 
     clear(this._list.content)
     for (const contact of contacts) this._list.content.appendChild(this._row(contact))

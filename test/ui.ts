@@ -246,3 +246,96 @@ test('contacts shows who is around on every transport, and tapping makes a conta
   t.deepStrictEqual(ivan.nicks, ['Ivan_Petrov|mt'])
   t.equal(ui.page, 'thread')
 })
+
+test('swiping right goes back: to the list from a conversation, to chats from a tab', (t) => {
+  const messenger = new Messenger()
+  const ui = new Ui(messenger, actions(), { compact: true })
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
+  t.teardown(() => window.hide())
+
+  ui.open('radio')
+  ui.open('setup')
+  ui.swipeBack()
+  t.equal(ui.page, 'radio')
+  ui.swipeBack()
+  t.equal(ui.page, 'chats')
+
+  ui.select(messenger.channel)
+  ui.swipeBack()
+  t.equal(ui.page, 'chats')
+})
+
+test('a channel opens from contacts, joining it first if need be', (t) => {
+  const messenger = new Messenger({ ircChannel: '#bulgaria' })
+  const joined: string[] = []
+  const ui = new Ui(
+    messenger,
+    actions({
+      toggleChannel(name: string) {
+        joined.push(name)
+        messenger.addChannel(name)
+      }
+    }),
+    { compact: true }
+  )
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
+  t.teardown(() => window.hide())
+
+  ui.setChannels(
+    [
+      { name: '#bulgaria', users: 146, topic: '' },
+      { name: '#sofia', users: 31, topic: '' }
+    ],
+    [],
+    '#bulgaria'
+  )
+  t.deepStrictEqual(ui.channels(), [
+    { name: '#bulgaria', users: 146, joined: true },
+    { name: '#sofia', users: 31, joined: false }
+  ])
+
+  ui.openChannel('#sofia')
+  t.deepStrictEqual(joined, ['#sofia'])
+  t.equal(ui.selected!.id, '#sofia')
+  t.equal(ui.page, 'thread')
+
+  ui.openChannel('#bulgaria')
+  t.deepStrictEqual(joined, ['#sofia'], 'the mesh channel is joined already')
+})
+
+test("a failed message's details offer a retry, which puts them away", (t) => {
+  const messenger = new Messenger()
+  const ui = new Ui(messenger, actions(), { compact: true })
+  const window = new Window(380, 800)
+  window.content(ui.root)
+  window.show()
+  t.teardown(() => window.hide())
+
+  const radio = new FakeRadio()
+  messenger.setRadio(radio as never)
+  radio.emit('message', {
+    from: '!a1b2c3d4',
+    name: 'ivan',
+    text: 'hi',
+    snr: 1,
+    rssi: -90,
+    hops: 0,
+    direct: true
+  })
+  const ivan = messenger.contacts.byNode('!a1b2c3d4')!
+  ui.select(ivan)
+
+  const msg = messenger.send(ivan, 'hello')
+  radio.emit('ack', { id: radio.sent.at(-1)!.opts.id, delivered: false, reason: 'MAX_RETRANSMIT' })
+  t.equal(msg.state, 'failed')
+
+  ui._thread._toggle(msg)
+  t.equal(ui._thread._open, msg)
+  ui._thread._act(() => messenger.retry(msg))
+  t.equal(ui._thread._open, null)
+  t.equal(msg.state, 'sending')
+})

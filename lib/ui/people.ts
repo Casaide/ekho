@@ -14,8 +14,14 @@ import {
   avatar,
   label,
   dot,
-  ago
+  ago,
+  button,
+  chip
 } from './kit.ts'
+
+// Rows shown at first, and added by each "show more": the bridge alone can
+// put well over a hundred people on screen.
+const PAGE = 40
 
 // What a bridged nick's suffix means, in words.
 const BRIDGED: Record<string, string> = {
@@ -34,13 +40,27 @@ export default class People {
   _summary: any
   _search: any
   _list: any
+  _limit: number
+  _key: string
+  _typing: ReturnType<typeof setTimeout> | null
 
   constructor(ui: Ui) {
     this.ui = ui
 
     this._summary = text('', { color: colors.muted, fontSize: 12 })
     this._search = input('/ filter')
-    this._search.on('change', () => this.render())
+    // Filter once typing pauses, not on every key.
+    this._typing = null
+    this._search.on('change', () => {
+      if (this._typing !== null) clearTimeout(this._typing)
+      this._typing = setTimeout(() => {
+        this._typing = null
+        this._limit = PAGE
+        this.render()
+      }, 250)
+    })
+    this._limit = PAGE
+    this._key = ''
     this._list = scroll({ paddingHorizontal: 18, paddingVertical: 10, gap: 10 })
 
     this.root = view({ flex: 1 }, [
@@ -59,31 +79,74 @@ export default class People {
     const matches = (name: string) => filter === '' || name.toLowerCase().includes(filter)
 
     const people = presence.people()
-    const onLora = people.filter((p) =>
-      p.nodes.some((n) => n.heard < messenger.heard.window)
-    ).length
+    const recent = (p: Person) => p.nodes.some((n) => n.heard < messenger.heard.window)
+    const onLora = people.filter(recent).length
     const onIrc = people.filter((p) => p.nicks.length > 0).length
     this._summary.text = onLora + ' heard on lora · ' + onIrc + ' on irc'
+
+    const online = people.filter((p) => matches(this._nameOf(p)))
+    const channels = this.ui.channels().filter((c) => matches(c.name))
+    const saved = messenger.contacts.all().filter((c) => !c.channel && matches(displayName(c)))
+
+    // Rebuild only when what's listed changed, not for every event.
+    const key = [
+      filter,
+      this._limit,
+      channels.map((c) => c.name + c.users + (c.joined ? '+' : '')).join(),
+      online
+        .slice(0, this._limit)
+        .map((p) => p.name + p.nodes.map((n) => Math.round(n.heard / 60_000)) + p.nicks.length)
+        .join(),
+      saved.map((c) => c.id + displayName(c)).join()
+    ].join('|')
+    if (key === this._key) return
+    this._key = key
 
     const content = this._list.content
     clear(content)
 
+    // Channels: tap to open, joining it if need be.
+    if (channels.length > 0) {
+      content.appendChild(label('channels · tap to open'))
+      const wrap = view({ flexDirection: 'row', flexWrap: 'wrap', gap: 8 })
+      for (const channel of channels) {
+        wrap.appendChild(
+          button(
+            channel.name + (channel.users > 0 ? ' · ' + channel.users : ''),
+            () => this.ui.openChannel(channel.name),
+            chip(channel.joined ? colors.accent : colors.muted)
+          )
+        )
+      }
+      content.appendChild(wrap)
+    }
+
     // People seen, under their contact name where they are one.
     const shown = new Set<string>()
-    const online = people.filter((p) => matches(this._nameOf(p)))
     content.appendChild(label('around now · ' + online.length))
-    for (const person of online) {
+    for (const person of online.slice(0, this._limit)) {
       const contact = this._contactOf(person)
       if (contact !== null) shown.add(contact.id)
       content.appendChild(this._row(person, contact))
     }
+    if (online.length > this._limit) {
+      const more = Math.min(PAGE, online.length - this._limit)
+      content.appendChild(
+        button(
+          'show ' + more + ' more',
+          () => {
+            this._limit += PAGE
+            this.render()
+          },
+          chip(colors.muted)
+        )
+      )
+    }
 
-    const saved = messenger.contacts
-      .all()
-      .filter((c) => !c.channel && !shown.has(c.id) && matches(displayName(c)))
-    if (saved.length > 0) {
+    const unseen = saved.filter((c) => !shown.has(c.id))
+    if (unseen.length > 0) {
       content.appendChild(label('saved, not seen'))
-      for (const contact of saved) {
+      for (const contact of unseen) {
         content.appendChild(
           this._row({ name: displayName(contact), nodes: [], nicks: [] }, contact)
         )

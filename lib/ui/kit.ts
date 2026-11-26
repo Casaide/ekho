@@ -105,16 +105,79 @@ export function link(label: string, onpress: () => void, style: object = {}): an
   )
 }
 
-// Acts on a tap or click, and dims while pressed so the touch shows.
+// How far a finger may drift and still tap; how far right a swipe must go,
+// mostly sideways, to go back.
+const SLOP = 12
+const SWIPE = 70
+
+// What a swipe right does: set by the app shell, which knows where back is.
+let swipeBack: () => void = () => {}
+
+export function setSwipeBack(fn: () => void): void {
+  swipeBack = fn
+}
+
+// Acts on a tap or click, and dims while pressed so the touch shows. A finger
+// that moves isn't a tap (it was scrolling), and a swipe right goes back.
+//
+// The action runs after the event, not during it: it often rebuilds the
+// screen, and destroying the view being touched while it handles the touch
+// can crash the app.
 export function press(node: any, onpress: () => void): any {
   const dim = (opacity: number) => (node.style = { ...node.style, opacity })
-  node.on('pointerdown', () => dim(0.5))
-  node.on('pointercancel', () => dim(1))
-  node.on('pointerup', () => {
-    dim(1)
-    onpress()
+  gesture(node, {
+    down: () => dim(0.5),
+    cancel: () => dim(1),
+    tap: () => {
+      dim(1)
+      setTimeout(onpress, 0)
+    }
   })
   return node
+}
+
+// Swipe right to go back, on a view that is otherwise inert: the empty space
+// of a screen.
+export function swipeable(node: any): any {
+  gesture(node, {})
+  return node
+}
+
+function gesture(
+  node: any,
+  on: { down?: () => void; cancel?: () => void; tap?: () => void }
+): void {
+  let start: { x: number; y: number } | null = null
+  let moved = false
+
+  node.on('pointerdown', (e: { x: number; y: number }) => {
+    start = { x: e.x, y: e.y }
+    moved = false
+    on.down?.()
+  })
+  node.on('pointermove', (e: { x: number; y: number }) => {
+    if (start === null) return
+    if (Math.abs(e.x - start.x) > SLOP || Math.abs(e.y - start.y) > SLOP) {
+      if (!moved) on.cancel?.()
+      moved = true
+    }
+  })
+  node.on('pointercancel', () => {
+    start = null
+    on.cancel?.()
+  })
+  node.on('pointerup', (e: { x: number; y: number }) => {
+    if (start === null) return
+    const dx = e.x - start.x
+    const dy = e.y - start.y
+    start = null
+    if (dx > SWIPE && Math.abs(dy) < dx / 2) {
+      on.cancel?.()
+      setTimeout(swipeBack, 0)
+      return
+    }
+    if (!moved) on.tap?.()
+  })
 }
 
 // Destroying a child removes it from its parent, so walk a copy.

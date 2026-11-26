@@ -4,7 +4,19 @@ import type { Contact, Message } from '../types.ts'
 import Log from '../log.ts'
 import Link from '../link.ts'
 import Presence from '../presence.ts'
-import { colors, view, text, button, chip, press, clear, detach, ago } from './kit.ts'
+import {
+  colors,
+  view,
+  text,
+  button,
+  chip,
+  press,
+  swipeable,
+  setSwipeBack,
+  clear,
+  detach,
+  ago
+} from './kit.ts'
 import { DeviceCard, IrcForm } from './parts.ts'
 import Chats from './chats.ts'
 import Thread from './thread.ts'
@@ -89,6 +101,8 @@ export default class Ui {
   _panes: any
   _tabbar: any
   _hint: any
+  _tabs: { tab: Page; bar: any; label: any }[]
+  _pending: ReturnType<typeof setTimeout> | null
 
   _chats: Chats
   _thread: Thread
@@ -144,10 +158,30 @@ export default class Ui {
 
     // Errors show here, above an app that keeps working.
     this._banner = view({ display: 'none' })
+    // Built once, so a tab being touched is never replaced mid-tap; only its
+    // colours and label change.
     this._tabbar = view({ flexDirection: 'row', height: 56 })
-    this._stage = view({ flex: 1 })
+    this._tabs = []
+    for (const tab of TABS) {
+      const bar = view({ height: 2, backgroundColor: colors.line })
+      const label = text(tab, { color: colors.muted, fontSize: 12 })
+      this._tabbar.appendChild(
+        press(
+          view({ flex: 1, cursor: 'pointer' }, [
+            bar,
+            view({ flex: 1, alignItems: 'center', justifyContent: 'center' }, [label])
+          ]),
+          () => this.open(tab)
+        )
+      )
+      this._tabs.push({ tab, bar, label })
+    }
+    this._pending = null
+    // Swiping right on empty space goes back, as on any pressable thing.
+    this._stage = swipeable(view({ flex: 1 }))
+    setSwipeBack(() => this.swipeBack())
     this._left = view({ width: 320 })
-    this._center = view({ flex: 1 })
+    this._center = swipeable(view({ flex: 1 }))
     this._right = view({ width: 320 })
     this._hint = text('pick a chat', { color: colors.muted, fontSize: 13, padding: 24 })
     this._panes = view({ flex: 1, flexDirection: 'row' }, [
@@ -176,14 +210,22 @@ export default class Ui {
       }
     })
 
-    messenger.on('contacts', () => this.render())
-    messenger.on('message', () => this.render())
-    messenger.on('update', () => this.render())
-    messenger.on('status', () => this.render())
-    messenger.on('read', () => this.render())
-    this.radio.on('change', () => this.render())
-    this.irc.on('change', () => this.render())
-    this.presence.on('change', () => this.render())
+    // Events come in bursts (a busy channel, people joining and leaving the
+    // bridge): redraw once for each burst, not once for each event.
+    messenger.on('contacts', () => this.schedule())
+    messenger.on('message', (_msg: Message, contact: Contact) => {
+      // A message arriving in the open conversation is read already.
+      if (this.page === 'thread' && this.selected !== null && contact.id === this.selected.id) {
+        this.messenger.markRead(contact)
+      }
+      this.schedule()
+    })
+    messenger.on('update', () => this.schedule())
+    messenger.on('status', () => this.schedule())
+    messenger.on('read', () => this.schedule())
+    this.radio.on('change', () => this.schedule())
+    this.irc.on('change', () => this.schedule())
+    this.presence.on('change', () => this.schedule())
     this.log.on('entry', () => {
       if (this.page === 'setup') this._setup.render()
     })
@@ -210,6 +252,13 @@ export default class Ui {
     this.open(page)
   }
 
+  // A swipe right: back from a screen on top, or to chats from another tab.
+  swipeBack(): void {
+    if (this.page === 'onboarding' || this.page === 'chats') return
+    if (TABS.includes(this.page)) return this.open('chats')
+    this.back()
+  }
+
   back(): void {
     this.page = this._history.pop() ?? this.tab
     this.render()
@@ -223,6 +272,7 @@ export default class Ui {
       return this.render()
     }
     if (this.page === 'contact') this.page = this._history.pop() ?? this.tab
+    this.messenger.markRead(contact)
     this.open('thread')
   }
 
@@ -314,13 +364,42 @@ export default class Ui {
     return { label: via + ' · ' + kind, color: via === 'irc' ? colors.irc : colors.lora }
   }
 
+  // Channels to open: the server's list once logged in, busiest first, or
+  // just the ones joined before that.
+  channels(): { name: string; users: number; joined: boolean }[] {
+    const joined = this.messenger.contacts.all().filter((c) => c.channel)
+    const isJoined = (name: string) => joined.some((c) => c.id.toLowerCase() === name.toLowerCase())
+    const list = this._setup.channels
+    if (list === null) return joined.map((c) => ({ name: c.id, users: 0, joined: true }))
+    return list.map((c) => ({ name: c.name, users: c.users, joined: isJoined(c.name) }))
+  }
+
+  // Open a channel's conversation, joining it first if need be.
+  openChannel(name: string): void {
+    if (this.messenger.contacts.get(name) === null) this.actions.toggleChannel(name)
+    const contact = this.messenger.contacts.get(name)
+    if (contact !== null) this.select(contact)
+  }
+
   online(nick: string): boolean {
     return this.presence.people().some((p) => p.nicks.some((n) => n.nick === nick))
   }
 
   // Drawing.
 
+  // Redraw soon, once, however many times this is called meanwhile.
+  schedule(): void {
+    if (this._pending !== null) return
+    this._pending = setTimeout(() => {
+      this._pending = null
+      this.render()
+    }, 100)
+  }
+
   render(): void {
+    if (this._pending !== null) clearTimeout(this._pending)
+    this._pending = null
+
     // A contact joined into another no longer exists.
     if (this.selected !== null && this.messenger.contacts.get(this.selected.id) === null) {
       this.selected = null
@@ -329,9 +408,6 @@ export default class Ui {
     if (this.selected === null && (this.page === 'thread' || this.page === 'contact')) {
       this.page = this.tab
     }
-
-    // Whatever's on screen in a conversation has been read.
-    if (this.selected !== null && this.page === 'thread') this.messenger.markRead(this.selected)
 
     this.device.render()
     this.form.render()
@@ -342,43 +418,54 @@ export default class Ui {
     this._stage.style = { flex: 1, display: split ? 'none' : 'flex' }
     this._panes.style = { flex: 1, flexDirection: 'row', display: split ? 'flex' : 'none' }
 
-    const screens = this._screens()
-    for (const screen of screens) detach(screen.root)
-    detach(this._tabbar)
-    detach(this._hint)
     this._log.show(this.page === 'log')
 
-    if (!split) {
-      const screen = this._screenFor(this.page)
-      this._stage.appendChild(screen.root)
-      screen.render()
-      if (TABS.includes(this.page)) {
-        this._renderTabbar()
-        this._stage.appendChild(this._tabbar)
-      }
-      return
-    }
-
-    // Side by side: the tab's list, the open screen, and the contact.
-    const list = this._screenFor(this.tab)
-    this._left.appendChild(list.root)
-    list.render()
-    this._renderTabbar()
-    this._left.appendChild(this._tabbar)
-
+    // What goes where. Views move only when this changes: moving a view
+    // cancels a touch on it.
+    const side = split && this.wide && this.page === 'thread' && this.selected !== null
     const detail = TABS.includes(this.page) ? null : this._screenFor(this.page)
-    if (detail !== null) {
-      this._center.appendChild(detail.root)
-      detail.render()
-    } else {
-      this._center.appendChild(this._hint)
-    }
-
-    const side = this.wide && this.page === 'thread' && this.selected !== null
+    const tabs = TABS.includes(this.page) || split
+    const layout: [any, any[]][] = split
+      ? [
+          [this._left, [this._screenFor(this.tab).root, this._tabbar]],
+          [this._center, [detail === null ? this._hint : detail.root]],
+          [this._right, side ? [this._side.root] : []],
+          [this._stage, []]
+        ]
+      : [
+          [
+            this._stage,
+            tabs
+              ? [this._screenFor(this.page).root, this._tabbar]
+              : [this._screenFor(this.page).root]
+          ],
+          [this._left, []],
+          [this._center, []],
+          [this._right, []]
+        ]
+    this._place(layout)
     this._right.style = { width: 320, display: side ? 'flex' : 'none' }
-    if (side) {
-      this._right.appendChild(this._side.root)
-      this._side.render()
+
+    if (tabs) this._renderTabbar()
+    if (split) this._screenFor(this.tab).render()
+    if (detail !== null) detail.render()
+    else if (!split) this._screenFor(this.page).render()
+    if (side) this._side.render()
+  }
+
+  // Put each container's children in place, touching only those that differ.
+  _place(layout: [any, any[]][]): void {
+    const same = layout.every(
+      ([container, children]) =>
+        container.children.length === children.length &&
+        children.every((child, i) => container.children[i] === child)
+    )
+    if (same) return
+    for (const [container] of layout) {
+      for (const child of [...container.children]) detach(child)
+    }
+    for (const [container, children] of layout) {
+      for (const child of children) container.appendChild(child)
     }
   }
 
@@ -412,28 +499,18 @@ export default class Ui {
 
   // chats · contacts · radio, the current one lit, with unread on chats.
   _renderTabbar(): void {
-    clear(this._tabbar)
-    this._tabbar.style = { flexDirection: 'row', height: 56 }
     const unread = this.messenger.contacts.all().reduce((n, c) => n + this.messenger.unread(c), 0)
 
-    for (const tab of TABS) {
+    for (const { tab, bar, label } of this._tabs) {
       const on = this.tab === tab && (TABS.includes(this.page) || !this.compact)
-      const name = tab === 'chats' && unread > 0 ? 'chats · ' + unread : tab
-      this._tabbar.appendChild(
-        press(
-          view({ flex: 1, cursor: 'pointer' }, [
-            view({ height: 2, backgroundColor: on ? colors.accent : colors.line }),
-            view({ flex: 1, alignItems: 'center', justifyContent: 'center' }, [
-              text(name, {
-                color: on ? colors.accent : colors.muted,
-                fontSize: 12,
-                fontWeight: on ? 'bold' : 'normal'
-              })
-            ])
-          ]),
-          () => this.open(tab)
-        )
-      )
+      bar.style = { height: 2, backgroundColor: on ? colors.accent : colors.line }
+      label.text = tab === 'chats' && unread > 0 ? 'chats · ' + unread : tab
+      label.style = {
+        fontFamily: label.style.fontFamily,
+        color: on ? colors.accent : colors.muted,
+        fontSize: 12,
+        fontWeight: on ? 'bold' : 'normal'
+      }
     }
   }
 }
