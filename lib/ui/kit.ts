@@ -149,7 +149,8 @@ export function setSwipeBack(fn: () => void): void {
 // can crash the app.
 //
 // `onhold`, if given, runs when a finger rests on it, instead of the tap;
-// `onswipe`, when it's swiped to the left.
+// `onswipe`, when it's swiped to the left: it follows the finger, then
+// slides away, or back if let go short.
 export function press(
   node: any,
   onpress: () => void,
@@ -157,6 +158,8 @@ export function press(
   onswipe?: () => void
 ): any {
   const dim = (opacity: number) => (node.style = { ...node.style, opacity })
+  // Where a swiped row is, sideways.
+  const at = { x: 0 }
   gesture(node, {
     down: () => dim(0.5),
     cancel: () => dim(1),
@@ -170,14 +173,39 @@ export function press(
         dim(1)
         setTimeout(onhold, 0)
       }),
-    left:
-      onswipe &&
-      (() => {
-        dim(1)
-        setTimeout(onswipe, 0)
-      })
+    drag: onswipe && ((dx) => shift(node, at, dx)),
+    left: onswipe && (() => slide(node, at, -SLIDE, () => onswipe!())),
+    back: onswipe && (() => slide(node, at, 0))
   })
   return node
+}
+
+// How far a swiped row slides before it's gone, and how long it takes.
+const SLIDE = 420
+const FRAMES = 10
+
+// Moved sideways by `dx`, fading as it goes.
+function shift(node: any, at: { x: number }, dx: number): void {
+  at.x = dx
+  node.style = {
+    ...node.style,
+    transform: [{ translateX: dx }],
+    opacity: Math.max(0.2, 1 + dx / SLIDE)
+  }
+}
+
+// From where it is to `to`, easing out over a few frames, then `done`.
+function slide(node: any, at: { x: number }, to: number, done?: () => void): void {
+  const from = at.x
+  let frame = 0
+  const step = () => {
+    frame++
+    const t = 1 - (1 - frame / FRAMES) ** 3
+    shift(node, at, from + (to - from) * t)
+    if (frame < FRAMES) setTimeout(step, 16)
+    else if (done) setTimeout(done, 0)
+  }
+  step()
 }
 
 // Swipe right to go back, on a view that is otherwise inert: the empty space
@@ -195,10 +223,18 @@ function gesture(
     tap?: () => void
     hold?: () => void
     left?: () => void
+    // Swiping left: the finger's distance as it goes, and a let-go short.
+    drag?: (dx: number) => void
+    back?: () => void
   }
 ): void {
   let start: { x: number; y: number } | null = null
   let moved = false
+  // How far it's been dragged: a touch is reported where it is on the
+  // moved view, so this is added back to know where the finger is.
+  let dragged = 0
+  const where = (e: { x: number; pointerType?: string }) =>
+    e.x + (e.pointerType === 'touch' ? dragged : 0)
   let held: ReturnType<typeof setTimeout> | null = null
   const unhold = () => {
     if (held !== null) clearTimeout(held)
@@ -208,6 +244,7 @@ function gesture(
   node.on('pointerdown', (e: { x: number; y: number }) => {
     start = { x: e.x, y: e.y }
     moved = false
+    dragged = 0
     on.down?.()
     if (on.hold) {
       held = setTimeout(() => {
@@ -219,21 +256,28 @@ function gesture(
   })
   node.on('pointermove', (e: { x: number; y: number }) => {
     if (start === null) return
-    if (Math.abs(e.x - start.x) > SLOP || Math.abs(e.y - start.y) > SLOP) {
+    const dx = where(e) - start.x
+    if (Math.abs(dx) > SLOP || Math.abs(e.y - start.y) > SLOP) {
       if (!moved) on.cancel?.()
       moved = true
       unhold()
+    }
+    if (on.drag && dx < -SLOP && Math.abs(e.y - start.y) < -dx / 2) {
+      dragged = dx
+      on.drag(dx)
     }
   })
   node.on('pointercancel', () => {
     start = null
     unhold()
     on.cancel?.()
+    if (dragged !== 0) on.back?.()
+    dragged = 0
   })
   node.on('pointerup', (e: { x: number; y: number }) => {
     unhold()
     if (start === null) return
-    const dx = e.x - start.x
+    const dx = where(e) - start.x
     const dy = e.y - start.y
     start = null
     if (dx > SWIPE && Math.abs(dy) < dx / 2) {
@@ -242,9 +286,12 @@ function gesture(
       return
     }
     if (on.left && -dx > SWIPE && Math.abs(dy) < -dx / 2) {
+      dragged = 0
       on.left()
       return
     }
+    if (dragged !== 0) on.back?.()
+    dragged = 0
     if (!moved) on.tap?.()
   })
 }
