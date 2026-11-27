@@ -24,6 +24,8 @@
   <img src="docs/screenshots/phone-translate.png" width="250" alt="A Bulgarian channel shown in English, with a message sent in Bulgarian">
 </p>
 
+Full guide with pictures: **[the wiki](https://github.com/Casaide/ekho/wiki)**.
+
 ## What it does
 
 ekho is a messenger for people with a Meshtastic radio, such as the Seeed T1000-E. You talk to **people**, not networks: each person has one conversation, however the messages got there.
