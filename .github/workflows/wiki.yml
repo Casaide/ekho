@@ -21,11 +21,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Publish docs/wiki
         env:
           TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          git clone --depth 1 "https://x-access-token:$TOKEN@github.com/${{ github.repository }}.wiki.git" wiki
+          git clone --depth 1 "https://x-access-token:$TOKEN@github.com/$REPO.wiki.git" wiki
           rsync -a --delete --exclude .git docs/wiki/ wiki/
           cd wiki
           git config user.name 'github-actions[bot]'
