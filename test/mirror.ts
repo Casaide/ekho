@@ -225,3 +225,20 @@ test('a linked device joins and leaves channels through the phone', async (t) =>
     ['#varna', false]
   ])
 })
+
+test('a linked device asks the phone who a nick is, and hears back', async (t) => {
+  const { stream, outbox, mirror } = await linked()
+  const answers: unknown[] = []
+  mirror.on('whois', (nick: string, info: { realname: string } | null) =>
+    answers.push([nick, info?.realname])
+  )
+
+  await outbox.append({ type: 'whois', nick: 'mirco' })
+  await settle()
+  t.equal(stream.lines.at(-1), 'WHOIS mirco', 'asked of the phone’s IRC')
+
+  stream.serve(':s 311 dom mirco ~m h * :Mirco R\r\n:s 318 dom mirco :End\r\n')
+  await settle()
+  await mirror.update()
+  t.deepStrictEqual(answers, [['mirco', 'Mirco R']])
+})

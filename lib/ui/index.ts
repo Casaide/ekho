@@ -7,6 +7,7 @@ import Link from '../link.ts'
 import Presence from '../presence.ts'
 import type Previews from '../previews.ts'
 import type Translator from '../translator.ts'
+import type { Whois } from '../irc.ts'
 import {
   colors,
   view,
@@ -87,7 +88,8 @@ const COMPACT = 700
 // Wide enough for the contact beside the conversation.
 const THREE_PANES = 1100
 
-// Events: select (contact | null), when the open conversation changes; clear
+// Events: select (contact | null), when the open conversation changes; whois
+// (nick, info), a linked device's answer from the phone; clear
 // (contact), when one is swiped off the chats list.
 //
 // The whole app view, after the mockups. On a phone: one screen at a time,
@@ -434,6 +436,31 @@ export default class Ui extends EventEmitter {
   setRadioInfo(info: RadioInfo): void {
     this.radioInfo = info
     this.render()
+  }
+
+  // Who a nick is, asked of IRC: this device's, or the phone's when linked.
+  // False when there's no IRC to ask; `done` gets the answer.
+  whois(nick: string, done: (info: Whois | null) => void): boolean {
+    const { messenger } = this
+    const irc = messenger.irc
+    const linked = messenger.relay !== null
+    if (!linked && (irc === null || !irc.ready)) return false
+    const from: any = linked ? this : irc
+    const wanted = nick.toLowerCase()
+    const answer = (got: string, info: Whois | null) => {
+      if (got.toLowerCase() !== wanted) return
+      from.off('whois', answer)
+      done(info)
+    }
+    from.on('whois', answer)
+    if (linked) messenger.relay!({ type: 'whois', nick })
+    else irc!.whois(nick)
+    return true
+  }
+
+  // The server's channels, as it last listed them.
+  get serverChannels(): Channel[] {
+    return this._setup.channels ?? []
   }
 
   setChannels(list: Channel[] | null, joined: string[], main: string): void {

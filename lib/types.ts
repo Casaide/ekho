@@ -97,10 +97,20 @@ export interface Message {
 
 // What a linked device asks of the one holding the radio and IRC.
 export type Command =
-  | { type: 'send'; local: number; contact: string; text: string; via: Via | null }
+  | {
+      type: 'send'
+      local: number
+      contact: string
+      text: string
+      via: Via | null
+      // Sent as `/me`.
+      action?: boolean
+    }
   | { type: 'retry'; ref: number }
   | { type: 'irc'; ref: number }
   // The whole state again, for a device that may have missed some of it.
   | { type: 'state' }
   // Join or leave an IRC channel.
   | { type: 'channel'; name: string; join: boolean }
+  // Who a nick is, asked of the phone's IRC; answered in its feed.
+  | { type: 'whois'; nick: string }

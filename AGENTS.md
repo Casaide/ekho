@@ -77,6 +77,7 @@ Don't relitigate these without the user.
 ## Conventions
 
 - **One open pull request at a time.** Add each change to it rather than opening another: every merge to `main` that changes the app makes a release, and a release per commit is noise. If it's merged while work goes on, the next changes start the next one.
+- **Every feature updates the wiki.** The wiki's pages live in `docs/wiki/` and are published to the GitHub wiki on merge (`.github/workflows/wiki.yml`). A change people will notice updates its page in the same PR, with a screenshot from the Screens workflow where it helps; the README links to the wiki rather than describing everything.
 - **Conventional Commits** for commit messages (`feat(irc): ...`, `fix(ci): ...`, `docs: ...`) and branch names (`feat/contacts-ui`, `fix/ble-reconnect`).
 - **Dependencies match npm.** Take versions from `npm view <name> version`, never from a clone or memory, and declare peer dependencies of what we use (bare-meshtastic needs `bare-logger`). The APK workflow prints each declared range next to the latest published version.
 - **Android back** comes from `bare-navigation-android` (Holepunch's): it needs minSdk 33 and `enableOnBackInvokedCallback` in the manifest, and it's Android only, so `app.ts` imports it only there and the macOS build defers it. `Ui.goBack()` decides; false lets Android leave the app.

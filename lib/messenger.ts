@@ -349,7 +349,14 @@ export default class Messenger extends EventEmitter {
     this._push(contact, msg)
 
     if (this.relay !== null) {
-      this.relay({ type: 'send', local: msg.id, contact: contact.id, text, via: opts.via ?? null })
+      this.relay({
+        type: 'send',
+        local: msg.id,
+        contact: contact.id,
+        text,
+        via: opts.via ?? null,
+        ...(opts.action ? { action: true } : {})
+      })
     } else {
       this._dispatch(contact, msg)
     }

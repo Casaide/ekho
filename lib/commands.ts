@@ -13,6 +13,45 @@ export type Command =
 
 export const USAGE = '/whois nick · /me does · /msg nick text · /join #channel · /part'
 
+// The commands, with what each does, for completing them.
+export const COMMANDS: [string, string][] = [
+  ['/whois', 'who a nick is'],
+  ['/me', 'an action'],
+  ['/msg', 'message a nick'],
+  ['/join', 'join a channel'],
+  ['/part', 'leave a channel']
+]
+
+// What could complete a line being typed: commands while the first word is
+// typed, then a nick for /whois and /msg or a channel for /join and /part,
+// from those given. Each is the whole line it would make.
+export function completions(
+  input: string,
+  opts: { nicks?: string[]; channels?: string[] } = {}
+): string[] {
+  if (!input.startsWith('/') || input.startsWith('//')) return []
+  const space = input.indexOf(' ')
+  if (space === -1) {
+    const typed = input.toLowerCase()
+    return COMMANDS.map(([c]) => c).filter((c) => c.startsWith(typed) && c !== typed)
+  }
+  const name = input.slice(0, space).toLowerCase()
+  const rest = input.slice(space + 1)
+  // Only the first argument completes.
+  if (rest.includes(' ')) return []
+  const pool =
+    name === '/whois' || name === '/msg' || name === '/wi' || name === '/query'
+      ? (opts.nicks ?? [])
+      : name === '/join' || name === '/part' || name === '/j' || name === '/leave'
+        ? (opts.channels ?? [])
+        : []
+  const typed = rest.toLowerCase()
+  return pool
+    .filter((p) => p.toLowerCase().startsWith(typed) && p.toLowerCase() !== typed)
+    .slice(0, 6)
+    .map((p) => input.slice(0, space) + ' ' + p)
+}
+
 // Null when it's a message, not a command.
 export function command(input: string): Command | null {
   const line = input.trim()

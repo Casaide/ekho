@@ -1,5 +1,7 @@
 #!/bin/sh
-# Build ekho for macOS (Apple Silicon and Intel in one app) and zip it.
+# Build ekho for macOS (Apple Silicon) and zip it. Apple Silicon only: QVAC's
+# runtime for translation comes as one package per processor, and a build for
+# both halves would need each in both.
 # Run on a Mac, after npm install. Unsigned builds get an ad-hoc signature,
 # so they run, with Gatekeeper asking once.
 set -e
@@ -17,10 +19,8 @@ iconutil -c icns "$out/icon.iconset" -o "$out/ekho.icns"
 
 npx bare-build app.ts \
   --host darwin-arm64 \
-  --host darwin-x64 \
   --runtime bare-native/runtime \
   --defer bare-navigation-android \
-  --defer @qvac/translation-nmtcpp \
   --defer bare-notifications-android \
   --defer bare-foreground-service-android \
   --defer bare-open-url-android \

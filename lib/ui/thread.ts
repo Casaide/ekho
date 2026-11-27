@@ -5,9 +5,9 @@ import { displayName } from '../contacts.ts'
 import { parts, links, host, media, lines } from '../links.ts'
 import type { Media } from '../links.ts'
 import { mentions } from '../mentions.ts'
-import { command, literal, USAGE } from '../commands.ts'
+import { command, literal, completions, COMMANDS, USAGE } from '../commands.ts'
 import type { Command } from '../commands.ts'
-import type { Whois } from '../irc.ts'
+import { whoisText } from './whois.ts'
 import type { Mention } from '../mentions.ts'
 import {
   colors,
@@ -130,6 +130,8 @@ export default class Thread {
   _sendBox: any
   _sendLabel: any
   _typing: ReturnType<typeof setTimeout> | null
+  // While a command is typed: what could complete it, above the box.
+  _complete: any
   // What a command said, above the box, for you only; tapped away.
   _note: any
   _noteText: any
@@ -180,6 +182,7 @@ export default class Thread {
     this._inBulgarian = false
     this._toBg = view({})
     this._preview = text('', { color: colors.text, fontSize: 13, display: 'none' })
+    this._complete = view({ flexDirection: 'row', flexWrap: 'wrap', gap: 6, display: 'none' })
     this._noteText = text('', { color: colors.text, fontSize: 12 })
     this._note = press(
       view(
@@ -229,6 +232,7 @@ export default class Thread {
       }
       this._renderCount()
       this._grow()
+      this._renderCompletions()
       this._translateSoon()
     })
     this._input.on('layout', (frame: { width: number }) => {
@@ -292,6 +296,7 @@ export default class Thread {
           this._count
         ]),
         this._replying,
+        this._complete,
         this._note,
         this._preview,
         view(
@@ -1017,6 +1022,7 @@ export default class Thread {
   renderCompose(): void {
     // Emptied by sending, which says nothing: back to one line.
     this._grow()
+    this._renderCompletions()
     const tr = this.ui.toBulgarian
     clear(this._toBg)
     if (tr !== null) {
@@ -1107,14 +1113,58 @@ export default class Thread {
       this._perLine === 0 || !this._input.multiline
         ? 1
         : Math.min(MAX_LINES, Math.max(1, Math.ceil(value.length / this._perLine)))
+    // A command reads as one: in the IRC colour.
+    const typing = this._input.value
+    const asCommand = typing.startsWith('/') && !typing.startsWith('//')
     this._input.style = {
       fontFamily: font,
-      color: colors.text,
+      color: asCommand ? colors.irc : colors.text,
       fontSize: INPUT_SIZE,
       flex: 1,
       paddingHorizontal: INPUT_PAD,
       paddingVertical: INPUT_PAD,
       height: lines * INPUT_LINE + 2 * INPUT_PAD
+    }
+  }
+
+  // Chips that complete the command being typed: tap one to take it.
+  _renderCompletions(): void {
+    clear(this._complete)
+    const typed = this._input.value
+    const contact = this.ui.selected
+    const { presence, messenger } = this.ui
+    const here =
+      contact !== null && contact.channel ? presence.inChannel(contact.id) : presence.people()
+    const nicks = here.flatMap((p) => p.nicks.map((n) => n.nick))
+    const channels = [
+      ...messenger.contacts
+        .all()
+        .filter((c) => c.channel)
+        .map((c) => c.id),
+      ...this.ui.serverChannels.map((c) => c.name)
+    ]
+    const options = completions(typed, {
+      nicks: [...new Set(nicks)],
+      channels: [...new Set(channels)]
+    })
+    this._complete.style = {
+      ...this._complete.style,
+      display: options.length > 0 ? 'flex' : 'none'
+    }
+    for (const option of options) {
+      const word = option.slice(option.lastIndexOf(' ') + 1)
+      const about = typed.includes(' ') ? '' : (COMMANDS.find(([c]) => c === option)?.[1] ?? '')
+      this._complete.appendChild(
+        button(
+          about === '' ? word : word + ' · ' + about,
+          () => {
+            this._input.value = option + ' '
+            this._input.focus()
+            this.renderCompose()
+          },
+          { ...chip(colors.irc), fontSize: 11, paddingVertical: 3, paddingHorizontal: 8 }
+        )
+      )
     }
   }
 
@@ -1167,17 +1217,10 @@ export default class Thread {
       return done()
     }
 
-    // whois: asked of the server, answered here.
-    const irc = messenger.irc
-    if (irc === null || !irc.ready) return this._say("whois needs IRC, which isn't connected")
-    const wanted = asked.nick.toLowerCase()
-    const answer = (nick: string, info: Whois | null) => {
-      if (nick.toLowerCase() !== wanted) return
-      irc.off('whois', answer)
-      this._say(whois(asked.nick, info))
-    }
-    irc.on('whois', answer)
-    irc.whois(asked.nick)
+    const asking = this.ui.whois(asked.nick, (info) =>
+      this._say(whoisText(asked.nick, info) + '\ntap to close')
+    )
+    if (!asking) return this._say("whois needs IRC, which isn't connected")
     this._say('whois ' + asked.nick + '…')
     done()
   }
@@ -1267,23 +1310,4 @@ function page(url: string, kind: Media): string {
     kind +
     '>'
   return Bare.platform === 'android' ? encodeURIComponent(html) : html
-}
-
-// A whois answer, a line per thing known.
-function whois(nick: string, info: Whois | null): string {
-  if (info === null) return nick + ': no such nick'
-  const lines = [info.nick + (info.realname ? ' (' + info.realname + ')' : '')]
-  if (info.user !== null) lines.push(info.user + '@' + info.host)
-  if (info.account !== null) lines.push('logged in as ' + info.account)
-  if (info.channels.length > 0) lines.push('in ' + info.channels.join(' '))
-  if (info.idle !== null) lines.push('idle ' + idle(info.idle))
-  if (info.away !== null) lines.push('away: ' + info.away)
-  if (info.server !== null) lines.push('on ' + info.server)
-  return lines.join('\n') + '\ntap to close'
-}
-
-function idle(seconds: number): string {
-  if (seconds < 60) return seconds + 's'
-  if (seconds < 3600) return Math.floor(seconds / 60) + 'm'
-  return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm'
 }

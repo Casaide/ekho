@@ -16,7 +16,8 @@ export interface Log<T> {
 // the user sends goes into this device's outbox for the hub to do.
 //
 // Events: applied (index), once the feed has been applied that far; synced,
-// once a whole state from the hub has been applied; around (around), with
+// once a whole state from the hub has been applied; whois (nick, info), an
+// answer the hub asked its IRC for; around (around), with
 // what the hub sees around it (lib/hub.ts); newer,
 // when the feed comes from a newer ekho, and applying stops there.
 export default class Mirror extends EventEmitter {
@@ -96,6 +97,8 @@ export default class Mirror extends EventEmitter {
     } else if (entry.type === 'around') {
       messenger.setRadioChannels(entry.around.radioChannels)
       this.emit('around', entry.around)
+    } else if (entry.type === 'whois') {
+      this.emit('whois', entry.nick, entry.info)
     } else {
       messenger.setRemote(entry.status)
     }
