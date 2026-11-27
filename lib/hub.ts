@@ -4,11 +4,13 @@ import type { Status } from './messenger.ts'
 import type { Command, Contact, Message } from './types.ts'
 import type { Log } from './mirror.ts'
 import type { Seen } from './presence.ts'
+import type { Whois } from './irc.ts'
 
 // The feed's format: entries carry it, so a device reading a feed from a
 // newer ekho stops instead of guessing at what it doesn't know.
 // 2 added `around`, which a device reading format 1 would take for a status.
-export const FORMAT = 2
+// 3 added `whois`.
+export const FORMAT = 3
 
 // What the phone sees around it, beyond the conversations: its radio's
 // channels, the server's channel list, who it is, the nodes it knows with
@@ -29,6 +31,7 @@ export type Entry = { format?: number; next?: number } & (
   | { type: 'contacts'; contacts: Contact[] }
   | { type: 'status'; status: Status }
   | { type: 'around'; around: Around }
+  | { type: 'whois'; nick: string; info: Whois | null }
 )
 
 // On the device holding the radio and IRC: everything the Messenger does goes
@@ -178,12 +181,16 @@ export default class Hub extends EventEmitter {
       this.emit('channel', command.name, command.join)
       return
     }
+    if (command.type === 'whois') return this._whois(command.nick)
     const { messenger } = this
     if (command.type === 'send') {
       const contact = messenger.contacts.get(command.contact)
       if (contact === null) return
       this._local = command.local
-      messenger.send(contact, command.text, command.via === null ? {} : { via: command.via })
+      messenger.send(contact, command.text, {
+        ...(command.via === null ? {} : { via: command.via }),
+        ...(command.action === true ? { action: true } : {})
+      })
       this._local = null
       return
     }
@@ -213,6 +220,20 @@ export default class Hub extends EventEmitter {
     this._append({ type: 'status', status })
   }
 
+  // Asked of our IRC, the answer into the feed; nothing without IRC.
+  _whois(nick: string): void {
+    const irc = this.messenger.irc
+    if (irc === null || !irc.ready) return this._append({ type: 'whois', nick, info: null })
+    const wanted = nick.toLowerCase()
+    const answer = (got: string, info: Whois | null) => {
+      if (got.toLowerCase() !== wanted) return
+      irc.off('whois', answer)
+      this._append({ type: 'whois', nick, info })
+    }
+    irc.on('whois', answer)
+    irc.whois(nick)
+  }
+
   _appendAround(): void {
     const json = JSON.stringify(this._around)
     if (json === this._aroundJson) return
@@ -236,8 +257,12 @@ function valid(command: any): boolean {
       typeof command.contact === 'string' &&
       typeof command.text === 'string' &&
       command.text.length <= 1000 &&
-      (command.via === null || command.via === 'lora' || command.via === 'irc')
+      (command.via === null || command.via === 'lora' || command.via === 'irc') &&
+      (command.action === undefined || typeof command.action === 'boolean')
     )
+  }
+  if (command?.type === 'whois') {
+    return typeof command.nick === 'string' && /^[^\s,]{1,30}$/.test(command.nick)
   }
   if (command?.type === 'retry' || command?.type === 'irc') return Number.isInteger(command.ref)
   if (command?.type === 'state') return true

@@ -87,7 +87,8 @@ const COMPACT = 700
 // Wide enough for the contact beside the conversation.
 const THREE_PANES = 1100
 
-// Events: select (contact | null), when the open conversation changes; clear
+// Events: select (contact | null), when the open conversation changes; whois
+// (nick, info), a linked device's answer from the phone; clear
 // (contact), when one is swiped off the chats list.
 //
 // The whole app view, after the mockups. On a phone: one screen at a time,

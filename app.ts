@@ -170,9 +170,9 @@ const translator = translatorFor('bg', 'en', {
 const toBulgarian = translatorFor('en', 'bg', {
   kept: new Kept<string>(linker.devices.store.get({ name: 'translations-en-bg' }))
 })
-// Android only for now: on the Mac, QVAC's runtime picks one architecture
-// for both halves of the universal build, so it's left out of it.
-const translates = Bare.platform === 'android' || demo !== null
+// On Android and Apple Silicon Macs (the Mac build is Apple Silicon only, as
+// QVAC's runtime comes per processor).
+const translates = Bare.platform === 'android' || Bare.platform === 'darwin' || demo !== null
 if (translates && (translate || demo !== null)) translator.start()
 
 // Save a second after the last change, not on every message.
@@ -571,6 +571,8 @@ linker.on('around', (around: Around) => {
     .map((c) => c.id)
   ui.setChannels(serverChannels, joined, IRC_CHANNEL)
 })
+// As the Mac: who a nick is, asked through the phone's IRC.
+linker.on('whois', (nick: string, info: unknown) => ui.emit('whois', nick, info))
 // As the phone: a linked Mac joined or left a channel.
 linker.on('channel', (name: string, join: boolean) => {
   if (name.toLowerCase() === IRC_CHANNEL || channels.includes(name) === join) return

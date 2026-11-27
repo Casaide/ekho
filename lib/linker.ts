@@ -180,6 +180,7 @@ export default class Linker extends EventEmitter {
       this.emit('change')
     })
     mirror.on('around', (around: Around) => this.emit('around', around))
+    mirror.on('whois', (nick: string, info: unknown) => this.emit('whois', nick, info))
     mirror.on('applied', (applied: number) => {
       link.applied = applied
       this.emit('change')
