@@ -325,13 +325,18 @@ export default class Messenger extends EventEmitter {
     return this._threads.get(contact.id) ?? []
   }
 
-  // `wrote`: what you typed, when `text` is its translation.
-  send(contact: Contact, text: string, opts: { via?: Via; wrote?: string } = {}): Message {
+  // `wrote`: what you typed, when `text` is its translation. `action`: sent
+  // as `/me` does, `* nick text`, an IRC action where IRC carries it.
+  send(
+    contact: Contact,
+    text: string,
+    opts: { via?: Via; wrote?: string; action?: boolean } = {}
+  ): Message {
     const msg: Message = {
       id: randomId(),
       contact: contact.id,
       from: null,
-      text,
+      text: opts.action ? '* ' + (this.irc?.nick ?? 'me') + ' ' + text : text,
       via: opts.via ?? this.routeFor(contact),
       state: 'sending',
       reason: null,
@@ -339,6 +344,7 @@ export default class Messenger extends EventEmitter {
       time: this.now()
     }
     if (opts.wrote !== undefined) msg.wrote = opts.wrote
+    if (opts.action) msg.action = text
 
     this._push(contact, msg)
 
@@ -484,7 +490,8 @@ export default class Messenger extends EventEmitter {
     if (contact.nicks.length === 0) return this._fail(msg, 'NO_NICK')
 
     msg.address = contact.nicks[0]
-    this.irc.privmsg(msg.address, msg.text)
+    if (msg.action !== undefined) this.irc.action(msg.address, msg.action)
+    else this.irc.privmsg(msg.address, msg.text)
     msg.state = 'sent'
   }
 

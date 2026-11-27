@@ -515,3 +515,10 @@ test('a message sent translated keeps what was typed', (t) => {
   t.equal(msg.text, 'тръгвам в 9')
   t.equal(msg.wrote, 'leaving at 9')
 })
+
+test('a /me goes over IRC as an action, and reads as * nick does', (t) => {
+  const { stream, messenger, ivan } = setup()
+  const msg = messenger.send(ivan, 'waves', { action: true, via: 'irc' })
+  t.equal(msg.text, '* dom waves')
+  t.equal(stream.lines.at(-1), 'PRIVMSG ivanp :\x01ACTION waves\x01')
+})

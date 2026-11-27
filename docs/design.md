@@ -134,6 +134,10 @@ Translating runs on a path of its own, apart from drawing: showing a message onl
 
 Sent this way, your message shows what you typed, marked "sent in bg", with the Bulgarian that went out in its details (`Message.wrote` keeps what was typed). What you write can go out in Bulgarian: the `→ bg` switch above the box (Mozilla's English→Bulgarian model, a second download when first switched on) shows the Bulgarian above the box as you type, turns the send button amber as "bg ➤", and sends the Bulgarian once it's shown. The byte counter counts the Bulgarian, which takes two bytes a letter.
 
+## IRC commands
+
+A line in the message box starting with `/` is a command, not a message, so nothing typed for IRC goes out over the air by mistake (`lib/commands.ts`). `/whois nick` asks the server and shows the answer above the box, for you only (who they are, their host, account, channels, idle time). `/me does` sends an action: an IRC `ACTION` where IRC carries it, read as `* nick does`; over LoRa it goes as that text. `/msg nick text` opens a conversation with the nick and sends over IRC. `/join #channel` and `/part [#channel]` join and leave as the channels tab does; the mesh channel can't be left. Anything else starting with `/` is named as unsupported and not sent; `//text` sends `/text`.
+
 ## Mentions
 
 Each network writes a mention its own way, and the bridge passes them on as text. MeshCore writes `@[Root 👾]`. Meshtastic's Android app writes `@!0e8666a6`, the node's ID, so it survives a rename. IRC has none: a nick in the line is the convention. ekho shows both written forms as `@name` in bold (a node's ID by the node's name, when the radio knows it), and in another colour when the mention is us: our nick, our radio's names, or our node's ID (`lib/mentions.ts`). A channel line mentioning us by any of these notifies. Sending mentions, each in the form its path expects, is not built yet.
