@@ -7,7 +7,7 @@ import type { Media } from '../links.ts'
 import { mentions } from '../mentions.ts'
 import { command, literal, completions, COMMANDS, USAGE } from '../commands.ts'
 import type { Command } from '../commands.ts'
-import type { Whois } from '../irc.ts'
+import { whoisText } from './whois.ts'
 import type { Mention } from '../mentions.ts'
 import {
   colors,
@@ -1217,23 +1217,10 @@ export default class Thread {
       return done()
     }
 
-    // whois: asked of the server, answered here. Linked, the phone asks its
-    // IRC and the answer comes back in its feed.
-    const irc = messenger.irc
-    const linked = messenger.relay !== null
-    if (!linked && (irc === null || !irc.ready)) {
-      return this._say("whois needs IRC, which isn't connected")
-    }
-    const from = linked ? this.ui : irc!
-    const wanted = asked.nick.toLowerCase()
-    const answer = (nick: string, info: Whois | null) => {
-      if (nick.toLowerCase() !== wanted) return
-      from.off('whois', answer)
-      this._say(whois(asked.nick, info))
-    }
-    from.on('whois', answer)
-    if (linked) messenger.relay!({ type: 'whois', nick: asked.nick })
-    else irc!.whois(asked.nick)
+    const asking = this.ui.whois(asked.nick, (info) =>
+      this._say(whoisText(asked.nick, info) + '\ntap to close')
+    )
+    if (!asking) return this._say("whois needs IRC, which isn't connected")
     this._say('whois ' + asked.nick + '…')
     done()
   }
@@ -1323,23 +1310,4 @@ function page(url: string, kind: Media): string {
     kind +
     '>'
   return Bare.platform === 'android' ? encodeURIComponent(html) : html
-}
-
-// A whois answer, a line per thing known.
-function whois(nick: string, info: Whois | null): string {
-  if (info === null) return nick + ': no such nick, or no IRC to ask'
-  const lines = [info.nick + (info.realname ? ' (' + info.realname + ')' : '')]
-  if (info.user !== null) lines.push(info.user + '@' + info.host)
-  if (info.account !== null) lines.push('logged in as ' + info.account)
-  if (info.channels.length > 0) lines.push('in ' + info.channels.join(' '))
-  if (info.idle !== null) lines.push('idle ' + idle(info.idle))
-  if (info.away !== null) lines.push('away: ' + info.away)
-  if (info.server !== null) lines.push('on ' + info.server)
-  return lines.join('\n') + '\ntap to close'
-}
-
-function idle(seconds: number): string {
-  if (seconds < 60) return seconds + 's'
-  if (seconds < 3600) return Math.floor(seconds / 60) + 'm'
-  return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm'
 }

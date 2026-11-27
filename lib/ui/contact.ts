@@ -2,6 +2,7 @@ import type Ui from './index.ts'
 import { displayName } from '../contacts.ts'
 import type { Contact } from '../types.ts'
 import { personRow, contactOf } from './people.ts'
+import { whoisText } from './whois.ts'
 import {
   colors,
   view,
@@ -38,11 +39,14 @@ export default class ContactScreen {
   _link: any
   _editButton: any
   _editing: boolean
+  // Whois answers asked from here, by nick: shown under their IRC rows.
+  _whois: Map<string, string>
 
   // `side`: shown beside a conversation on a desktop, closed with ×.
   constructor(ui: Ui, opts: { side?: boolean } = {}) {
     this.ui = ui
     this._editing = false
+    this._whois = new Map()
 
     this._back = opts.side ? back(() => this.ui.toggleInfo(), '×') : back(() => this.ui.back())
     this._where = text('~/contacts/', { color: colors.muted, fontSize: 15, fontWeight: 'bold' })
@@ -83,6 +87,18 @@ export default class ContactScreen {
       rule(),
       this._body
     ])
+  }
+
+  _ask(nick: string): void {
+    const asking = this.ui.whois(nick, (info) => {
+      this._whois.set(nick, whoisText(nick, info))
+      this.render()
+    })
+    this._whois.set(
+      nick,
+      asking ? 'asking IRC who ' + nick + ' is…' : "whois needs IRC, which isn't connected"
+    )
+    this.render()
   }
 
   render(): void {
@@ -179,6 +195,37 @@ export default class ContactScreen {
       }
       for (const nick of contact.nicks) {
         content.appendChild(row('irc', nick, this.ui.online(nick) ? 'online' : '', colors.irc))
+      }
+      // Who each nick is, asked of IRC: a tap away, the answer under it.
+      if (contact.nicks.length > 0) {
+        const asks = view({ flexDirection: 'row', flexWrap: 'wrap', gap: 8 })
+        for (const nick of contact.nicks) {
+          asks.appendChild(
+            button('whois ' + nick, () => this._ask(nick), {
+              ...chip(colors.irc),
+              fontSize: 11,
+              paddingVertical: 3,
+              paddingHorizontal: 8
+            })
+          )
+        }
+        content.appendChild(asks)
+        for (const nick of contact.nicks) {
+          const said = this._whois.get(nick)
+          if (said === undefined) continue
+          content.appendChild(
+            view(
+              {
+                padding: 10,
+                borderWidth: 1,
+                borderColor: colors.line,
+                borderRadius: 6,
+                backgroundColor: colors.panel
+              },
+              [text(said, { color: colors.text, fontSize: 12 })]
+            )
+          )
+        }
       }
       content.appendChild(this._link)
 
