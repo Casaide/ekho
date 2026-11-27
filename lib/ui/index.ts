@@ -437,6 +437,11 @@ export default class Ui extends EventEmitter {
     this.render()
   }
 
+  // The server's channels, as it last listed them.
+  get serverChannels(): Channel[] {
+    return this._setup.channels ?? []
+  }
+
   setChannels(list: Channel[] | null, joined: string[], main: string): void {
     this._setup.channels = list
     this._setup.joined = joined

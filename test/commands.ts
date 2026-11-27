@@ -1,5 +1,5 @@
 import tap from 'bare-tap'
-import { command, literal } from '../lib/commands.ts'
+import { command, completions, literal } from '../lib/commands.ts'
 
 const { test } = tap
 
@@ -27,4 +27,14 @@ test('anything else is a message, and // sends a slash', (t) => {
   t.equal(command('//shrug'), null)
   t.equal(literal('//shrug'), '/shrug')
   t.equal(literal('hello'), 'hello')
+})
+
+test('a command completes: its name, then a nick or a channel', (t) => {
+  const opts = { nicks: ['mirco', 'Dom|mt', 'mira'], channels: ['#sofia', '#bulgaria'] }
+  t.deepStrictEqual(completions('/', opts), ['/whois', '/me', '/msg', '/join', '/part'])
+  t.deepStrictEqual(completions('/m', opts), ['/me', '/msg'])
+  t.deepStrictEqual(completions('/whois mi', opts), ['/whois mirco', '/whois mira'])
+  t.deepStrictEqual(completions('/join #s', opts), ['/join #sofia'])
+  t.deepStrictEqual(completions('/msg mirco hi', opts), [], 'only the first word after it')
+  t.deepStrictEqual(completions('hello', opts), [])
 })

@@ -136,7 +136,7 @@ Sent this way, your message shows what you typed, marked "sent in bg", with the 
 
 ## IRC commands
 
-A line in the message box starting with `/` is a command, not a message, so nothing typed for IRC goes out over the air by mistake (`lib/commands.ts`). `/whois nick` asks the server and shows the answer above the box, for you only (who they are, their host, account, channels, idle time). `/me does` sends an action: an IRC `ACTION` where IRC carries it, read as `* nick does`; over LoRa it goes as that text. `/msg nick text` opens a conversation with the nick and sends over IRC. `/join #channel` and `/part [#channel]` join and leave as the channels tab does; the mesh channel can't be left. Anything else starting with `/` is named as unsupported and not sent; `//text` sends `/text`.
+A line in the message box starting with `/` is a command, not a message, so nothing typed for IRC goes out over the air by mistake (`lib/commands.ts`). `/whois nick` asks the server and shows the answer above the box, for you only (who they are, their host, account, channels, idle time). `/me does` sends an action: an IRC `ACTION` where IRC carries it, read as `* nick does`; over LoRa it goes as that text. `/msg nick text` opens a conversation with the nick and sends over IRC. `/join #channel` and `/part [#channel]` join and leave as the channels tab does; the mesh channel can't be left. Anything else starting with `/` is named as unsupported and not sent; `//text` sends `/text`. While a command is typed it shows in the IRC colour, with chips above the box to complete it: the command names, then a nick (people in the channel, or everyone known) or a channel.
 
 ## Mentions
 
