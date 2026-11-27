@@ -245,3 +245,52 @@ test('a probe passes on any answer, and drops a connection that gives none', asy
   t.equal(destroyed!.message, 'the server stopped answering')
   irc.quit()
 })
+
+test('whois gathers its answer, and says when there is no such nick', (t) => {
+  const { stream, irc } = client()
+  const answers: unknown[] = []
+  irc.on('whois', (nick: string, info: unknown) => answers.push([nick, info]))
+
+  irc.whois('mirco')
+  t.equal(stream.lines.at(-1), 'WHOIS mirco')
+  stream.serve(':s 311 dom mirco ~m 64a18efa92.irc * :Mirco R\r\n')
+  stream.serve(':s 312 dom mirco irc.motaba.net :Sofia\r\n')
+  stream.serve(':s 319 dom mirco :@#bulgaria #sofia\r\n')
+  stream.serve(':s 330 dom mirco mirco :is logged in as\r\n')
+  stream.serve(':s 317 dom mirco 42 1764200000 :seconds idle\r\n')
+  stream.serve(':s 318 dom mirco :End of /WHOIS list.\r\n')
+
+  irc.whois('nobody')
+  stream.serve(':s 401 dom nobody :No such nick/channel\r\n')
+  stream.serve(':s 318 dom nobody :End of /WHOIS list.\r\n')
+
+  t.deepStrictEqual(answers, [
+    [
+      'mirco',
+      {
+        nick: 'mirco',
+        user: '~m',
+        host: '64a18efa92.irc',
+        realname: 'Mirco R',
+        server: 'irc.motaba.net',
+        account: 'mirco',
+        channels: ['@#bulgaria', '#sofia'],
+        idle: 42,
+        away: null
+      }
+    ],
+    ['nobody', null]
+  ])
+})
+
+test('an action goes out as one, and comes in as * nick does', (t) => {
+  const { stream, irc } = client()
+  const got: string[] = []
+  irc.on('message', (m: { text: string }) => got.push(m.text))
+
+  irc.action('#bulgaria', 'waves')
+  t.equal(stream.lines.at(-1), 'PRIVMSG #bulgaria :\x01ACTION waves\x01')
+
+  stream.serve(':mirco!m@h PRIVMSG #bulgaria :\x01ACTION waves back\x01\r\n')
+  t.deepStrictEqual(got, ['* mirco waves back'])
+})

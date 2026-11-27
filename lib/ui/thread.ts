@@ -5,6 +5,9 @@ import { displayName } from '../contacts.ts'
 import { parts, links, host, media, lines } from '../links.ts'
 import type { Media } from '../links.ts'
 import { mentions } from '../mentions.ts'
+import { command, literal, USAGE } from '../commands.ts'
+import type { Command } from '../commands.ts'
+import type { Whois } from '../irc.ts'
 import type { Mention } from '../mentions.ts'
 import {
   colors,
@@ -127,6 +130,9 @@ export default class Thread {
   _sendBox: any
   _sendLabel: any
   _typing: ReturnType<typeof setTimeout> | null
+  // What a command said, above the box, for you only; tapped away.
+  _note: any
+  _noteText: any
 
   constructor(ui: Ui) {
     this.ui = ui
@@ -174,6 +180,21 @@ export default class Thread {
     this._inBulgarian = false
     this._toBg = view({})
     this._preview = text('', { color: colors.text, fontSize: 13, display: 'none' })
+    this._noteText = text('', { color: colors.text, fontSize: 12 })
+    this._note = press(
+      view(
+        {
+          display: 'none',
+          padding: 8,
+          borderWidth: 1,
+          borderColor: colors.line,
+          borderRadius: 6,
+          backgroundColor: colors.panel
+        },
+        [this._noteText]
+      ),
+      () => this._say(null)
+    )
     this._sendLabel = text('➤', { color: colors.ground, fontSize: 16, fontWeight: 'bold' })
     this._sendBox = view({}, [this._sendLabel])
     this._typing = null
@@ -271,6 +292,7 @@ export default class Thread {
           this._count
         ]),
         this._replying,
+        this._note,
         this._preview,
         view(
           {
@@ -1062,7 +1084,7 @@ export default class Thread {
   // What goes out: what's typed, or its Bulgarian; null while that's on
   // its way.
   _outgoing(): string | null {
-    const value = this._input.value.trim()
+    const value = literal(this._input.value)
     if (!this._inBulgarian || this.ui.toBulgarian === null) return value
     return this.ui.toBulgarian.translation(value)
   }
@@ -1096,16 +1118,83 @@ export default class Thread {
     }
   }
 
+  // A note above the box, or none.
+  _say(note: string | null): void {
+    this._noteText.text = note ?? ''
+    this._note.style = { ...this._note.style, display: note === null ? 'none' : 'flex' }
+  }
+
+  _command(asked: Command, contact: Contact): void {
+    const { messenger } = this.ui
+    const done = () => {
+      this._input.value = ''
+      this.renderCompose()
+    }
+    if (asked.name === 'usage') return this._say('use it as ' + asked.usage)
+    if (asked.name === 'unknown') return this._say(asked.command + " isn't supported · " + USAGE)
+
+    if (asked.name === 'me') {
+      messenger.send(contact, asked.text, { action: true })
+      this._say(null)
+      done()
+      return this.render()
+    }
+
+    if (asked.name === 'msg') {
+      const them =
+        messenger.contacts.byNick(asked.nick) ?? messenger.addContact({ nicks: [asked.nick] })
+      messenger.send(them, asked.text, { via: 'irc' })
+      this._say(null)
+      done()
+      return this.ui.select(them)
+    }
+
+    if (asked.name === 'join' || asked.name === 'part') {
+      const channel =
+        asked.name === 'join'
+          ? asked.channel
+          : (asked.channel ?? (contact.channel ? contact.id : null))
+      if (channel === null) return this._say('use it as /part #channel, or in the channel')
+      if (channel.toLowerCase() === messenger.channel.id.toLowerCase()) {
+        return this._say(channel + " is the mesh channel: it can't be left")
+      }
+      const joined = messenger.contacts.get(channel) !== null
+      if (joined === (asked.name === 'join')) {
+        return this._say((joined ? 'already in ' : 'not in ') + channel)
+      }
+      this.ui.actions.toggleChannel(channel)
+      this._say((asked.name === 'join' ? 'joining ' : 'leaving ') + channel)
+      return done()
+    }
+
+    // whois: asked of the server, answered here.
+    const irc = messenger.irc
+    if (irc === null || !irc.ready) return this._say("whois needs IRC, which isn't connected")
+    const wanted = asked.nick.toLowerCase()
+    const answer = (nick: string, info: Whois | null) => {
+      if (nick.toLowerCase() !== wanted) return
+      irc.off('whois', answer)
+      this._say(whois(asked.nick, info))
+    }
+    irc.on('whois', answer)
+    irc.whois(asked.nick)
+    this._say('whois ' + asked.nick + '…')
+    done()
+  }
+
   _send(): void {
-    const value = this._outgoing()
     const contact = this.ui.selected
+    // `/whois` and the like do what they say rather than going out.
+    const asked = command(this._input.value)
+    if (asked !== null && contact !== null) return this._command(asked, contact)
+    const value = this._outgoing()
     // In Bulgarian, nothing goes until its translation is shown.
     if (value === null || value === '' || contact === null) return
     const prefix = this._replyTo === null ? '' : this.ui.messenger.replyTo(this._replyTo)
     // Too long to go out in one piece: the counter is already red.
     if (bytes(prefix + value) > this._limit()) return
 
-    const typed = this._input.value.trim()
+    const typed = literal(this._input.value)
     const wrote = value === typed ? {} : { wrote: typed }
     const sent =
       this._replyTo === null
@@ -1178,4 +1267,23 @@ function page(url: string, kind: Media): string {
     kind +
     '>'
   return Bare.platform === 'android' ? encodeURIComponent(html) : html
+}
+
+// A whois answer, a line per thing known.
+function whois(nick: string, info: Whois | null): string {
+  if (info === null) return nick + ': no such nick'
+  const lines = [info.nick + (info.realname ? ' (' + info.realname + ')' : '')]
+  if (info.user !== null) lines.push(info.user + '@' + info.host)
+  if (info.account !== null) lines.push('logged in as ' + info.account)
+  if (info.channels.length > 0) lines.push('in ' + info.channels.join(' '))
+  if (info.idle !== null) lines.push('idle ' + idle(info.idle))
+  if (info.away !== null) lines.push('away: ' + info.away)
+  if (info.server !== null) lines.push('on ' + info.server)
+  return lines.join('\n') + '\ntap to close'
+}
+
+function idle(seconds: number): string {
+  if (seconds < 60) return seconds + 's'
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm'
+  return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm'
 }

@@ -78,6 +78,8 @@ export interface Message {
   hops?: number
   // Ours, sent translated: what was typed.
   wrote?: string
+  // Ours, sent as an action (`/me`): what was done. Its text is `* nick does`.
+  action?: string
   // Received over the other path too, from the same person: the copy that
   // was folded into this one.
   also?: Via

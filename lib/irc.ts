@@ -21,6 +21,8 @@ interface Parsed {
 // login (account), reclaim (account), nick (nick), error, close.
 // Who's where: names (channel, nicks), join, part ({ nick, channel }),
 // quit ({ nick }), rename ({ from, to }) for nicks other than ours.
+// whois (nick, Whois | null), the answer to `whois`, null for no such nick.
+// An action (`/me`) arrives as a message whose text is `* nick does`.
 //
 // With a password it logs in during the handshake with SASL PLAIN, and falls
 // back to NickServ IDENTIFY where the server doesn't offer SASL. A wrong
@@ -51,6 +53,7 @@ export default class Irc extends EventEmitter {
   _watchdog: ReturnType<typeof setTimeout> | null
   _listing: { name: string; users: number; topic: string }[]
   _names: Map<string, string[]>
+  _whois: Map<string, Whois | null>
   _reclaimTimer: ReturnType<typeof setTimeout> | null
 
   constructor(
@@ -84,6 +87,7 @@ export default class Irc extends EventEmitter {
     this._watchdog = null
     this._listing = []
     this._names = new Map()
+    this._whois = new Map()
 
     stream.on('data', (data: Uint8Array) => this._ondata(data))
     stream.on('error', (err: Error) => this.emit('error', err))
@@ -163,6 +167,27 @@ export default class Irc extends EventEmitter {
     const lines = split(text)
     for (const line of lines) this._send('PRIVMSG ' + target + ' :' + line)
     return lines.length
+  }
+
+  // An action, as `/me` sends it.
+  action(target: string, text: string): void {
+    this._send('PRIVMSG ' + target + ' :\x01ACTION ' + text.slice(0, MAX_TEXT) + '\x01')
+  }
+
+  // Who a nick is, answered as a `whois` event.
+  whois(nick: string): void {
+    this._whois.set(nick.toLowerCase(), {
+      nick,
+      user: null,
+      host: null,
+      realname: null,
+      server: null,
+      account: null,
+      channels: [],
+      idle: null,
+      away: null
+    })
+    this._send('WHOIS ' + nick)
   }
 
   quit(reason = 'bye'): void {
@@ -365,15 +390,66 @@ export default class Irc extends EventEmitter {
 
       case 'PRIVMSG': {
         const to = msg.params[0]
+        let text = msg.params[1] ?? ''
+        const action = /^\x01ACTION (.*?)\x01?$/.exec(text)
+        if (action !== null) text = '* ' + msg.nick + ' ' + action[1]
         this.emit('message', {
           from: msg.nick,
           to,
-          text: msg.params[1] ?? '',
+          text,
           direct: to.toLowerCase() === this.nick.toLowerCase()
         })
+        return
       }
+
+      // WHOIS: its answer comes a line at a time, then 318 to end it.
+      case '311':
+      case '312':
+      case '317':
+      case '319':
+      case '330':
+      case '301':
+      case '401':
+      case '318':
+        return this._onwhois(msg)
     }
   }
+
+  _onwhois(msg: Parsed): void {
+    const key = (msg.params[1] ?? '').toLowerCase()
+    const info = this._whois.get(key)
+    if (info === undefined) return
+    const p = msg.params
+    if (msg.command === '318') {
+      this._whois.delete(key)
+      this.emit('whois', p[1], info)
+    } else if (info === null) {
+      // No such nick: only the end follows.
+    } else if (msg.command === '311') {
+      info.user = p[2]
+      info.host = p[3]
+      info.realname = p[5] ?? null
+    } else if (msg.command === '312') info.server = p[2]
+    else if (msg.command === '317') info.idle = Number(p[2])
+    else if (msg.command === '319') info.channels = (p[2] ?? '').split(' ').filter(Boolean)
+    else if (msg.command === '330') info.account = p[2]
+    else if (msg.command === '301') info.away = p[2] ?? null
+    else if (msg.command === '401') this._whois.set(key, null)
+  }
+}
+
+export interface Whois {
+  nick: string
+  user: string | null
+  host: string | null
+  realname: string | null
+  server: string | null
+  // The account they're logged in to, when the server says.
+  account: string | null
+  channels: string[]
+  // Seconds since they last said anything.
+  idle: number | null
+  away: string | null
 }
 
 function parse(line: string): Parsed {
