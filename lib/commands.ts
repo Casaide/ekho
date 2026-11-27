@@ -23,8 +23,9 @@ export function command(input: string): Command | null {
   if (name === 'whois' || name === 'wi') {
     return rest[0] ? { name: 'whois', nick: rest[0] } : { name: 'usage', usage: '/whois nick' }
   }
-  if (name === 'me')
+  if (name === 'me') {
     return text ? { name: 'me', text } : { name: 'usage', usage: '/me does something' }
+  }
   if (name === 'msg' || name === 'query') {
     const body = text.slice((rest[0] ?? '').length).trim()
     return rest[0] && body
